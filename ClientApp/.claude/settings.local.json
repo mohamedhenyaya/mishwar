@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(New-NetFirewallRule -DisplayName \"Expo Metro 8081\" -Direction Inbound -Protocol TCP -LocalPort 8081 -Action Allow -Profile Any 2>&1)",
+      "PowerShell(Get-ChildItem -Recurse -Path \"c:\\\\Users\\\\moham\\\\OneDrive\\\\Desktop\\\\trrrrr\\\\ClientApp\\\\src\" -File | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\(\"c:\\\\Users\\\\moham\\\\OneDrive\\\\Desktop\\\\trrrrr\\\\ClientApp\\\\\",\"\"\\) })",
+      "PowerShell(Get-ChildItem -Recurse -Path \"c:\\\\Users\\\\moham\\\\OneDrive\\\\Desktop\\\\trrrrr\\\\ServerApp\\\\src\" -File | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object FullName | ForEach-Object { $_.FullName.Replace\\(\"c:\\\\Users\\\\moham\\\\OneDrive\\\\Desktop\\\\trrrrr\\\\ServerApp\\\\\",\"\"\\) })"
+    ]
+  }
+}
