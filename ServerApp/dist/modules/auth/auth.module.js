@@ -17,6 +17,7 @@ const auth_service_1 = require("./auth.service");
 const jwt_strategy_1 = require("./strategies/jwt.strategy");
 const user_entity_1 = require("../users/entities/user.entity");
 const driver_entity_1 = require("../drivers/entities/driver.entity");
+const refresh_token_entity_1 = require("./entities/refresh-token.entity");
 const jwt_config_1 = require("../../config/jwt.config");
 const whatsapp_module_1 = require("../whatsapp/whatsapp.module");
 let AuthModule = class AuthModule {
@@ -30,7 +31,7 @@ exports.AuthModule = AuthModule = __decorate([
                 inject: [config_1.ConfigService],
                 useFactory: jwt_config_1.jwtConfig,
             }),
-            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, driver_entity_1.Driver]),
+            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, driver_entity_1.Driver, refresh_token_entity_1.RefreshToken]),
             whatsapp_module_1.WhatsappModule,
         ],
         controllers: [auth_controller_1.AuthController],

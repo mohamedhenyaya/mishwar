@@ -17,7 +17,7 @@ import { VEHICLE_CLASS_TO_DRIVER_TYPES } from '../rides/utils/vehicle-class.util
 import { estimateEtaMinutes } from '../rides/utils/pricing.util';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
-type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled';
+type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled' | 'driver_cancelled';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconnect {

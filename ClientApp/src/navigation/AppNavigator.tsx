@@ -7,12 +7,16 @@ import * as SecureStore from 'expo-secure-store';
 import { RootStackParamList } from '../types';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { navigationRef } from './navigationRef';
-import WelcomeScreen from '../screens/WelcomeScreen';
-import LoginScreen   from '../screens/LoginScreen';
-import AuthScreen    from '../screens/AuthScreen';
-import HomeScreen    from '../screens/HomeScreen';
-import BookingScreen from '../screens/BookingScreen';
-import MatchScreen   from '../screens/MatchScreen';
+import { colors } from '../theme';
+import MainTabs        from './MainTabs';
+import WelcomeScreen    from '../screens/WelcomeScreen';
+import LoginScreen      from '../screens/LoginScreen';
+import AuthScreen       from '../screens/AuthScreen';
+import BookingScreen    from '../screens/BookingScreen';
+import MatchScreen      from '../screens/MatchScreen';
+import FavoritesScreen  from '../screens/FavoritesScreen';
+import SupportScreen    from '../screens/SupportScreen';
+import RechargeScreen   from '../screens/RechargeScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -28,8 +32,8 @@ export default function AppNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A1A2E' }}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary }}>
+        <ActivityIndicator size="large" color={colors.textInverse} />
       </View>
     );
   }
@@ -37,11 +41,11 @@ export default function AppNavigator() {
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
-        initialRouteName={isAuthenticated ? 'Home' : 'Welcome'}
+        initialRouteName={isAuthenticated ? 'Main' : 'Welcome'}
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
-          contentStyle: { backgroundColor: '#F5F5F7' },
+          contentStyle: { backgroundColor: colors.bg },
         }}
       >
         {/* ── Écrans publics ──────────────────────────────────────────────── */}
@@ -60,7 +64,7 @@ export default function AppNavigator() {
         />
 
         {/* ── Écrans authentifiés ─────────────────────────────────────────── */}
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Main" component={MainTabs} options={{ animation: 'fade' }} />
         <Stack.Screen
           name="Booking"
           component={BookingScreen}
@@ -71,6 +75,9 @@ export default function AppNavigator() {
           component={MatchScreen}
           options={{ animation: 'fade' }}
         />
+        <Stack.Screen name="Favorites" component={FavoritesScreen} />
+        <Stack.Screen name="Support" component={SupportScreen} />
+        <Stack.Screen name="Recharge" component={RechargeScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -7,6 +7,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { apiPost } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
@@ -23,9 +24,9 @@ interface RegisterResponse { accessToken: string }
 // ─── Step Indicator ───────────────────────────────────────────────────────────
 
 const STEPS = [
-  { key: 'phone',    label: 'Téléphone', icon: '📱' },
-  { key: 'otp',     label: 'Code OTP',   icon: '💬' },
-  { key: 'password',label: 'Mot de passe',icon: '🔐' },
+  { key: 'phone',    label: 'Téléphone',    icon: 'call-outline'         as const },
+  { key: 'otp',      label: 'Code OTP',     icon: 'chatbubble-outline'   as const },
+  { key: 'password', label: 'Mot de passe', icon: 'lock-closed-outline'  as const },
 ] as const;
 
 function StepBar({ current }: { current: Step }) {
@@ -39,9 +40,9 @@ function StepBar({ current }: { current: Step }) {
           <React.Fragment key={s.key}>
             <View style={sb.item}>
               <View style={[sb.dot, done && sb.dotDone, active && sb.dotActive]}>
-                <Text style={[sb.dotLabel, (done || active) && sb.dotLabelActive]}>
-                  {done ? '✓' : `${i + 1}`}
-                </Text>
+                {done
+                  ? <Ionicons name="checkmark" size={14} color={C.white} />
+                  : <Text style={[sb.dotLabel, active && sb.dotLabelActive]}>{i + 1}</Text>}
               </View>
               <Text style={[sb.stepLabel, active && sb.stepLabelActive]}>{s.label}</Text>
             </View>
@@ -218,7 +219,7 @@ export default function AuthScreen({ navigation }: Props) {
         '/auth/register/verify', { phone: phone.trim(), code: otp, password },
       );
       await SecureStore.setItemAsync(SECURE_STORE_KEY, res.accessToken);
-      navigation.replace('Home');
+      navigation.replace('Main');
     } catch (e: any) {
       const msg = e?.response?.data?.message ?? 'Erreur lors de la création du compte.';
       Alert.alert('Erreur', msg);
@@ -238,7 +239,7 @@ export default function AuthScreen({ navigation }: Props) {
       {/* Header */}
       <LinearGradient colors={G.dark} style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={handleBack} activeOpacity={0.7}>
-          <Text style={styles.backIcon}>‹</Text>
+          <Ionicons name="chevron-back" size={22} color={C.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Créer un compte</Text>
         <Text style={styles.headerSub}>Rejoignez Volta en 3 étapes rapides</Text>
@@ -284,7 +285,7 @@ export default function AuthScreen({ navigation }: Props) {
                   {loading
                     ? <ActivityIndicator color={C.white} />
                     : <>
-                        <Text style={styles.waIcon}>💬</Text>
+                        <Ionicons name="logo-whatsapp" size={18} color={C.white} />
                         <Text style={styles.btnLabel}>Recevoir le code WhatsApp</Text>
                       </>}
                 </LinearGradient>
@@ -301,7 +302,7 @@ export default function AuthScreen({ navigation }: Props) {
           {step === 'otp' && (
             <View style={styles.stepContent}>
               <View style={styles.waBanner}>
-                <Text style={styles.waBannerIcon}>✅</Text>
+                <Ionicons name="checkmark-circle" size={16} color="#1A6B45" />
                 <Text style={styles.waBannerText}>Code envoyé sur WhatsApp au {phone}</Text>
               </View>
               <Text style={styles.stepTitle}>Code de vérification</Text>
@@ -336,7 +337,7 @@ export default function AuthScreen({ navigation }: Props) {
               <Text style={styles.stepSub}>Choisissez un mot de passe robuste pour protéger vos données.</Text>
 
               <View style={styles.pwdField}>
-                <Text style={styles.fieldLabel}>🔐  Mot de passe</Text>
+                <Text style={styles.fieldLabel}>Mot de passe</Text>
                 <View style={styles.pwdRow}>
                   <TextInput
                     style={styles.pwdInput}
@@ -349,14 +350,14 @@ export default function AuthScreen({ navigation }: Props) {
                     onSubmitEditing={() => confirmRef.current?.focus()}
                   />
                   <TouchableOpacity onPress={() => setShowPwd((v) => !v)} style={styles.eyeBtn}>
-                    <Text style={styles.eyeIcon}>{showPwd ? '🙈' : '👁️'}</Text>
+                    <Ionicons name={showPwd ? 'eye-off-outline' : 'eye-outline'} size={18} color={C.sub} />
                   </TouchableOpacity>
                 </View>
                 <StrengthBar pwd={password} />
               </View>
 
               <View style={styles.pwdField}>
-                <Text style={styles.fieldLabel}>🔁  Confirmer</Text>
+                <Text style={styles.fieldLabel}>Confirmer</Text>
                 <View style={[styles.pwdRow, pwdMatch && styles.pwdRowError]}>
                   <TextInput
                     ref={confirmRef}
@@ -386,7 +387,10 @@ export default function AuthScreen({ navigation }: Props) {
                 >
                   {loading
                     ? <ActivityIndicator color={C.white} />
-                    : <Text style={styles.btnLabel}>Créer mon compte ✓</Text>}
+                    : <>
+                        <Text style={styles.btnLabel}>Créer mon compte</Text>
+                        <Ionicons name="checkmark-circle" size={18} color={C.white} />
+                      </>}
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -409,7 +413,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
-  backIcon:    { fontSize: 24, color: C.white, fontWeight: '300' },
   headerTitle: { fontSize: 22, fontWeight: '800', color: C.white, marginBottom: 4 },
   headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.55)', marginBottom: 20 },
   stepBarWrap: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: RADIUS.lg, padding: 12 },
@@ -431,13 +434,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0FFF9', borderRadius: RADIUS.lg,
     padding: 14, borderWidth: 1, borderColor: '#C6F6E5',
   },
-  waBannerIcon: { fontSize: 16 },
   waBannerText: { flex: 1, fontSize: 13, color: '#1A6B45', fontWeight: '600' },
 
   btnWrap:    { borderRadius: RADIUS.xl, overflow: 'hidden', ...SH.md },
   btnDisabled:{ opacity: 0.45 },
   btn:        { height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  waIcon:     { fontSize: 18 },
   btnLabel:   { color: C.white, fontSize: 16, fontWeight: '800' },
 
   switchLink: { alignItems: 'center' },
@@ -458,6 +459,5 @@ const styles = StyleSheet.create({
     fontSize: 16, color: C.text,
   },
   eyeBtn:    { padding: 14 },
-  eyeIcon:   { fontSize: 18 },
   pwdError:  { fontSize: 12, color: C.danger, fontWeight: '600', marginLeft: 4 },
 });

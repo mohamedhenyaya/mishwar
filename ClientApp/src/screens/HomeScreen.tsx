@@ -3,35 +3,26 @@ import React, {
 } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
-  ActivityIndicator, Platform, Dimensions,
+  ActivityIndicator, Dimensions,
   Animated, ScrollView,
 } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import MapComponent from '../components/MapComponent';
+import { IconButton, StatusBadge } from '../components/ui';
 import { socketService } from '../services/socket';
 import { apiGet } from '../services/api';
-import { Coordinates, Driver, RootStackParamList } from '../types';
+import { Coordinates, Driver, TabScreenProps } from '../types';
+import { colors, radius, shadows, spacing, typography } from '../theme';
 
 const { width } = Dimensions.get('window');
 const DELTA = { latitudeDelta: 0.0122, longitudeDelta: 0.0121 };
 
-// ── Palette ──────────────────────────────────────────────────────────────────
-const C = {
-  blue:    '#007AFF',
-  bg:      '#F5F6FA',
-  text:    '#1A1A1A',
-  subtle:  '#7F8C8D',
-  white:   '#FFFFFF',
-  card:    '#FFFFFF',
-  border:  '#EAECF0',
-};
-
-type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
+type Props = TabScreenProps<'Home'>;
 
 interface NearbyDriverApi {
   id: string; name: string; phone: string;
@@ -54,11 +45,10 @@ function toDriver(d: any): Driver {
   };
 }
 
-// ── Chips de catégorie ────────────────────────────────────────────────────────
 const CATEGORIES = [
-  { id: 'economy', label: 'Économie', icon: '🚗', desc: '~3 min' },
-  { id: 'comfort', label: 'Confort',  icon: '🚙', desc: '~5 min' },
-  { id: 'premium', label: 'Premium',  icon: '✨', desc: '~7 min' },
+  { id: 'economy', label: 'Économie', icon: 'car-outline' as const, desc: '~3 min' },
+  { id: 'comfort', label: 'Confort',  icon: 'car-sport-outline' as const, desc: '~5 min' },
+  { id: 'premium', label: 'Premium',  icon: 'sparkles-outline' as const, desc: '~7 min' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,7 +64,6 @@ export default function HomeScreen({ navigation }: Props) {
   const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState('economy');
 
-  // Animations
   const headerAnim  = useRef(new Animated.Value(0)).current;
   const searchAnim  = useRef(new Animated.Value(0)).current;
   const searchScale = useRef(new Animated.Value(1)).current;
@@ -176,7 +165,7 @@ export default function HomeScreen({ navigation }: Props) {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={C.blue} />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.loadingText}>Localisation en cours…</Text>
       </View>
     );
@@ -185,9 +174,9 @@ export default function HomeScreen({ navigation }: Props) {
   if (errorMsg || !region) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorEmoji}>📍</Text>
+        <Ionicons name="location-outline" size={44} color={colors.textTertiary} />
         <Text style={styles.errorText}>{errorMsg ?? 'Position indisponible.'}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={initLocation}>
+        <TouchableOpacity style={styles.retryBtn} onPress={initLocation} activeOpacity={0.88}>
           <Text style={styles.retryLabel}>Réessayer</Text>
         </TouchableOpacity>
       </View>
@@ -224,32 +213,38 @@ export default function HomeScreen({ navigation }: Props) {
           <Text style={styles.greeting}>Bonjour 👋</Text>
           <Text style={styles.headerTitle}>Où souhaitez-vous aller ?</Text>
         </View>
-        <View style={styles.avatarCircle}>
+        <TouchableOpacity
+          style={styles.avatarCircle}
+          onPress={() => navigation.navigate('Profile')}
+          activeOpacity={0.85}
+        >
           <Text style={styles.avatarText}>U</Text>
-        </View>
+        </TouchableOpacity>
       </Animated.View>
 
       {/* ── Badge chauffeurs ──────────────────────────────────────────────── */}
       <Animated.View
         style={[
-          styles.driversBadge,
+          styles.driversBadgeWrap,
           { top: insets.top + 96 },
           { opacity: headerAnim },
         ]}
       >
-        <View style={[styles.dot, { backgroundColor: drivers.length > 0 ? '#34C759' : '#C7C7CC' }]} />
-        <Text style={styles.badgeText}>
-          {drivers.length > 0
-            ? `${drivers.length} chauffeur${drivers.length > 1 ? 's' : ''} disponible${drivers.length > 1 ? 's' : ''}`
-            : 'Aucun chauffeur à proximité'}
-        </Text>
+        <StatusBadge
+          tone={drivers.length > 0 ? 'success' : 'neutral'}
+          label={
+            drivers.length > 0
+              ? `${drivers.length} chauffeur${drivers.length > 1 ? 's' : ''} disponible${drivers.length > 1 ? 's' : ''}`
+              : 'Aucun chauffeur à proximité'
+          }
+        />
       </Animated.View>
 
       {/* ── Chips catégories ──────────────────────────────────────────────── */}
       <Animated.View
         style={[
           styles.chipsContainer,
-          { bottom: insets.bottom + 150 },
+          { bottom: 150 },
           { opacity: chipsAnim, transform: [{ translateY: chipsTranslate }] },
         ]}
       >
@@ -267,7 +262,7 @@ export default function HomeScreen({ navigation }: Props) {
                 onPress={() => setActiveCategory(cat.id)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.chipIcon}>{cat.icon}</Text>
+                <Ionicons name={cat.icon} size={20} color={active ? colors.accent : colors.text} />
                 <View>
                   <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
                     {cat.label}
@@ -283,29 +278,28 @@ export default function HomeScreen({ navigation }: Props) {
       </Animated.View>
 
       {/* ── Recentrer ─────────────────────────────────────────────────────── */}
-      <TouchableOpacity
-        style={[styles.recenterBtn, { bottom: insets.bottom + 150 }]}
+      <IconButton
+        name="locate"
+        size="lg"
         onPress={centerOnUser}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.recenterIcon}>⊕</Text>
-      </TouchableOpacity>
+        style={[styles.recenterBtn, { bottom: 150 }]}
+      />
 
       {/* ── Barre de recherche ────────────────────────────────────────────── */}
       <Animated.View
         style={[
           styles.searchBarWrap,
-          { bottom: insets.bottom + 28, width: width - 32 },
+          { bottom: 20, width: width - 32 },
           { opacity: searchAnim, transform: [{ translateY: searchTranslate }, { scale: searchScale }] },
         ]}
       >
         <TouchableOpacity style={styles.searchBar} onPress={handleSearchPress} activeOpacity={1}>
           <View style={styles.searchIconBg}>
-            <Text style={styles.searchIconText}>📍</Text>
+            <Ionicons name="location" size={18} color={colors.accent} />
           </View>
           <Text style={styles.searchPlaceholder}>Où allez-vous ?</Text>
           <View style={styles.searchCTA}>
-            <Text style={styles.searchCTAText}>→</Text>
+            <Ionicons name="arrow-forward" size={18} color={colors.textInverse} />
           </View>
         </TouchableOpacity>
       </Animated.View>
@@ -315,116 +309,77 @@ export default function HomeScreen({ navigation }: Props) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CARD_SHADOW = {
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 16,
-  elevation: 6,
-};
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
   centered: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: C.bg, padding: 32, gap: 14,
+    backgroundColor: colors.bg, padding: spacing.xxl, gap: spacing.md,
   },
-  loadingText: { fontSize: 15, color: C.subtle, marginTop: 8 },
-  errorEmoji: { fontSize: 44 },
-  errorText:  { fontSize: 15, color: C.text, textAlign: 'center', lineHeight: 22 },
+  loadingText: { ...typography.body, color: colors.textSecondary, marginTop: spacing.sm },
+  errorText:  { ...typography.body, color: colors.text, textAlign: 'center', lineHeight: 22 },
   retryBtn: {
-    backgroundColor: C.blue, paddingHorizontal: 28, paddingVertical: 13,
-    borderRadius: 14, marginTop: 6,
+    backgroundColor: colors.primary, paddingHorizontal: spacing.xxl, paddingVertical: 13,
+    borderRadius: radius.md, marginTop: spacing.sm,
   },
-  retryLabel: { color: C.white, fontWeight: '700', fontSize: 15 },
+  retryLabel: { ...typography.button, color: colors.textInverse },
 
   // Header
   header: {
-    position: 'absolute', left: 16, right: 16,
-    backgroundColor: C.white, borderRadius: 20,
-    paddingHorizontal: 18, paddingVertical: 14,
+    position: 'absolute', left: spacing.lg, right: spacing.lg,
+    backgroundColor: colors.surface, borderRadius: radius.xl,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    ...CARD_SHADOW,
+    ...shadows.md,
   },
   headerLeft: { flex: 1 },
-  greeting: { fontSize: 12, color: C.subtle, marginBottom: 2, fontWeight: '500' },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: C.text },
+  greeting: { ...typography.caption, color: colors.textSecondary, marginBottom: 2 },
+  headerTitle: { ...typography.h3, color: colors.text },
   avatarCircle: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center', marginLeft: 12,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginLeft: spacing.md,
   },
-  avatarText: { color: C.white, fontWeight: '800', fontSize: 16 },
+  avatarText: { color: colors.textInverse, fontWeight: '800', fontSize: 16 },
 
   // Badge
-  driversBadge: {
-    position: 'absolute', left: 16,
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: C.white, borderRadius: 24,
-    paddingHorizontal: 12, paddingVertical: 7, gap: 7,
-    ...CARD_SHADOW,
-  },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  badgeText: { fontSize: 12, fontWeight: '600', color: C.text },
+  driversBadgeWrap: { position: 'absolute', left: spacing.lg },
 
   // Chips
-  chipsContainer: {
-    position: 'absolute', left: 0, right: 0,
-  },
-  chipsScroll: {
-    paddingHorizontal: 16, gap: 10,
-  },
+  chipsContainer: { position: 'absolute', left: 0, right: 0 },
+  chipsScroll: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: C.white, borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface, borderRadius: radius.md,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
     borderWidth: 1.5, borderColor: 'transparent',
-    ...CARD_SHADOW,
+    ...shadows.md,
   },
   chipActive: {
-    borderColor: C.blue,
-    backgroundColor: '#EBF5FF',
+    borderColor: colors.accent,
+    backgroundColor: colors.accentMuted,
   },
-  chipIcon: { fontSize: 20 },
-  chipLabel: { fontSize: 13, fontWeight: '700', color: C.text },
-  chipLabelActive: { color: C.blue },
-  chipDesc: { fontSize: 11, color: C.subtle, marginTop: 1 },
-  chipDescActive: { color: C.blue, opacity: 0.8 },
+  chipLabel: { ...typography.bodySm, fontWeight: '700', color: colors.text },
+  chipLabelActive: { color: colors.accent },
+  chipDesc: { ...typography.caption, color: colors.textSecondary, marginTop: 1 },
+  chipDescActive: { color: colors.accent, opacity: 0.85 },
 
   // Recentrer
-  recenterBtn: {
-    position: 'absolute', right: 16,
-    width: 46, height: 46, borderRadius: 23,
-    backgroundColor: C.white, alignItems: 'center', justifyContent: 'center',
-    ...CARD_SHADOW,
-  },
-  recenterIcon: {
-    fontSize: 22, color: C.text,
-    marginTop: Platform.OS === 'ios' ? -1 : 0,
-  },
+  recenterBtn: { position: 'absolute', right: spacing.lg },
 
   // Search bar
-  searchBarWrap: {
-    position: 'absolute', alignSelf: 'center',
-  },
+  searchBarWrap: { position: 'absolute', alignSelf: 'center' },
   searchBar: {
-    height: 64, backgroundColor: C.white, borderRadius: 20,
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 12,
-    ...CARD_SHADOW,
-    shadowOpacity: 0.12, shadowRadius: 20, elevation: 10,
+    height: 64, backgroundColor: colors.surface, borderRadius: radius.xl,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, gap: spacing.md,
+    ...shadows.lg,
   },
   searchIconBg: {
-    width: 40, height: 40, borderRadius: 12,
-    backgroundColor: '#EBF5FF', alignItems: 'center', justifyContent: 'center',
+    width: 40, height: 40, borderRadius: radius.md,
+    backgroundColor: colors.accentMuted, alignItems: 'center', justifyContent: 'center',
   },
-  searchIconText: { fontSize: 18 },
-  searchPlaceholder: { flex: 1, fontSize: 16, color: '#AEAEB2', fontWeight: '500' },
+  searchPlaceholder: { flex: 1, ...typography.bodyLg, color: colors.placeholder },
   searchCTA: {
-    width: 38, height: 38, borderRadius: 12,
-    backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center',
-  },
-  searchCTAText: {
-    color: C.white, fontSize: 18, fontWeight: '700',
-    marginTop: Platform.OS === 'ios' ? -1 : 0,
+    width: 38, height: 38, borderRadius: radius.md,
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
   },
 });

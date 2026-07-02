@@ -11,6 +11,11 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { RatingsModule } from './modules/ratings/ratings.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
+import { SupportModule } from './modules/support/support.module';
+import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { databaseConfig } from './config/database.config';
 
 @Module({
@@ -30,6 +35,11 @@ import { databaseConfig } from './config/database.config';
     WalletModule,
     NotificationsModule,
     DashboardModule,
+    RatingsModule,
+    PromotionsModule,
+    SupportModule,
+    VehiclesModule,
+    AuditLogModule,
   ],
 })
 export class AppModule {}

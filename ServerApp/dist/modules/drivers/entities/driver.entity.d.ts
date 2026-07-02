@@ -19,7 +19,9 @@ export declare class Driver {
     vehicleModel: string;
     vehiclePlate: string;
     rating: number;
+    ratingCount: number;
     totalRides: number;
+    deviceToken: string | null;
     latitude: number | null;
     longitude: number | null;
     lastLocationUpdate: Date | null;

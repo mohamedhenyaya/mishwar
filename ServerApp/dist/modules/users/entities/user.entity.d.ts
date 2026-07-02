@@ -13,6 +13,8 @@ export declare class User {
     blockedReason: string | null;
     blockedAt: Date | null;
     balance: number;
+    rating: number;
+    ratingCount: number;
     createdAt: Date;
     updatedAt: Date;
 }

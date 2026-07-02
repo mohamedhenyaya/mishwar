@@ -5,11 +5,13 @@ import { AdminDriversController } from './admin-drivers.controller';
 import { DriversService } from './drivers.service';
 import { Driver } from './entities/driver.entity';
 import { GeolocationModule } from '../geolocation/geolocation.module';
+import { AuditLogModule } from '../audit-log/audit-log.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Driver]),
     forwardRef(() => GeolocationModule),
+    AuditLogModule,
   ],
   controllers: [DriversController, AdminDriversController],
   providers: [DriversService],

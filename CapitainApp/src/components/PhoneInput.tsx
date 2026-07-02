@@ -5,17 +5,9 @@ import {
   ViewStyle, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { COUNTRIES, Country, DEFAULT_COUNTRY } from '../data/countries';
-
-// ── Palette ───────────────────────────────────────────────────────────────────
-const C = {
-  blue:   '#007AFF',
-  bg:     '#F5F6FA',
-  text:   '#1A1A1A',
-  subtle: '#7F8C8D',
-  white:  '#FFFFFF',
-  border: '#EAECF0',
-};
+import { C, RADIUS, SH } from '../theme';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface PhoneInputProps {
@@ -79,7 +71,7 @@ const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
           >
             <Text style={styles.flag}>{country.flag}</Text>
             <Text style={styles.dialCode}>+{country.dialCode}</Text>
-            <Text style={styles.chevron}>▾</Text>
+            <Ionicons name="chevron-down" size={12} color={C.sub} />
           </TouchableOpacity>
 
           {/* Séparateur */}
@@ -92,7 +84,7 @@ const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
             value={localNumber}
             onChangeText={handleChangeLocal}
             placeholder={placeholder}
-            placeholderTextColor="#AEAEB2"
+            placeholderTextColor={C.muted}
             keyboardType="phone-pad"
             returnKeyType={returnKeyType}
             onSubmitEditing={onSubmitEditing}
@@ -116,19 +108,19 @@ const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
                 onPress={() => { setModalVisible(false); setSearch(''); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Text style={styles.modalClose}>✕</Text>
+                <Ionicons name="close" size={22} color={C.sub} />
               </TouchableOpacity>
             </View>
 
             {/* Barre de recherche */}
             <View style={styles.searchWrap}>
-              <Text style={styles.searchIcon}>🔍</Text>
+              <Ionicons name="search" size={16} color={C.muted} />
               <TextInput
                 style={styles.searchInput}
                 value={search}
                 onChangeText={setSearch}
                 placeholder="Rechercher un pays ou un indicatif…"
-                placeholderTextColor="#AEAEB2"
+                placeholderTextColor={C.muted}
                 autoFocus
                 returnKeyType="search"
                 clearButtonMode="while-editing"
@@ -157,7 +149,7 @@ const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
                     <Text style={[styles.itemDial, active && styles.itemDialActive]}>
                       +{item.dialCode}
                     </Text>
-                    {active && <Text style={styles.itemCheck}>✓</Text>}
+                    {active && <Ionicons name="checkmark" size={16} color={C.primary} style={{ marginLeft: 4 }} />}
                   </TouchableOpacity>
                 );
               }}
@@ -182,23 +174,19 @@ export default PhoneInput;
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: C.white, borderRadius: 14,
+    backgroundColor: C.white, borderRadius: RADIUS.md + 2,
     borderWidth: 1.5, borderColor: C.border,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 6,
-    elevation: 3,
+    ...SH.sm,
   },
 
   // Sélecteur pays
   countryBtn: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 14, gap: 4,
+    paddingHorizontal: 12, paddingVertical: 14, gap: 6,
   },
   flag:     { fontSize: 22 },
   dialCode: { fontSize: 15, fontWeight: '700', color: C.text },
-  chevron:  { fontSize: 10, color: C.subtle, marginTop: 2 },
 
   separator: {
     width: 1, height: 28, backgroundColor: C.border, marginHorizontal: 2,
@@ -221,16 +209,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
   modalTitle: { fontSize: 18, fontWeight: '700', color: C.text },
-  modalClose: { fontSize: 18, color: C.subtle, fontWeight: '500' },
 
   // Recherche
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     margin: 16, paddingHorizontal: 14,
-    backgroundColor: C.bg, borderRadius: 12,
+    backgroundColor: C.bg, borderRadius: RADIUS.md,
     borderWidth: 1, borderColor: C.border,
   },
-  searchIcon:  { fontSize: 16 },
   searchInput: {
     flex: 1, fontSize: 15, color: C.text,
     paddingVertical: Platform.OS === 'ios' ? 12 : 9,
@@ -242,16 +228,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 20, paddingVertical: 13, gap: 14,
   },
-  countryItemActive: { backgroundColor: '#EBF5FF' },
+  countryItemActive: { backgroundColor: C.surfaceAlt },
   itemFlag: { fontSize: 24, width: 32 },
   itemName: {
     flex: 1, fontSize: 15, color: C.text, fontWeight: '500',
   },
-  itemNameActive: { color: C.blue, fontWeight: '700' },
-  itemDial:       { fontSize: 14, color: C.subtle, fontWeight: '600' },
-  itemDialActive: { color: C.blue },
-  itemCheck:      { fontSize: 16, color: C.blue, fontWeight: '800', marginLeft: 4 },
+  itemNameActive: { color: C.primary, fontWeight: '700' },
+  itemDial:       { fontSize: 14, color: C.sub, fontWeight: '600' },
+  itemDialActive: { color: C.primary },
 
   emptyWrap: { padding: 40, alignItems: 'center' },
-  emptyText: { fontSize: 15, color: C.subtle },
+  emptyText: { fontSize: 15, color: C.sub },
 });

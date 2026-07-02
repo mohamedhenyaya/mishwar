@@ -30,4 +30,8 @@ export class CreateRideDto {
   @IsNumber()
   @Type(() => Number)
   endLongitude?: number;
+
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
 }

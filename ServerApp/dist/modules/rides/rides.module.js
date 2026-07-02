@@ -17,6 +17,7 @@ const geolocation_module_1 = require("../geolocation/geolocation.module");
 const drivers_module_1 = require("../drivers/drivers.module");
 const settings_module_1 = require("../settings/settings.module");
 const wallet_module_1 = require("../wallet/wallet.module");
+const promotions_module_1 = require("../promotions/promotions.module");
 let RidesModule = class RidesModule {
 };
 exports.RidesModule = RidesModule;
@@ -28,6 +29,7 @@ exports.RidesModule = RidesModule = __decorate([
             drivers_module_1.DriversModule,
             settings_module_1.SettingsModule,
             wallet_module_1.WalletModule,
+            promotions_module_1.PromotionsModule,
         ],
         controllers: [rides_controller_1.RidesController, admin_rides_controller_1.AdminRidesController],
         providers: [rides_service_1.RidesService],

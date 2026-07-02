@@ -20,19 +20,39 @@ const jwt_1 = require("@nestjs/jwt");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const user_entity_1 = require("../users/entities/user.entity");
 const driver_entity_1 = require("../drivers/entities/driver.entity");
+const refresh_token_entity_1 = require("./entities/refresh-token.entity");
 const send_otp_dto_1 = require("./dto/send-otp.dto");
 const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 let AuthService = AuthService_1 = class AuthService {
-    constructor(userRepo, driverRepo, jwtService, whatsappService, config) {
+    constructor(userRepo, driverRepo, refreshTokenRepo, jwtService, whatsappService, config) {
         this.userRepo = userRepo;
         this.driverRepo = driverRepo;
+        this.refreshTokenRepo = refreshTokenRepo;
         this.jwtService = jwtService;
         this.whatsappService = whatsappService;
         this.config = config;
         this.logger = new common_1.Logger(AuthService_1.name);
         this.otpStore = new Map();
+    }
+    hashToken(token) {
+        return crypto.createHash('sha256').update(token).digest('hex');
+    }
+    async issueTokenPair(sub, phone, role) {
+        const accessToken = this.jwtService.sign({ sub, phone, role });
+        const refreshToken = crypto.randomBytes(40).toString('hex');
+        await this.refreshTokenRepo.save(this.refreshTokenRepo.create({
+            ownerId: sub,
+            role,
+            phone,
+            tokenHash: this.hashToken(refreshToken),
+            expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+            revokedAt: null,
+        }));
+        return { accessToken, refreshToken };
     }
     async sendOtp(dto) {
         const code = Math.floor(100_000 + Math.random() * 900_000).toString();
@@ -69,8 +89,7 @@ let AuthService = AuthService_1 = class AuthService {
                 await this.driverRepo.save(driver);
                 this.logger.log(`Nouveau chauffeur inscrit: ${driver.id}`);
             }
-            const accessToken = this.jwtService.sign({ sub: driver.id, phone: driver.phone, role: 'driver' });
-            return { accessToken };
+            return this.issueTokenPair(driver.id, driver.phone, 'driver');
         }
         let user = await this.userRepo.findOne({ where: { phone: dto.phone } });
         if (user) {
@@ -81,8 +100,7 @@ let AuthService = AuthService_1 = class AuthService {
             await this.userRepo.save(user);
             this.logger.log(`Nouvel utilisateur inscrit: ${user.id}`);
         }
-        const accessToken = this.jwtService.sign({ sub: user.id, phone: user.phone, role: 'user' });
-        return { accessToken };
+        return this.issueTokenPair(user.id, user.phone, 'user');
     }
     async login(dto) {
         const role = dto.role ?? send_otp_dto_1.AuthRole.USER;
@@ -105,8 +123,7 @@ let AuthService = AuthService_1 = class AuthService {
             if (!driver.isActive) {
                 throw new common_1.ForbiddenException(driver.blockedReason ?? 'Compte bloqué');
             }
-            const accessToken = this.jwtService.sign({ sub: driver.id, phone: driver.phone, role: 'driver' });
-            return { accessToken };
+            return this.issueTokenPair(driver.id, driver.phone, 'driver');
         }
         const user = await this.userRepo
             .createQueryBuilder('user')
@@ -126,8 +143,7 @@ let AuthService = AuthService_1 = class AuthService {
         if (!user.isActive) {
             throw new common_1.ForbiddenException(user.blockedReason ?? 'Compte bloqué');
         }
-        const accessToken = this.jwtService.sign({ sub: user.id, phone: user.phone, role: user.role });
-        return { accessToken };
+        return this.issueTokenPair(user.id, user.phone, user.role);
     }
     async bootstrapAdmin(dto) {
         const expectedSecret = this.config.get('ADMIN_BOOTSTRAP_SECRET');
@@ -150,8 +166,53 @@ let AuthService = AuthService_1 = class AuthService {
         });
         await this.userRepo.save(admin);
         this.logger.log(`Premier compte admin créé: ${admin.id}`);
-        const accessToken = this.jwtService.sign({ sub: admin.id, phone: admin.phone, role: 'admin' });
-        return { accessToken };
+        return this.issueTokenPair(admin.id, admin.phone, 'admin');
+    }
+    async refresh(dto) {
+        const tokenHash = this.hashToken(dto.refreshToken);
+        const record = await this.refreshTokenRepo.findOne({ where: { tokenHash } });
+        if (!record || record.revokedAt || record.expiresAt < new Date()) {
+            throw new common_1.UnauthorizedException('Refresh token invalide ou expiré');
+        }
+        await this.refreshTokenRepo.update(record.id, { revokedAt: new Date() });
+        return this.issueTokenPair(record.ownerId, record.phone, record.role);
+    }
+    async logout(jwt) {
+        await this.refreshTokenRepo.update({ ownerId: jwt.sub }, { revokedAt: new Date() });
+        return { message: 'Déconnexion réussie' };
+    }
+    async forgotPassword(dto) {
+        return this.sendOtp(dto);
+    }
+    async resetPassword(dto) {
+        const entry = this.otpStore.get(dto.phone);
+        if (!entry)
+            throw new common_1.BadRequestException('Aucun OTP trouvé pour ce numéro');
+        if (entry.code !== dto.code)
+            throw new common_1.UnauthorizedException('Code OTP invalide');
+        if (entry.expiresAt < new Date()) {
+            this.otpStore.delete(dto.phone);
+            throw new common_1.UnauthorizedException('OTP expiré, veuillez en demander un nouveau');
+        }
+        this.otpStore.delete(dto.phone);
+        const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+        let ownerId;
+        if (entry.role === send_otp_dto_1.AuthRole.DRIVER) {
+            const driver = await this.driverRepo.findOne({ where: { phone: dto.phone } });
+            if (!driver)
+                throw new common_1.NotFoundException('Aucun compte chauffeur trouvé pour ce numéro');
+            await this.driverRepo.update(driver.id, { passwordHash });
+            ownerId = driver.id;
+        }
+        else {
+            const user = await this.userRepo.findOne({ where: { phone: dto.phone } });
+            if (!user)
+                throw new common_1.NotFoundException('Aucun compte utilisateur trouvé pour ce numéro');
+            await this.userRepo.update(user.id, { passwordHash });
+            ownerId = user.id;
+        }
+        await this.refreshTokenRepo.update({ ownerId }, { revokedAt: new Date() });
+        return { message: 'Mot de passe réinitialisé avec succès' };
     }
 };
 exports.AuthService = AuthService;
@@ -159,7 +220,9 @@ exports.AuthService = AuthService = AuthService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(1, (0, typeorm_1.InjectRepository)(driver_entity_1.Driver)),
+    __param(2, (0, typeorm_1.InjectRepository)(refresh_token_entity_1.RefreshToken)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         jwt_1.JwtService,
         whatsapp_service_1.WhatsappService,

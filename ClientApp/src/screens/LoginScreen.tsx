@@ -1,22 +1,24 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
+import { Ionicons } from '@expo/vector-icons';
 import { apiPost } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { RootStackParamList } from '../types';
 import PhoneInput from '../components/PhoneInput';
+import { Button, IconButton, TextField } from '../components/ui';
+import { colors, spacing, typography, motion } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -27,10 +29,18 @@ export default function LoginScreen({ navigation }: Props) {
 
   const [phone,    setPhone]    = useState('');
   const [password, setPassword] = useState('');
-  const [showPwd,  setShowPwd]  = useState(false);
   const [loading,  setLoading]  = useState(false);
 
   const passwordRef = useRef<TextInput>(null);
+  const fade  = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(20)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade,  { toValue: 1, duration: motion.base, useNativeDriver: true }),
+      Animated.spring(slide, { toValue: 0, useNativeDriver: true, ...motion.spring }),
+    ]).start();
+  }, [fade, slide]);
 
   const canSubmit = phone.trim().length >= 9 && password.length >= 6;
 
@@ -43,7 +53,7 @@ export default function LoginScreen({ navigation }: Props) {
         { phone: phone.trim(), password },
       );
       await SecureStore.setItemAsync(SECURE_STORE_KEY, res.accessToken);
-      navigation.replace('Home');
+      navigation.replace('Main');
     } catch (e: any) {
       Alert.alert(
         'Connexion échouée',
@@ -59,26 +69,24 @@ export default function LoginScreen({ navigation }: Props) {
       style={[styles.container, { paddingBottom: insets.bottom + 24 }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Bouton retour */}
-      <TouchableOpacity
-        style={[styles.backBtn, { top: insets.top + 12 }]}
+      <IconButton
+        name="chevron-back"
         onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.backIcon}>‹</Text>
-      </TouchableOpacity>
+        style={[styles.backBtn, { top: insets.top + 12 }]}
+      />
 
-      <View style={styles.inner}>
+      <Animated.View style={[styles.inner, { opacity: fade, transform: [{ translateY: slide }] }]}>
 
-        {/* Logo */}
         <View style={styles.logoWrap}>
-          <Text style={styles.logoEmoji}>🚗</Text>
+          <View style={styles.logoBadge}>
+            <Ionicons name="car-sport" size={26} color={colors.textInverse} />
+          </View>
           <Text style={styles.appName}>Mishwar</Text>
         </View>
 
         <Text style={styles.title}>Bon retour !</Text>
         <Text style={styles.subtitle}>Connectez-vous à votre compte</Text>
 
-        {/* Téléphone */}
         <View style={styles.fieldGroup}>
           <Text style={styles.label}>Téléphone</Text>
           <PhoneInput
@@ -89,59 +97,35 @@ export default function LoginScreen({ navigation }: Props) {
           />
         </View>
 
-        {/* Mot de passe */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Mot de passe</Text>
-          <View style={styles.pwdWrap}>
-            <TextInput
-              ref={passwordRef}
-              style={[styles.input, styles.pwdInput]}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor="#BBB"
-              secureTextEntry={!showPwd}
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-            />
-            <TouchableOpacity
-              style={styles.eyeBtn}
-              onPress={() => setShowPwd((v) => !v)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.eyeIcon}>{showPwd ? '🙈' : '👁️'}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <TextField
+          ref={passwordRef}
+          label="Mot de passe"
+          icon="lock-closed-outline"
+          isPassword
+          value={password}
+          onChangeText={setPassword}
+          placeholder="••••••••"
+          returnKeyType="done"
+          onSubmitEditing={handleLogin}
+        />
 
-        {/* Mot de passe oublié */}
-        <TouchableOpacity style={styles.forgotWrap}>
-          <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
-        </TouchableOpacity>
+        <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
 
-        {/* Bouton connexion */}
-        <TouchableOpacity
-          style={[styles.btn, !canSubmit && styles.btnDisabled]}
+        <Button
+          label="Se connecter"
           onPress={handleLogin}
-          disabled={loading || !canSubmit}
-          activeOpacity={0.88}
-        >
-          {loading
-            ? <ActivityIndicator color="#FFF" />
-            : <Text style={styles.btnLabel}>Se connecter</Text>}
-        </TouchableOpacity>
+          loading={loading}
+          disabled={!canSubmit}
+          style={{ marginTop: spacing.xs }}
+        />
 
-        {/* Lien inscription */}
-        <TouchableOpacity
-          style={styles.switchWrap}
-          onPress={() => navigation.replace('Auth', { mode: 'register' })}
-        >
-          <Text style={styles.switchText}>
-            Pas encore de compte ?{' '}
-            <Text style={styles.switchLink}>Créer un compte</Text>
+        <Text style={styles.switchText}>
+          Pas encore de compte ?{' '}
+          <Text style={styles.switchLink} onPress={() => navigation.replace('Auth', { mode: 'register' })}>
+            Créer un compte
           </Text>
-        </TouchableOpacity>
-      </View>
+        </Text>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 }
@@ -149,135 +133,40 @@ export default function LoginScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F7',
+    backgroundColor: colors.bg,
   },
   backBtn: {
     position: 'absolute',
-    left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    left: spacing.lg,
     zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  backIcon: {
-    fontSize: 26,
-    color: '#1A1A2E',
-    fontWeight: '300',
-    marginTop: Platform.OS === 'ios' ? -2 : 0,
   },
   inner: {
     flex: 1,
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing.xxl,
     paddingTop: 80,
-    gap: 14,
+    gap: spacing.md,
   },
   logoWrap: {
     alignItems: 'center',
-    marginBottom: 8,
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  logoEmoji: { fontSize: 44 },
-  appName: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1A1A2E',
-    marginTop: 4,
+  logoBadge: {
+    width: 52, height: 52, borderRadius: 18,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
   },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#1A1A2E',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  fieldGroup: {
-    gap: 6,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#555',
-    marginLeft: 4,
-  },
-  input: {
-    backgroundColor: '#FFF',
-    borderRadius: 14,
-    height: 54,
-    paddingHorizontal: 18,
-    fontSize: 16,
-    color: '#1A1A2E',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  pwdWrap: {
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  pwdInput: {
-    paddingRight: 52,
-  },
-  eyeBtn: {
-    position: 'absolute',
-    right: 16,
-  },
-  eyeIcon: {
-    fontSize: 18,
-  },
-  forgotWrap: {
-    alignSelf: 'flex-end',
-    marginTop: -4,
-  },
+  appName: { ...typography.h3, color: colors.text },
+  title: { ...typography.h1, color: colors.text, textAlign: 'center' },
+  subtitle: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginTop: -8 },
+  fieldGroup: { gap: 6 },
+  label: { ...typography.label, color: colors.textSecondary, marginLeft: 2 },
   forgotText: {
-    fontSize: 13,
-    color: '#1A1A2E',
-    fontWeight: '600',
+    ...typography.label,
+    color: colors.accent,
+    alignSelf: 'flex-end',
+    marginTop: -6,
   },
-  btn: {
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#1A1A2E',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-    shadowColor: '#1A1A2E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  btnDisabled: {
-    opacity: 0.4,
-  },
-  btnLabel: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  switchWrap: {
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  switchText: {
-    fontSize: 14,
-    color: '#888',
-  },
-  switchLink: {
-    color: '#1A1A2E',
-    fontWeight: '700',
-  },
+  switchText: { ...typography.body, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm },
+  switchLink: { color: colors.text, fontWeight: '700' },
 });

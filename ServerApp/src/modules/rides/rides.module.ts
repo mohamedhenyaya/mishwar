@@ -8,6 +8,7 @@ import { GeolocationModule } from '../geolocation/geolocation.module';
 import { DriversModule } from '../drivers/drivers.module';
 import { SettingsModule } from '../settings/settings.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { PromotionsModule } from '../promotions/promotions.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { WalletModule } from '../wallet/wallet.module';
     DriversModule,
     SettingsModule,
     WalletModule,
+    PromotionsModule,
   ],
   controllers: [RidesController, AdminRidesController],
   providers: [RidesService],

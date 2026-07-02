@@ -3,11 +3,14 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { DriversService } from './drivers.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { BlockDriverDto } from './dto/block-driver.dto';
 import { AdminDriversQueryDto } from './dto/admin-drivers-query.dto';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 @ApiTags('admin-drivers')
 @ApiBearerAuth()
@@ -15,7 +18,10 @@ import { AdminDriversQueryDto } from './dto/admin-drivers-query.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 export class AdminDriversController {
-  constructor(private readonly driversService: DriversService) {}
+  constructor(
+    private readonly driversService: DriversService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Liste paginée des chauffeurs, filtrable par statut/actif/recherche' })
@@ -46,13 +52,17 @@ export class AdminDriversController {
     summary: 'Bloquer un chauffeur',
     description: 'Empêche toute connexion future, force son statut à OFFLINE, et notifie sa session en temps réel si elle est connectée.',
   })
-  block(@Param('id') id: string, @Body() dto: BlockDriverDto) {
-    return this.driversService.block(id, dto.reason);
+  async block(@CurrentUser() admin: JwtPayload, @Param('id') id: string, @Body() dto: BlockDriverDto) {
+    const driver = await this.driversService.block(id, dto.reason);
+    await this.auditLogService.log(admin.sub, 'driver.block', 'Driver', id, { reason: dto.reason });
+    return driver;
   }
 
   @Patch(':id/unblock')
   @ApiOperation({ summary: 'Débloquer un chauffeur' })
-  unblock(@Param('id') id: string) {
-    return this.driversService.unblock(id);
+  async unblock(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
+    const driver = await this.driversService.unblock(id);
+    await this.auditLogService.log(admin.sub, 'driver.unblock', 'Driver', id);
+    return driver;
   }
 }

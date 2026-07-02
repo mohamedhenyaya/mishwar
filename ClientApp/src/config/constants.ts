@@ -9,3 +9,8 @@ export const API_BASE_URL = `http://${DEV_HOST}:3000/api/v1`;
 export const SOCKET_URL   = `http://${DEV_HOST}:3000`;
 
 export const SECURE_STORE_KEY = 'mishwar_auth_token';
+
+// ── Support — à mettre à jour avec les vrais contacts de l'équipe support ──────
+export const SUPPORT_PHONE    = '+22220122724';
+export const SUPPORT_WHATSAPP = '+22220122724';
+export const SUPPORT_EMAIL    = 'support@mishwar.mr';

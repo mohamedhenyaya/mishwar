@@ -7,6 +7,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { C, G, SH, RADIUS } from '../theme';
 import { RootStackParamList } from '../types';
 
@@ -14,9 +15,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
 const { height } = Dimensions.get('window');
 
 const STATS = [
-  { icon: '🚗', value: '50K+', label: 'Courses' },
-  { icon: '⭐', value: '4.9',  label: 'Note moy.' },
-  { icon: '💎', value: '24/7', label: 'Support' },
+  { icon: 'car-sport'  as const, value: '50K+', label: 'Courses' },
+  { icon: 'star'       as const, value: '4.9',  label: 'Note moy.' },
+  { icon: 'diamond'    as const, value: '24/7', label: 'Support' },
 ];
 
 export default function WelcomeScreen({ navigation }: Props) {
@@ -93,7 +94,7 @@ export default function WelcomeScreen({ navigation }: Props) {
         >
           <Animated.View style={[styles.logoRingOuter, { transform: [{ scale: pulse }] }]}>
             <View style={styles.logoRingInner}>
-              <Text style={styles.logoEmoji}>🚖</Text>
+              <Ionicons name="car-sport" size={36} color={C.white} />
             </View>
           </Animated.View>
           <Text style={styles.appName}>Volta</Text>
@@ -111,7 +112,7 @@ export default function WelcomeScreen({ navigation }: Props) {
         <Animated.View style={[styles.statsRow, { opacity: textOpacity }]}>
           {STATS.map((s) => (
             <View key={s.label} style={styles.statChip}>
-              <Text style={styles.statIcon}>{s.icon}</Text>
+              <Ionicons name={s.icon} size={17} color={C.white} />
               <Text style={styles.statValue}>{s.value}</Text>
               <Text style={styles.statLabel}>{s.label}</Text>
             </View>
@@ -162,7 +163,7 @@ export default function WelcomeScreen({ navigation }: Props) {
 
         {/* WhatsApp note */}
         <View style={styles.waBadge}>
-          <Text style={styles.waIcon}>💬</Text>
+          <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
           <Text style={styles.waText}>
             Inscription sécurisée via <Text style={styles.waGreen}>WhatsApp OTP</Text>
           </Text>
@@ -214,7 +215,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-  logoEmoji: { fontSize: 38 },
   appName:   { fontSize: 42, fontWeight: '900', color: C.white, letterSpacing: -1 },
   roleBadge: {
     backgroundColor: 'rgba(167,139,250,0.25)',
@@ -238,7 +238,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
     gap: 2,
   },
-  statIcon:  { fontSize: 18 },
   statValue: { fontSize: 16, fontWeight: '800', color: C.white },
   statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: '600' },
 
@@ -285,7 +284,6 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.pill, padding: 12,
     borderWidth: 1, borderColor: '#C6F6E5',
   },
-  waIcon:  { fontSize: 15 },
   waText:  { fontSize: 13, color: C.sub },
   waGreen: { color: '#25D366', fontWeight: '700' },
 });

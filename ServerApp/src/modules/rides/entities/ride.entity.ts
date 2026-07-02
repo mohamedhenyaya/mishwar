@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 
 export enum RideStatus {
+  SCHEDULED   = 'SCHEDULED',
   PENDING     = 'PENDING',
   ACCEPTED    = 'ACCEPTED',
   IN_PROGRESS = 'IN_PROGRESS',
@@ -71,6 +72,31 @@ export class Ride {
 
   @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
   price: number | null;
+
+  // Note donnée par le rider au driver après la course
+  @Column({ type: 'decimal', precision: 2, scale: 1, nullable: true })
+  ratingForDriver: number | null;
+
+  // Note donnée par le driver au rider après la course
+  @Column({ type: 'decimal', precision: 2, scale: 1, nullable: true })
+  ratingForRider: number | null;
+
+  // Course programmée pour plus tard — activée automatiquement (statut PENDING) par le sondeur de RidesService
+  @Column({ type: 'timestamp', nullable: true })
+  scheduledAt: Date | null;
+
+  @Column({ nullable: true })
+  couponCode: string | null;
+
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  discountAmount: number | null;
+
+  // 'user' | 'driver' | 'system' — qui est à l'origine de l'annulation
+  @Column({ nullable: true })
+  cancelledBy: string | null;
+
+  @Column({ nullable: true })
+  cancelReason: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

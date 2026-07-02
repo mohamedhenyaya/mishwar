@@ -14,6 +14,7 @@ const admin_drivers_controller_1 = require("./admin-drivers.controller");
 const drivers_service_1 = require("./drivers.service");
 const driver_entity_1 = require("./entities/driver.entity");
 const geolocation_module_1 = require("../geolocation/geolocation.module");
+const audit_log_module_1 = require("../audit-log/audit-log.module");
 let DriversModule = class DriversModule {
 };
 exports.DriversModule = DriversModule;
@@ -22,6 +23,7 @@ exports.DriversModule = DriversModule = __decorate([
         imports: [
             typeorm_1.TypeOrmModule.forFeature([driver_entity_1.Driver]),
             (0, common_1.forwardRef)(() => geolocation_module_1.GeolocationModule),
+            audit_log_module_1.AuditLogModule,
         ],
         controllers: [drivers_controller_1.DriversController, admin_drivers_controller_1.AdminDriversController],
         providers: [drivers_service_1.DriversService],

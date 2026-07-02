@@ -1,4 +1,5 @@
 export declare enum RideStatus {
+    SCHEDULED = "SCHEDULED",
     PENDING = "PENDING",
     ACCEPTED = "ACCEPTED",
     IN_PROGRESS = "IN_PROGRESS",
@@ -24,6 +25,13 @@ export declare class Ride {
     notifiedDriverIds: string[];
     rejectedDriverIds: string[];
     price: number | null;
+    ratingForDriver: number | null;
+    ratingForRider: number | null;
+    scheduledAt: Date | null;
+    couponCode: string | null;
+    discountAmount: number | null;
+    cancelledBy: string | null;
+    cancelReason: string | null;
     createdAt: Date;
     updatedAt: Date;
 }

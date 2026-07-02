@@ -1,11 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { Driver } from '../drivers/entities/driver.entity';
 import { GeolocationGateway } from '../geolocation/geolocation.gateway';
 import { Notification, NotificationRecipientType } from './entities/notification.entity';
+import { DeviceToken, DeviceOwnerType } from './entities/device-token.entity';
+import { NotificationPreference } from './entities/notification-preference.entity';
 import { SendNotificationDto, NotificationTargetType } from './dto/send-notification.dto';
+import { RegisterDeviceDto } from './dto/register-device.dto';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import { PaginatedResult, PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
@@ -17,6 +21,10 @@ export class NotificationsService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Driver)
     private readonly driverRepo: Repository<Driver>,
+    @InjectRepository(DeviceToken)
+    private readonly deviceTokenRepo: Repository<DeviceToken>,
+    @InjectRepository(NotificationPreference)
+    private readonly notificationPreferenceRepo: Repository<NotificationPreference>,
     private readonly geolocationGateway: GeolocationGateway,
   ) {}
 
@@ -123,5 +131,78 @@ export class NotificationsService {
     });
 
     return { data, total, page, limit };
+  }
+
+  async registerDevice(
+    ownerType: DeviceOwnerType,
+    ownerId: string,
+    dto: RegisterDeviceDto,
+  ): Promise<DeviceToken> {
+    const existing = await this.deviceTokenRepo.findOne({ where: { token: dto.token } });
+
+    if (existing) {
+      existing.ownerType = ownerType;
+      existing.ownerId = ownerId;
+      existing.platform = dto.platform;
+      existing.lastUsedAt = new Date();
+      return this.deviceTokenRepo.save(existing);
+    }
+
+    const deviceToken = this.deviceTokenRepo.create({
+      ownerType,
+      ownerId,
+      token: dto.token,
+      platform: dto.platform,
+      lastUsedAt: new Date(),
+    });
+    return this.deviceTokenRepo.save(deviceToken);
+  }
+
+  async unregisterDevice(ownerId: string, token: string): Promise<void> {
+    const deviceToken = await this.deviceTokenRepo.findOne({ where: { token } });
+    if (!deviceToken) throw new NotFoundException('Appareil non trouvé');
+    if (deviceToken.ownerId !== ownerId) {
+      throw new ForbiddenException('Cet appareil ne vous appartient pas');
+    }
+    await this.deviceTokenRepo.delete(deviceToken.id);
+  }
+
+  async getPreferences(
+    ownerType: DeviceOwnerType,
+    ownerId: string,
+  ): Promise<Partial<NotificationPreference>> {
+    const preferences = await this.notificationPreferenceRepo.findOne({ where: { ownerType, ownerId } });
+    if (preferences) return preferences;
+
+    return {
+      ownerType,
+      ownerId,
+      rideUpdates: true,
+      promotions: true,
+      marketing: true,
+    };
+  }
+
+  async updatePreferences(
+    ownerType: DeviceOwnerType,
+    ownerId: string,
+    dto: UpdateNotificationPreferencesDto,
+  ): Promise<NotificationPreference> {
+    const existing = await this.notificationPreferenceRepo.findOne({ where: { ownerType, ownerId } });
+
+    if (!existing) {
+      const created = this.notificationPreferenceRepo.create({
+        ownerType,
+        ownerId,
+        rideUpdates: true,
+        promotions: true,
+        marketing: true,
+        ...dto,
+      });
+      return this.notificationPreferenceRepo.save(created);
+    }
+
+    await this.notificationPreferenceRepo.update(existing.id, dto);
+    return { ...existing, ...dto };
   }
 }

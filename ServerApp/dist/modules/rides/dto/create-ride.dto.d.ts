@@ -6,4 +6,5 @@ export declare class CreateRideDto {
     vehicleType: RideVehicleClass;
     endLatitude?: number;
     endLongitude?: number;
+    couponCode?: string;
 }

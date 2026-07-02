@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../users/entities/user.entity';
 import { Driver } from '../drivers/entities/driver.entity';
+import { RefreshToken } from './entities/refresh-token.entity';
 import { jwtConfig } from '../../config/jwt.config';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
@@ -18,7 +19,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
       inject: [ConfigService],
       useFactory: jwtConfig,
     }),
-    TypeOrmModule.forFeature([User, Driver]),
+    TypeOrmModule.forFeature([User, Driver, RefreshToken]),
     WhatsappModule,
   ],
   controllers: [AuthController],

@@ -7,6 +7,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { apiPost } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
@@ -21,13 +22,13 @@ interface LoginResponse { accessToken: string }
 
 function Field({
   icon, label, children,
-}: { icon: string; label: string; children: React.ReactNode }) {
+}: { icon: keyof typeof Ionicons.glyphMap; label: string; children: React.ReactNode }) {
   return (
     <View style={field.wrap}>
-      <Text style={field.label}>
-        <Text style={field.icon}>{icon}  </Text>
-        {label}
-      </Text>
+      <View style={field.labelRow}>
+        <Ionicons name={icon} size={14} color={C.sub} />
+        <Text style={field.label}>{label}</Text>
+      </View>
       {children}
     </View>
   );
@@ -35,8 +36,8 @@ function Field({
 
 const field = StyleSheet.create({
   wrap:  { gap: 8 },
-  icon:  { fontSize: 14 },
-  label: { fontSize: 13, fontWeight: '700', color: C.sub, marginLeft: 2 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  label: { fontSize: 13, fontWeight: '700', color: C.sub },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ export default function LoginScreen({ navigation }: Props) {
         { phone: phone.trim(), password },
       );
       await SecureStore.setItemAsync(SECURE_STORE_KEY, res.accessToken);
-      navigation.replace('Home');
+      navigation.replace('Main');
     } catch (e: any) {
       Alert.alert('Connexion échouée', e?.response?.data?.message ?? 'Numéro ou mot de passe incorrect.');
     } finally {
@@ -84,10 +85,12 @@ export default function LoginScreen({ navigation }: Props) {
       {/* ── Header gradient strip ── */}
       <LinearGradient colors={G.dark} style={[styles.headerStrip, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backIcon}>‹</Text>
+          <Ionicons name="chevron-back" size={24} color={C.white} />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerEmoji}>🚖</Text>
+          <View style={styles.headerEmojiWrap}>
+            <Ionicons name="car-sport" size={26} color={C.white} />
+          </View>
           <View>
             <Text style={styles.headerTitle}>Volta Capitaine</Text>
             <Text style={styles.headerSub}>Espace chauffeur professionnel</Text>
@@ -101,7 +104,7 @@ export default function LoginScreen({ navigation }: Props) {
         <Text style={styles.formSub}>Connectez-vous pour accéder à vos courses.</Text>
 
         <View style={styles.fields}>
-          <Field icon="📱" label="Numéro de téléphone">
+          <Field icon="call-outline" label="Numéro de téléphone">
             <PhoneInput
               value={phone}
               onChange={setPhone}
@@ -110,7 +113,7 @@ export default function LoginScreen({ navigation }: Props) {
             />
           </Field>
 
-          <Field icon="🔐" label="Mot de passe">
+          <Field icon="lock-closed-outline" label="Mot de passe">
             <View style={[styles.pwdContainer, pwdFocus && styles.pwdFocused]}>
               <TextInput
                 ref={passwordRef}
@@ -130,7 +133,7 @@ export default function LoginScreen({ navigation }: Props) {
                 onPress={() => setShowPwd((v) => !v)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={styles.eyeIcon}>{showPwd ? '🙈' : '👁️'}</Text>
+                <Ionicons name={showPwd ? 'eye-off-outline' : 'eye-outline'} size={18} color={C.sub} />
               </TouchableOpacity>
             </View>
           </Field>
@@ -195,9 +198,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 16,
   },
-  backIcon: { fontSize: 26, color: C.white, fontWeight: '300' },
   headerInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerEmoji: { fontSize: 32 },
+  headerEmojiWrap: {
+    width: 48, height: 48, borderRadius: RADIUS.lg,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   headerTitle: { fontSize: 20, fontWeight: '800', color: C.white },
   headerSub:   { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
 
@@ -226,7 +232,6 @@ const styles = StyleSheet.create({
     fontSize: 16, color: C.text,
   },
   eyeBtn:  { padding: 10 },
-  eyeIcon: { fontSize: 18 },
 
   forgotRow: { alignSelf: 'flex-end' },
   forgotText: { fontSize: 13, color: C.primary, fontWeight: '600' },

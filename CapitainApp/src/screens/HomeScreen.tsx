@@ -3,36 +3,22 @@ import React, {
 } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
-  Animated, Dimensions, ScrollView,
+  Animated, Dimensions,
 } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as SecureStore from 'expo-secure-store';
+import { Ionicons } from '@expo/vector-icons';
 
 import { captainSocketService } from '../services/socket';
-import { SECURE_STORE_KEY, APP_VERSION } from '../config/constants';
-import { Coordinates, RootStackParamList } from '../types';
+import { Coordinates, HomeScreenProps } from '../types';
 import { C, G, SH, RADIUS } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
-
 const { width: SW } = Dimensions.get('window');
-const DRAWER_WIDTH  = SW * 0.80;
-const DELTA         = { latitudeDelta: 0.012, longitudeDelta: 0.012 };
+const DELTA = { latitudeDelta: 0.012, longitudeDelta: 0.012 };
 
-const MENU_ITEMS = [
-  { key: 'Courses',         icon: '🚗', color: '#EDE9FF', route: null           },
-  { key: 'Notifications',   icon: '🔔', color: '#FFF3E0', route: null           },
-  { key: 'Historique',      icon: '📋', color: '#E8F5E9', route: 'Historique' as const },
-  { key: 'Mon compte',      icon: '💰', color: '#E3F2FD', route: 'MonCompte'  as const },
-  { key: 'Paramètres',      icon: '⚙️', color: '#F3E5F5', route: 'Parametres' as const },
-  { key: 'Nous contacter',  icon: '💬', color: '#E0F7FA', route: null           },
-];
-
-export default function HomeScreen({ navigation }: Props) {
+export default function HomeScreen({ navigation }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
@@ -40,12 +26,9 @@ export default function HomeScreen({ navigation }: Props) {
   const [region,     setRegion]     = useState<Region | null>(null);
   const [isOnline,   setIsOnline]   = useState(false);
   const [now,        setNow]        = useState(new Date());
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [todayRides,    setTodayRides]    = useState(0);
 
-  const drawerAnim  = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const overlayAnim = useRef(new Animated.Value(0)).current;
   const pillScale   = useRef(new Animated.Value(1)).current;
   const pulseAnim   = useRef(new Animated.Value(1)).current;
   const cardSlide   = useRef(new Animated.Value(120)).current;
@@ -117,32 +100,6 @@ export default function HomeScreen({ navigation }: Props) {
     if (!isOnline) { setTodayRides((n) => n); }
   };
 
-  const openDrawer = () => {
-    setDrawerOpen(true);
-    Animated.parallel([
-      Animated.spring(drawerAnim,  { toValue: 0,    useNativeDriver: true, tension: 70, friction: 10 }),
-      Animated.timing(overlayAnim, { toValue: 0.55, duration: 260, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const closeDrawer = () => {
-    Animated.parallel([
-      Animated.spring(drawerAnim,  { toValue: -DRAWER_WIDTH, useNativeDriver: true, tension: 80, friction: 12 }),
-      Animated.timing(overlayAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]).start(() => setDrawerOpen(false));
-  };
-
-  const handleMenu = (route: string | null) => {
-    closeDrawer();
-    if (route) setTimeout(() => navigation.navigate(route as any), 290);
-  };
-
-  const handleLogout = async () => {
-    closeDrawer();
-    await SecureStore.deleteItemAsync(SECURE_STORE_KEY);
-    setTimeout(() => navigation.replace('Welcome'), 290);
-  };
-
   const centerMap = () => {
     if (!location || !mapRef.current) return;
     mapRef.current.animateToRegion({ ...location, ...DELTA }, 400);
@@ -171,8 +128,8 @@ export default function HomeScreen({ navigation }: Props) {
       <View style={[styles.topBar, { top: insets.top + 10 }]}>
 
         {/* Burger */}
-        <TouchableOpacity style={styles.topBtn} onPress={openDrawer} activeOpacity={0.8}>
-          <Text style={styles.topBtnIcon}>☰</Text>
+        <TouchableOpacity style={styles.topBtn} onPress={() => navigation.openDrawer()} activeOpacity={0.8}>
+          <Ionicons name="menu" size={20} color={C.dark} />
         </TouchableOpacity>
 
         {/* Status pill */}
@@ -199,7 +156,7 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.timeText}>{formatTime(now)}</Text>
           </View>
           <TouchableOpacity style={styles.topBtn} onPress={centerMap} activeOpacity={0.8}>
-            <Text style={styles.topBtnIcon}>◎</Text>
+            <Ionicons name="locate" size={19} color={C.dark} />
           </TouchableOpacity>
         </View>
       </View>
@@ -219,7 +176,10 @@ export default function HomeScreen({ navigation }: Props) {
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={styles.onlineHeader}
             >
-              <Text style={styles.onlineTitle}>🟢  En attente de courses…</Text>
+              <View style={styles.onlineTitleRow}>
+                <Ionicons name="radio" size={14} color={C.white} />
+                <Text style={styles.onlineTitle}>En attente de courses…</Text>
+              </View>
               <View style={styles.onlineStats}>
                 <View style={styles.onlineStat}>
                   <Text style={styles.onlineStatVal}>{todayRides}</Text>
@@ -240,7 +200,9 @@ export default function HomeScreen({ navigation }: Props) {
           /* Offline card */
           <View style={styles.offlineCard}>
             <View style={styles.offlineLeft}>
-              <Text style={styles.offlineIcon}>🔴</Text>
+              <View style={styles.offlineIconWrap}>
+                <Ionicons name="power" size={20} color={C.danger} />
+              </View>
               <View>
                 <Text style={styles.offlineTitle}>Vous êtes hors ligne</Text>
                 <Text style={styles.offlineSub}>Activez pour recevoir des courses</Text>
@@ -257,96 +219,6 @@ export default function HomeScreen({ navigation }: Props) {
             </TouchableOpacity>
           </View>
         )}
-      </Animated.View>
-
-      {/* ── Overlay ── */}
-      {drawerOpen && (
-        <Animated.View style={[StyleSheet.absoluteFill, styles.overlay, { opacity: overlayAnim }]}
-          pointerEvents="auto"
-        >
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeDrawer} activeOpacity={1} />
-        </Animated.View>
-      )}
-
-      {/* ── Drawer ── */}
-      <Animated.View style={[styles.drawer, { transform: [{ translateX: drawerAnim }] }]}>
-        {/* Dark header */}
-        <LinearGradient
-          colors={G.dark}
-          style={[styles.drawerHeader, { paddingTop: insets.top + 24 }]}
-        >
-          {/* Decorative blob */}
-          <View style={styles.drawerBlob} />
-
-          {/* Avatar */}
-          <View style={styles.avatarWrap}>
-            <LinearGradient colors={G.primary} style={styles.avatarRing}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>M</Text>
-              </View>
-            </LinearGradient>
-            <View style={[styles.avatarBadge, { backgroundColor: isOnline ? C.accent : C.danger }]} />
-          </View>
-          <Text style={styles.drawerName}>MohamedhenYaya</Text>
-          <Text style={styles.drawerPhone}>+22220122724</Text>
-
-          {/* Rating chip */}
-          <View style={styles.ratingChip}>
-            <Text style={styles.ratingIcon}>⭐</Text>
-            <Text style={styles.ratingText}>4.9</Text>
-            <Text style={styles.ratingDot}>·</Text>
-            <Text style={styles.ratingText}>238 courses</Text>
-          </View>
-        </LinearGradient>
-
-        {/* Menu */}
-        <ScrollView style={styles.drawerMenu} showsVerticalScrollIndicator={false}>
-          {MENU_ITEMS.map((item, i) => (
-            <TouchableOpacity
-              key={item.key}
-              style={styles.menuItem}
-              onPress={() => handleMenu(item.route)}
-              activeOpacity={0.65}
-            >
-              <View style={[styles.menuIconBadge, { backgroundColor: item.color }]}>
-                <Text style={styles.menuEmoji}>{item.icon}</Text>
-              </View>
-              <Text style={styles.menuLabel}>{item.key}</Text>
-              <Text style={styles.menuChev}>›</Text>
-            </TouchableOpacity>
-          ))}
-
-          <View style={styles.menuDivider} />
-
-          {/* Passenger mode */}
-          <TouchableOpacity style={styles.passengerRow} activeOpacity={0.8}>
-            <View style={styles.passengerContent}>
-              <Text style={styles.passengerIcon}>👤</Text>
-              <View>
-                <Text style={styles.passengerTitle}>Mode Passager</Text>
-                <Text style={styles.passengerSub}>Passer en mode client</Text>
-              </View>
-            </View>
-            <View style={styles.passengerBadge}>
-              <Text style={styles.passengerBadgeText}>Bêta</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.menuDivider} />
-
-          {/* Logout */}
-          <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.7}>
-            <View style={[styles.menuIconBadge, { backgroundColor: '#FEE2E2' }]}>
-              <Text style={styles.menuEmoji}>⎋</Text>
-            </View>
-            <Text style={[styles.menuLabel, { color: C.danger }]}>Se déconnecter</Text>
-          </TouchableOpacity>
-
-          <View style={styles.drawerFooter}>
-            <Text style={styles.footerLang}>🌐  Français</Text>
-            <Text style={styles.footerVersion}>Volta Capitaine v{APP_VERSION}</Text>
-          </View>
-        </ScrollView>
       </Animated.View>
     </View>
   );
@@ -371,7 +243,6 @@ const styles = StyleSheet.create({
     backgroundColor: C.white, alignItems: 'center', justifyContent: 'center',
     ...SH.sm,
   },
-  topBtnIcon: { fontSize: 18, color: C.dark },
 
   // Status pill
   statusPill: {
@@ -410,7 +281,8 @@ const styles = StyleSheet.create({
   // Online card
   onlineCard: { backgroundColor: C.surface },
   onlineHeader: { padding: 18 },
-  onlineTitle:  { fontSize: 14, fontWeight: '700', color: C.white, marginBottom: 12 },
+  onlineTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  onlineTitle:  { fontSize: 14, fontWeight: '700', color: C.white },
   onlineStats:  { flexDirection: 'row', alignItems: 'center' },
   onlineStat:   { flex: 1, alignItems: 'center' },
   onlineStatVal:{ fontSize: 22, fontWeight: '900', color: C.white },
@@ -428,97 +300,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12,
   },
   offlineLeft:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  offlineIcon:  { fontSize: 24 },
+  offlineIconWrap: {
+    width: 40, height: 40, borderRadius: RADIUS.md,
+    backgroundColor: '#FFF1F5', alignItems: 'center', justifyContent: 'center',
+  },
   offlineTitle: { fontSize: 15, fontWeight: '700', color: C.text },
   offlineSub:   { fontSize: 12, color: C.sub, marginTop: 2 },
   goOnlineBtnWrap: { borderRadius: RADIUS.lg, overflow: 'hidden', ...SH.green },
   goOnlineBtn: { paddingHorizontal: 20, paddingVertical: 12 },
   goOnlineBtnText: { fontSize: 14, fontWeight: '800', color: C.white },
-
-  // ── Overlay
-  overlay: { backgroundColor: '#000', zIndex: 20 },
-
-  // ── Drawer
-  drawer: {
-    position: 'absolute', top: 0, bottom: 0, left: 0,
-    width: DRAWER_WIDTH, backgroundColor: C.surface, zIndex: 30,
-    ...SH.dark,
-  },
-  drawerHeader: {
-    paddingHorizontal: 24, paddingBottom: 24, overflow: 'hidden',
-  },
-  drawerBlob: {
-    position: 'absolute', top: -60, right: -80,
-    width: 220, height: 220, borderRadius: 110,
-    backgroundColor: C.primaryLt, opacity: 0.1,
-  },
-
-  // Avatar
-  avatarWrap: { position: 'relative', alignSelf: 'flex-start', marginBottom: 14 },
-  avatarRing: {
-    width: 70, height: 70, borderRadius: 35,
-    padding: 2.5, alignItems: 'center', justifyContent: 'center',
-  },
-  avatar: {
-    width: 65, height: 65, borderRadius: 32.5,
-    backgroundColor: C.darkMid,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontSize: 28, fontWeight: '800', color: C.white },
-  avatarBadge: {
-    position: 'absolute', bottom: 2, right: 2,
-    width: 16, height: 16, borderRadius: 8,
-    borderWidth: 2.5, borderColor: C.white,
-  },
-
-  drawerName:  { fontSize: 20, fontWeight: '800', color: C.white, marginBottom: 4 },
-  drawerPhone: { fontSize: 13, color: 'rgba(255,255,255,0.55)', marginBottom: 12 },
-
-  ratingChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 6,
-    alignSelf: 'flex-start',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
-  },
-  ratingIcon: { fontSize: 12 },
-  ratingText: { fontSize: 13, color: C.white, fontWeight: '700' },
-  ratingDot:  { fontSize: 13, color: 'rgba(255,255,255,0.4)' },
-
-  // Menu
-  drawerMenu:   { flex: 1 },
-  menuItem: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 13, gap: 14,
-  },
-  menuIconBadge: {
-    width: 40, height: 40, borderRadius: RADIUS.md,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  menuEmoji: { fontSize: 18 },
-  menuLabel: { flex: 1, fontSize: 15, color: C.text, fontWeight: '600' },
-  menuChev:  { fontSize: 22, color: C.muted, fontWeight: '300' },
-  menuDivider: { height: 1, backgroundColor: C.border, marginHorizontal: 20, marginVertical: 4 },
-
-  // Passenger
-  passengerRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14,
-  },
-  passengerContent: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  passengerIcon:    { fontSize: 22, width: 40, textAlign: 'center' },
-  passengerTitle:   { fontSize: 15, fontWeight: '600', color: C.text },
-  passengerSub:     { fontSize: 12, color: C.sub, marginTop: 2 },
-  passengerBadge:   { backgroundColor: C.surfaceAlt, borderRadius: RADIUS.pill, paddingHorizontal: 8, paddingVertical: 3 },
-  passengerBadgeText: { fontSize: 11, color: C.primary, fontWeight: '700' },
-
-  // Logout
-  logoutRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 13, gap: 14,
-  },
-
-  drawerFooter: { padding: 20, gap: 4 },
-  footerLang:    { fontSize: 13, color: C.sub },
-  footerVersion: { fontSize: 11, color: C.muted },
 });

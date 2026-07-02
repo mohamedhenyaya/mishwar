@@ -13,6 +13,7 @@ exports.Ride = exports.RideVehicleClass = exports.RideStatus = void 0;
 const typeorm_1 = require("typeorm");
 var RideStatus;
 (function (RideStatus) {
+    RideStatus["SCHEDULED"] = "SCHEDULED";
     RideStatus["PENDING"] = "PENDING";
     RideStatus["ACCEPTED"] = "ACCEPTED";
     RideStatus["IN_PROGRESS"] = "IN_PROGRESS";
@@ -88,6 +89,34 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'decimal', precision: 8, scale: 2, nullable: true }),
     __metadata("design:type", Number)
 ], Ride.prototype, "price", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 2, scale: 1, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "ratingForDriver", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 2, scale: 1, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "ratingForRider", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    __metadata("design:type", Date)
+], Ride.prototype, "scheduledAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Ride.prototype, "couponCode", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 8, scale: 2, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "discountAmount", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Ride.prototype, "cancelledBy", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Ride.prototype, "cancelReason", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

@@ -7,13 +7,16 @@ import * as SecureStore from 'expo-secure-store';
 import { RootStackParamList } from '../types';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { navigationRef } from './navigationRef';
-import WelcomeScreen    from '../screens/WelcomeScreen';
-import LoginScreen      from '../screens/LoginScreen';
-import AuthScreen       from '../screens/AuthScreen';
-import HomeScreen       from '../screens/HomeScreen';
-import HistoriqueScreen from '../screens/HistoriqueScreen';
-import ParametresScreen from '../screens/ParametresScreen';
-import MonCompteScreen  from '../screens/MonCompteScreen';
+import MainDrawer          from './MainDrawer';
+import WelcomeScreen       from '../screens/WelcomeScreen';
+import LoginScreen         from '../screens/LoginScreen';
+import AuthScreen          from '../screens/AuthScreen';
+import HistoriqueScreen    from '../screens/HistoriqueScreen';
+import ParametresScreen    from '../screens/ParametresScreen';
+import MonCompteScreen     from '../screens/MonCompteScreen';
+import PerformanceScreen   from '../screens/PerformanceScreen';
+import RechargeScreen      from '../screens/RechargeScreen';
+import { C } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -29,8 +32,8 @@ export default function AppNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F6FA' }}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.dark }}>
+        <ActivityIndicator size="large" color={C.white} />
       </View>
     );
   }
@@ -38,20 +41,22 @@ export default function AppNavigator() {
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
-        initialRouteName={isAuthenticated ? 'Home' : 'Welcome'}
+        initialRouteName={isAuthenticated ? 'Main' : 'Welcome'}
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
-          contentStyle: { backgroundColor: '#F5F6FA' },
+          contentStyle: { backgroundColor: C.bg },
         }}
       >
-        <Stack.Screen name="Welcome"    component={WelcomeScreen} options={{ animation: 'fade' }} />
-        <Stack.Screen name="Login"      component={LoginScreen} />
-        <Stack.Screen name="Auth"       component={AuthScreen} />
-        <Stack.Screen name="Home"       component={HomeScreen} options={{ animation: 'fade' }} />
-        <Stack.Screen name="Historique" component={HistoriqueScreen} options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="Parametres" component={ParametresScreen} options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="MonCompte"  component={MonCompteScreen}  options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Welcome"     component={WelcomeScreen} options={{ animation: 'fade' }} />
+        <Stack.Screen name="Login"       component={LoginScreen} />
+        <Stack.Screen name="Auth"        component={AuthScreen} />
+        <Stack.Screen name="Main"        component={MainDrawer} options={{ animation: 'fade' }} />
+        <Stack.Screen name="Historique"  component={HistoriqueScreen} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Parametres"  component={ParametresScreen} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="MonCompte"   component={MonCompteScreen}  options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Performance" component={PerformanceScreen} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Recharge"    component={RechargeScreen}   options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

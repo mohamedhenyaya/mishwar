@@ -1,32 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
-  Animated, Easing,
+  Animated, Easing, Modal,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { socketService, RideAcceptedDriver } from '../services/socket';
 import { apiPost } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { RootStackParamList } from '../types';
+import { Button, IconButton, ScreenHeader } from '../components/ui';
+import { colors, radius, shadows, spacing, typography, motion } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Match'>;
 type MatchStatus = 'searching' | 'found' | 'cancelled';
 
-// ── Palette ───────────────────────────────────────────────────────────────────
-const C = {
-  blue:    '#007AFF',
-  bg:      '#F5F6FA',
-  text:    '#1A1A1A',
-  subtle:  '#7F8C8D',
-  white:   '#FFFFFF',
-  green:   '#34C759',
-  red:     '#FF3B30',
-  blueBg:  '#EBF5FF',
-  border:  '#EAECF0',
-};
+const CANCEL_REASONS = [
+  'Le chauffeur met trop de temps',
+  'Je ne pars plus',
+  'Trajet erroné',
+  'Changement de destination',
+  'Autre raison',
+];
 
 // ── Composant rings pulsants ───────────────────────────────────────────────────
 function PulseRings() {
@@ -82,8 +80,9 @@ function PulseRings() {
           ]}
         />
       ))}
-      {/* Point central */}
-      <View style={pulse.dot} />
+      <View style={pulse.dot}>
+        <Ionicons name="car-sport" size={13} color={colors.textInverse} />
+      </View>
     </View>
   );
 }
@@ -93,9 +92,12 @@ function Stars({ rating }: { rating: number }) {
   return (
     <View style={{ flexDirection: 'row', gap: 2 }}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <Text key={i} style={{ fontSize: 13, color: i <= Math.round(rating) ? '#FFD60A' : '#E5E5EA' }}>
-          ★
-        </Text>
+        <Ionicons
+          key={i}
+          name={i <= Math.round(rating) ? 'star' : 'star-outline'}
+          size={13}
+          color={i <= Math.round(rating) ? colors.star : colors.textTertiary}
+        />
       ))}
     </View>
   );
@@ -111,8 +113,8 @@ export default function MatchScreen({ navigation, route }: Props) {
   const [eta,    setEta]    = useState(0);
   const [driver, setDriver] = useState<RideAcceptedDriver | null>(null);
   const [tripStarted, setTripStarted] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
-  // Animations d'entrée / transition
   const fadeIn    = useRef(new Animated.Value(0)).current;
   const slideUp   = useRef(new Animated.Value(40)).current;
   const cardScale = useRef(new Animated.Value(0.85)).current;
@@ -125,7 +127,6 @@ export default function MatchScreen({ navigation, route }: Props) {
     ]).start();
   }, []);
 
-  // Animation d'apparition de la carte chauffeur
   const showDriverCard = () => {
     Animated.parallel([
       Animated.spring(cardScale, { toValue: 1, tension: 70, friction: 10, useNativeDriver: true }),
@@ -176,12 +177,18 @@ export default function MatchScreen({ navigation, route }: Props) {
 
   // ── Annulation côté serveur (libère la course) ────────────────────────────
 
-  const cancelSearch = async () => {
+  const confirmCancel = async (reason: string) => {
+    setShowCancelModal(false);
     try {
-      await apiPost(`/rides/${rideId}/cancel`, {});
+      await apiPost(`/rides/${rideId}/cancel`, { reason });
     } catch {
       // best-effort — la course a peut-être déjà été acceptée/annulée/expirée
     }
+    navigation.goBack();
+  };
+
+  const handleClosePress = () => {
+    if (status === 'searching') { setShowCancelModal(true); return; }
     navigation.goBack();
   };
 
@@ -191,21 +198,14 @@ export default function MatchScreen({ navigation, route }: Props) {
     <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom + 24 }]}>
       <StatusBar style="dark" />
 
-      {/* ── En-tête ───────────────────────────────────────────────────── */}
-      <View style={styles.topBar}>
-        <TouchableOpacity
-          style={styles.cancelTopBtn}
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Text style={styles.cancelTopText}>✕</Text>
-        </TouchableOpacity>
-        <Text style={styles.topBarTitle}>
-          {status === 'searching' ? 'Recherche en cours' :
-           status === 'found'     ? (tripStarted ? 'Course en cours' : 'Chauffeur trouvé') : 'Course annulée'}
-        </Text>
-        <View style={{ width: 36 }} />
-      </View>
+      <ScreenHeader
+        bordered
+        title={
+          status === 'searching' ? 'Recherche en cours' :
+          status === 'found'     ? (tripStarted ? 'Course en cours' : 'Chauffeur trouvé') : 'Course annulée'
+        }
+        right={<IconButton name="close" size="sm" variant="muted" onPress={handleClosePress} />}
+      />
 
       <Animated.View
         style={[styles.content, { opacity: fadeIn, transform: [{ translateY: slideUp }] }]}
@@ -223,32 +223,32 @@ export default function MatchScreen({ navigation, route }: Props) {
             <View style={styles.searchingInfo}>
               {['Tarif le plus bas', 'Chauffeur le mieux noté', 'Le plus proche'].map((item) => (
                 <View key={item} style={styles.infoRow}>
-                  <View style={styles.infoCheck}><Text style={styles.infoCheckIcon}>✓</Text></View>
+                  <View style={styles.infoCheck}>
+                    <Ionicons name="checkmark" size={12} color={colors.textInverse} />
+                  </View>
                   <Text style={styles.infoText}>{item}</Text>
                 </View>
               ))}
             </View>
 
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={cancelSearch}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.cancelBtnText}>Annuler la recherche</Text>
-            </TouchableOpacity>
+            <Button
+              label="Annuler la recherche"
+              variant="outline"
+              size="md"
+              fullWidth={false}
+              onPress={() => setShowCancelModal(true)}
+            />
           </View>
         )}
 
         {/* ── Found ─────────────────────────────────────────────────── */}
         {status === 'found' && (
           <View style={styles.foundSection}>
-            {/* Icône succès */}
             <View style={styles.successCircle}>
-              <Text style={styles.successIcon}>✓</Text>
+              <Ionicons name="checkmark" size={30} color={colors.textInverse} />
             </View>
             <Text style={styles.foundTitle}>Chauffeur trouvé !</Text>
 
-            {/* ETA */}
             <View style={styles.etaCard}>
               <Text style={styles.etaLabel}>Arrivée estimée</Text>
               <View style={styles.etaRow}>
@@ -257,14 +257,12 @@ export default function MatchScreen({ navigation, route }: Props) {
               </View>
             </View>
 
-            {/* Carte chauffeur */}
             <Animated.View
               style={[
                 styles.driverCard,
                 { opacity: cardFade, transform: [{ scale: cardScale }] },
               ]}
             >
-              {/* Avatar */}
               <View style={styles.driverAvatarWrap}>
                 <View style={styles.driverAvatar}>
                   <Text style={styles.driverAvatarText}>{(driver?.name?.[0] ?? '?').toUpperCase()}</Text>
@@ -272,7 +270,6 @@ export default function MatchScreen({ navigation, route }: Props) {
                 <View style={styles.driverOnline} />
               </View>
 
-              {/* Infos */}
               <View style={styles.driverInfo}>
                 <Text style={styles.driverName}>{driver?.name ?? 'Chauffeur'}</Text>
                 <Stars rating={driver?.rating ?? 5} />
@@ -281,27 +278,15 @@ export default function MatchScreen({ navigation, route }: Props) {
                 </Text>
               </View>
 
-              {/* Actions */}
               <View style={styles.driverActions}>
-                <TouchableOpacity style={styles.driverActionBtn}>
-                  <Text style={styles.driverActionIcon}>📞</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.driverActionBtn}>
-                  <Text style={styles.driverActionIcon}>💬</Text>
-                </TouchableOpacity>
+                <IconButton name="call-outline" size="md" variant="muted" onPress={() => {}} />
+                <IconButton name="chatbubble-outline" size="md" variant="muted" onPress={() => {}} />
               </View>
             </Animated.View>
 
-            {/* Course ID */}
             <Text style={styles.rideId}>Course #{rideId.slice(0, 8).toUpperCase()}</Text>
 
-            <TouchableOpacity
-              style={styles.doneBtn}
-              onPress={() => navigation.popToTop()}
-              activeOpacity={0.88}
-            >
-              <Text style={styles.doneBtnText}>Terminer</Text>
-            </TouchableOpacity>
+            <Button label="Terminer" onPress={() => navigation.popToTop()} />
           </View>
         )}
 
@@ -309,7 +294,7 @@ export default function MatchScreen({ navigation, route }: Props) {
         {status === 'cancelled' && (
           <View style={styles.cancelledSection}>
             <View style={styles.cancelledCircle}>
-              <Text style={styles.cancelledIcon}>✕</Text>
+              <Ionicons name="close" size={28} color={colors.textInverse} />
             </View>
             <Text style={styles.cancelledTitle}>Trajet annulé</Text>
             <Text style={styles.cancelledSubtitle}>
@@ -317,188 +302,181 @@ export default function MatchScreen({ navigation, route }: Props) {
               Réessayez dans quelques instants.
             </Text>
 
-            <TouchableOpacity
-              style={styles.retryBtn}
-              onPress={() => navigation.goBack()}
-              activeOpacity={0.88}
-            >
-              <Text style={styles.retryBtnText}>Réessayer</Text>
-            </TouchableOpacity>
+            <Button label="Réessayer" onPress={() => navigation.goBack()} />
 
-            <TouchableOpacity
-              style={styles.homeLink}
-              onPress={() => navigation.popToTop()}
-            >
+            <TouchableOpacity style={styles.homeLink} onPress={() => navigation.popToTop()}>
               <Text style={styles.homeLinkText}>Retour à l'accueil</Text>
             </TouchableOpacity>
           </View>
         )}
       </Animated.View>
+
+      {/* ── Raison d'annulation ───────────────────────────────────────── */}
+      <Modal
+        visible={showCancelModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowCancelModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowCancelModal(false)} />
+          <View style={[styles.modalSheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalIconWrap}>
+              <Ionicons name="alert-circle" size={28} color={colors.warning} />
+            </View>
+            <Text style={styles.modalTitle}>Choisissez une raison d'annulation</Text>
+            <Text style={styles.modalSubtitle}>Cela nous aide à améliorer le service</Text>
+
+            {CANCEL_REASONS.map((reason) => (
+              <TouchableOpacity
+                key={reason}
+                style={styles.reasonRow}
+                onPress={() => confirmCancel(reason)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.reasonDot} />
+                <Text style={styles.reasonText}>{reason}</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+              </TouchableOpacity>
+            ))}
+
+            <Button
+              label="Retour"
+              variant="secondary"
+              onPress={() => setShowCancelModal(false)}
+              style={{ marginTop: spacing.md }}
+            />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CARD_SHADOW = {
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.08,
-  shadowRadius: 16,
-  elevation: 6,
-};
-
 const pulse = StyleSheet.create({
   container: {
     width: 120, height: 120,
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   ring: {
     position: 'absolute',
     width: 80, height: 80, borderRadius: 40,
-    borderWidth: 2, borderColor: C.blue,
+    borderWidth: 2, borderColor: colors.accent,
   },
   dot: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: C.blue,
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 8,
-    elevation: 6,
+    backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+    ...shadows.md, shadowColor: colors.accent,
   },
 });
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1, backgroundColor: C.bg,
-  },
+  container: { flex: 1, backgroundColor: colors.bg },
 
-  topBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: C.border,
-    backgroundColor: C.white,
-  },
-  cancelTopBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center',
-  },
-  cancelTopText: { fontSize: 14, color: C.subtle, fontWeight: '600' },
-  topBarTitle: { fontSize: 15, fontWeight: '700', color: C.text },
-
-  content: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  content: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
 
   // Searching
-  searchingSection: { alignItems: 'center', gap: 20, width: '100%' },
-  searchingTitle: { fontSize: 22, fontWeight: '700', color: C.text, textAlign: 'center' },
+  searchingSection: { alignItems: 'center', gap: spacing.xl, width: '100%' },
+  searchingTitle: { ...typography.h2, color: colors.text, textAlign: 'center' },
   searchingSubtitle: {
-    fontSize: 14, color: C.subtle, textAlign: 'center', lineHeight: 22,
-    marginTop: -8,
+    ...typography.body, color: colors.textSecondary, textAlign: 'center', marginTop: -8,
   },
   searchingInfo: {
-    backgroundColor: C.white, borderRadius: 16, padding: 16,
-    alignSelf: 'stretch', gap: 10, ...CARD_SHADOW,
+    backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.lg,
+    alignSelf: 'stretch', gap: spacing.md, ...shadows.md,
   },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   infoCheck: {
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
   },
-  infoCheckIcon: { color: C.white, fontSize: 11, fontWeight: '800' },
-  infoText: { fontSize: 14, color: C.text, fontWeight: '500' },
-  cancelBtn: {
-    paddingHorizontal: 28, paddingVertical: 13, borderRadius: 14,
-    borderWidth: 1.5, borderColor: C.border,
-    backgroundColor: C.white,
-    marginTop: 4,
-  },
-  cancelBtnText: { fontSize: 14, color: C.subtle, fontWeight: '600' },
+  infoText: { ...typography.bodySm, fontWeight: '500', color: colors.text },
 
   // Found
-  foundSection: { alignItems: 'center', gap: 16, width: '100%' },
+  foundSection: { alignItems: 'center', gap: spacing.lg, width: '100%' },
   successCircle: {
     width: 72, height: 72, borderRadius: 36,
-    backgroundColor: C.green, alignItems: 'center', justifyContent: 'center',
-    shadowColor: C.green,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16, elevation: 10,
+    backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center',
+    ...shadows.lg, shadowColor: colors.success,
   },
-  successIcon: { color: C.white, fontSize: 32, fontWeight: '800' },
-  foundTitle: { fontSize: 24, fontWeight: '800', color: C.text },
+  foundTitle: { ...typography.display, fontSize: 24, color: colors.text },
 
   etaCard: {
-    backgroundColor: C.blueBg, borderRadius: 16,
-    paddingVertical: 16, paddingHorizontal: 32,
+    backgroundColor: colors.accentMuted, borderRadius: radius.lg,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.xxxl,
     alignItems: 'center', alignSelf: 'stretch',
-    borderWidth: 1.5, borderColor: '#CCE4FF',
+    borderWidth: 1.5, borderColor: colors.accentMuted,
   },
-  etaLabel: { fontSize: 12, color: C.blue, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
+  etaLabel: { ...typography.overline, color: colors.accent },
   etaRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 },
-  etaNumber: { fontSize: 52, fontWeight: '800', color: C.blue, lineHeight: 60 },
-  etaUnit: { fontSize: 20, fontWeight: '600', color: C.blue, marginBottom: 8 },
+  etaNumber: { fontSize: 52, fontWeight: '800', color: colors.accent, lineHeight: 60 },
+  etaUnit: { fontSize: 20, fontWeight: '600', color: colors.accent, marginBottom: 8 },
 
   driverCard: {
-    backgroundColor: C.white, borderRadius: 20,
-    padding: 16, alignSelf: 'stretch',
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    ...CARD_SHADOW,
+    backgroundColor: colors.surface, borderRadius: radius.xl,
+    padding: spacing.lg, alignSelf: 'stretch',
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    ...shadows.md,
   },
   driverAvatarWrap: { position: 'relative' },
   driverAvatar: {
     width: 52, height: 52, borderRadius: 26,
-    backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center',
   },
-  driverAvatarText: { color: C.white, fontSize: 22, fontWeight: '800' },
+  driverAvatarText: { color: colors.textInverse, fontSize: 22, fontWeight: '800' },
   driverOnline: {
     position: 'absolute', bottom: 2, right: 2,
     width: 13, height: 13, borderRadius: 7,
-    backgroundColor: C.green, borderWidth: 2, borderColor: C.white,
+    backgroundColor: colors.success, borderWidth: 2, borderColor: colors.surface,
   },
   driverInfo: { flex: 1, gap: 4 },
-  driverName: { fontSize: 15, fontWeight: '700', color: C.text },
-  driverMeta: { fontSize: 11, color: C.subtle, marginTop: 2 },
-  driverActions: { flexDirection: 'row', gap: 8 },
-  driverActionBtn: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: C.border,
-  },
-  driverActionIcon: { fontSize: 18 },
+  driverName: { ...typography.h3, fontSize: 15, color: colors.text },
+  driverMeta: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
+  driverActions: { flexDirection: 'row', gap: spacing.sm },
 
-  rideId: { fontSize: 11, color: '#C7C7CC', fontWeight: '500', marginTop: -4 },
-
-  doneBtn: {
-    height: 54, borderRadius: 16, backgroundColor: C.blue,
-    alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center',
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
-  },
-  doneBtnText: { color: C.white, fontSize: 16, fontWeight: '700' },
+  rideId: { ...typography.caption, color: colors.textTertiary, marginTop: -4 },
 
   // Cancelled
-  cancelledSection: { alignItems: 'center', gap: 16, width: '100%' },
+  cancelledSection: { alignItems: 'center', gap: spacing.lg, width: '100%' },
   cancelledCircle: {
     width: 72, height: 72, borderRadius: 36,
-    backgroundColor: C.red, alignItems: 'center', justifyContent: 'center',
-    shadowColor: C.red,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3, shadowRadius: 16, elevation: 10,
+    backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
+    ...shadows.lg, shadowColor: colors.danger,
   },
-  cancelledIcon: { color: C.white, fontSize: 28, fontWeight: '800' },
-  cancelledTitle: { fontSize: 24, fontWeight: '800', color: C.text },
+  cancelledTitle: { ...typography.display, fontSize: 24, color: colors.text },
   cancelledSubtitle: {
-    fontSize: 14, color: C.subtle, textAlign: 'center', lineHeight: 22, marginTop: -4,
+    ...typography.body, color: colors.textSecondary, textAlign: 'center', marginTop: -4,
   },
-  retryBtn: {
-    height: 54, borderRadius: 16, backgroundColor: C.blue,
-    alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center',
-    shadowColor: C.blue,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+  homeLink: { marginTop: spacing.xs },
+  homeLinkText: { ...typography.bodySm, color: colors.textSecondary, fontWeight: '500' },
+
+  // Cancel reason modal
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
+  modalSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl,
+    paddingHorizontal: spacing.xxl, paddingTop: spacing.md,
+    alignItems: 'center',
   },
-  retryBtnText: { color: C.white, fontSize: 16, fontWeight: '700' },
-  homeLink: { marginTop: 4 },
-  homeLinkText: { fontSize: 14, color: C.subtle, fontWeight: '500' },
+  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.lg },
+  modalIconWrap: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: colors.warningMuted, alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  modalTitle: { ...typography.h3, color: colors.text, textAlign: 'center' },
+  modalSubtitle: { ...typography.bodySm, color: colors.textSecondary, textAlign: 'center', marginTop: 4, marginBottom: spacing.lg },
+
+  reasonRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    alignSelf: 'stretch', paddingVertical: spacing.md,
+    borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  reasonDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
+  reasonText: { flex: 1, ...typography.bodySm, fontWeight: '600', color: colors.text },
 });

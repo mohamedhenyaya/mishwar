@@ -23,17 +23,29 @@ const geolocation_gateway_1 = require("../geolocation/geolocation.gateway");
 const drivers_service_1 = require("../drivers/drivers.service");
 const driver_entity_1 = require("../drivers/entities/driver.entity");
 const pricing_util_1 = require("./utils/pricing.util");
+const geo_util_1 = require("../../common/utils/geo.util");
 const settings_service_1 = require("../settings/settings.service");
 const wallet_service_1 = require("../wallet/wallet.service");
+const promotions_service_1 = require("../promotions/promotions.service");
+const AVG_TRIP_SPEED_KMH = 30;
+const SCHEDULED_ACTIVATION_WINDOW_MS = 5 * 60 * 1_000;
+const SCHEDULED_POLL_INTERVAL_MS = 60 * 1_000;
 let RidesService = RidesService_1 = class RidesService {
-    constructor(rideRepo, geolocationGateway, driversService, config, settingsService, walletService) {
+    constructor(rideRepo, geolocationGateway, driversService, config, settingsService, walletService, promotionsService) {
         this.rideRepo = rideRepo;
         this.geolocationGateway = geolocationGateway;
         this.driversService = driversService;
         this.config = config;
         this.settingsService = settingsService;
         this.walletService = walletService;
+        this.promotionsService = promotionsService;
         this.logger = new common_1.Logger(RidesService_1.name);
+    }
+    onModuleInit() {
+        const timer = setInterval(() => {
+            this.activateDueScheduledRides().catch((err) => this.logger.error(`Échec de l'activation des courses programmées: ${err.message}`));
+        }, SCHEDULED_POLL_INTERVAL_MS);
+        timer.unref();
     }
     async createRide(userId, dto) {
         const ride = this.rideRepo.create({
@@ -44,15 +56,19 @@ let RidesService = RidesService_1 = class RidesService {
             endLatitude: dto.endLatitude ?? null,
             endLongitude: dto.endLongitude ?? null,
             vehicleType: dto.vehicleType,
+            couponCode: dto.couponCode ?? null,
             status: ride_entity_1.RideStatus.PENDING,
         });
         const saved = await this.rideRepo.save(ride);
         this.logger.log(`Course créée: ${saved.id} par user ${userId}`);
-        const notifiedDriverIds = await this.geolocationGateway.notifyNearbyDrivers(saved);
-        saved.notifiedDriverIds = notifiedDriverIds;
-        await this.rideRepo.update(saved.id, { notifiedDriverIds });
-        this.scheduleRideTimeout(saved.id);
+        await this.activatePendingRide(saved);
         return saved;
+    }
+    async activatePendingRide(ride) {
+        const notifiedDriverIds = await this.geolocationGateway.notifyNearbyDrivers(ride);
+        ride.notifiedDriverIds = notifiedDriverIds;
+        await this.rideRepo.update(ride.id, { notifiedDriverIds });
+        this.scheduleRideTimeout(ride.id);
     }
     async findById(id) {
         return this.rideRepo.findOne({ where: { id } });
@@ -142,11 +158,22 @@ let RidesService = RidesService_1 = class RidesService {
         const endLatitude = dto.endLatitude ?? existing.endLatitude ?? existing.startLatitude;
         const endLongitude = dto.endLongitude ?? existing.endLongitude ?? existing.startLongitude;
         const settings = await this.settingsService.getSettings();
-        const price = (0, pricing_util_1.computeFare)(existing.startLatitude, existing.startLongitude, endLatitude, endLongitude, Number(settings.pricePerKm), Number(settings.minimumFare));
+        const grossPrice = (0, pricing_util_1.computeFare)(existing.startLatitude, existing.startLongitude, endLatitude, endLongitude, Number(settings.pricePerKm), Number(settings.minimumFare));
+        let discountAmount = 0;
+        if (existing.couponCode) {
+            try {
+                const result = await this.promotionsService.redeem(existing.couponCode, existing.userId, rideId, grossPrice);
+                discountAmount = result.discountAmount;
+            }
+            catch (err) {
+                this.logger.warn(`Coupon ${existing.couponCode} non appliqué sur la course ${rideId}: ${err.message}`);
+            }
+        }
+        const price = Math.max(0, Math.round((grossPrice - discountAmount) * 100) / 100);
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
-            .set({ status: ride_entity_1.RideStatus.COMPLETED, price, endLatitude, endLongitude })
+            .set({ status: ride_entity_1.RideStatus.COMPLETED, price, discountAmount, endLatitude, endLongitude })
             .where('id = :id AND status = :status AND "driverId" = :driverId', {
             id: rideId,
             status: ride_entity_1.RideStatus.IN_PROGRESS,
@@ -163,7 +190,7 @@ let RidesService = RidesService_1 = class RidesService {
         await this.geolocationGateway.notifyRideCompleted(ride);
         return ride;
     }
-    async cancelRide(rideId, userId) {
+    async cancelRide(rideId, userId, reason) {
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
         if (!ride)
             throw new common_1.NotFoundException('Course non trouvée');
@@ -175,7 +202,7 @@ let RidesService = RidesService_1 = class RidesService {
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
-            .set({ status: ride_entity_1.RideStatus.CANCELLED })
+            .set({ status: ride_entity_1.RideStatus.CANCELLED, cancelledBy: 'user', cancelReason: reason ?? null })
             .where('id = :id AND status = :status', { id: rideId, status: ride.status })
             .execute();
         if (!result.affected) {
@@ -190,6 +217,32 @@ let RidesService = RidesService_1 = class RidesService {
                 this.geolocationGateway.notifyRideUnavailable(driverId, rideId);
             }
         }
+    }
+    async driverCancelRide(rideId, driverId, dto) {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        if (ride.driverId !== driverId)
+            throw new common_1.ForbiddenException('Cette course ne vous est pas assignée');
+        const result = await this.rideRepo
+            .createQueryBuilder()
+            .update(ride_entity_1.Ride)
+            .set({
+            status: ride_entity_1.RideStatus.CANCELLED,
+            cancelledBy: 'driver',
+            cancelReason: dto.reason ?? null,
+        })
+            .where('id = :id AND status = :status AND "driverId" = :driverId', {
+            id: rideId,
+            status: ride_entity_1.RideStatus.ACCEPTED,
+            driverId,
+        })
+            .execute();
+        if (!result.affected) {
+            throw new common_1.ConflictException('Cette course ne peut plus être annulée par le chauffeur');
+        }
+        await this.driversService.updateStatus(driverId, driver_entity_1.DriverStatus.ONLINE);
+        this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'driver_cancelled');
     }
     scheduleRideTimeout(rideId) {
         const timeoutMs = this.config.get('RIDE_ACCEPT_TIMEOUT_MS', 60_000);
@@ -211,6 +264,138 @@ let RidesService = RidesService_1 = class RidesService {
             }
         }, timeoutMs);
         timer.unref();
+    }
+    async estimateRide(dto) {
+        const settings = await this.settingsService.getSettings();
+        const distanceKm = (0, geo_util_1.haversineMeters)(dto.startLatitude, dto.startLongitude, dto.endLatitude, dto.endLongitude) / 1000;
+        const estimatedPrice = (0, pricing_util_1.computeFare)(dto.startLatitude, dto.startLongitude, dto.endLatitude, dto.endLongitude, Number(settings.pricePerKm), Number(settings.minimumFare));
+        return {
+            distanceKm: Math.round(distanceKm * 100) / 100,
+            estimatedDurationMinutes: Math.max(1, Math.round((distanceKm / AVG_TRIP_SPEED_KMH) * 60)),
+            estimatedPrice,
+        };
+    }
+    async getReceipt(rideId, jwt) {
+        const ride = await this.findByIdForParticipant(rideId, jwt);
+        if (ride.status !== ride_entity_1.RideStatus.COMPLETED) {
+            throw new common_1.BadRequestException('Le reçu n\'est disponible qu\'une fois la course terminée');
+        }
+        const settings = await this.settingsService.getSettings();
+        const distanceKm = (0, geo_util_1.haversineMeters)(ride.startLatitude, ride.startLongitude, ride.endLatitude ?? ride.startLatitude, ride.endLongitude ?? ride.startLongitude) / 1000;
+        const discountAmount = Number(ride.discountAmount ?? 0);
+        const finalPrice = Number(ride.price ?? 0);
+        return {
+            rideId: ride.id,
+            distanceKm: Math.round(distanceKm * 100) / 100,
+            pricePerKm: Number(settings.pricePerKm),
+            minimumFare: Number(settings.minimumFare),
+            grossFare: Math.round((finalPrice + discountAmount) * 100) / 100,
+            couponCode: ride.couponCode,
+            discountAmount,
+            finalPrice,
+            completedAt: ride.updatedAt,
+        };
+    }
+    async createScheduledRide(userId, dto) {
+        const scheduledAt = new Date(dto.scheduledAt);
+        if (scheduledAt.getTime() < Date.now() + SCHEDULED_ACTIVATION_WINDOW_MS) {
+            throw new common_1.BadRequestException('La date programmée doit être au moins 5 minutes dans le futur');
+        }
+        const ride = this.rideRepo.create({
+            userId,
+            startLatitude: dto.startLatitude,
+            startLongitude: dto.startLongitude,
+            destinationName: dto.destinationName,
+            endLatitude: dto.endLatitude ?? null,
+            endLongitude: dto.endLongitude ?? null,
+            vehicleType: dto.vehicleType,
+            couponCode: dto.couponCode ?? null,
+            scheduledAt,
+            status: ride_entity_1.RideStatus.SCHEDULED,
+        });
+        const saved = await this.rideRepo.save(ride);
+        this.logger.log(`Course programmée créée: ${saved.id} par user ${userId} pour ${scheduledAt.toISOString()}`);
+        return saved;
+    }
+    async findScheduledByUser(userId) {
+        return this.rideRepo.find({
+            where: { userId, status: ride_entity_1.RideStatus.SCHEDULED },
+            order: { scheduledAt: 'ASC' },
+        });
+    }
+    async updateScheduledRide(rideId, userId, dto) {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        if (ride.userId !== userId)
+            throw new common_1.ForbiddenException('Cette course ne vous appartient pas');
+        if (ride.status !== ride_entity_1.RideStatus.SCHEDULED) {
+            throw new common_1.ConflictException('Cette course ne peut plus être modifiée');
+        }
+        let scheduledAt = ride.scheduledAt;
+        if (dto.scheduledAt) {
+            scheduledAt = new Date(dto.scheduledAt);
+            if (scheduledAt.getTime() < Date.now() + SCHEDULED_ACTIVATION_WINDOW_MS) {
+                throw new common_1.BadRequestException('La date programmée doit être au moins 5 minutes dans le futur');
+            }
+        }
+        await this.rideRepo.update(rideId, {
+            scheduledAt,
+            startLatitude: dto.startLatitude ?? ride.startLatitude,
+            startLongitude: dto.startLongitude ?? ride.startLongitude,
+            destinationName: dto.destinationName ?? ride.destinationName,
+            vehicleType: dto.vehicleType ?? ride.vehicleType,
+            endLatitude: dto.endLatitude ?? ride.endLatitude,
+            endLongitude: dto.endLongitude ?? ride.endLongitude,
+        });
+        return this.rideRepo.findOne({ where: { id: rideId } });
+    }
+    async cancelScheduledRide(rideId, userId) {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        if (ride.userId !== userId)
+            throw new common_1.ForbiddenException('Cette course ne vous appartient pas');
+        const result = await this.rideRepo
+            .createQueryBuilder()
+            .update(ride_entity_1.Ride)
+            .set({ status: ride_entity_1.RideStatus.CANCELLED, cancelledBy: 'user' })
+            .where('id = :id AND status = :status', { id: rideId, status: ride_entity_1.RideStatus.SCHEDULED })
+            .execute();
+        if (!result.affected) {
+            throw new common_1.ConflictException('Cette course ne peut plus être annulée');
+        }
+    }
+    async findScheduledForAdmin(query) {
+        const page = query.page ?? 1;
+        const limit = query.limit ?? 20;
+        const qb = this.rideRepo
+            .createQueryBuilder('ride')
+            .where('ride.status = :status', { status: ride_entity_1.RideStatus.SCHEDULED })
+            .orderBy('ride.scheduledAt', 'ASC');
+        const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+        return { data, total, page, limit };
+    }
+    async activateDueScheduledRides() {
+        const dueRides = await this.rideRepo.find({
+            where: {
+                status: ride_entity_1.RideStatus.SCHEDULED,
+                scheduledAt: (0, typeorm_2.LessThanOrEqual)(new Date(Date.now() + SCHEDULED_ACTIVATION_WINDOW_MS)),
+            },
+        });
+        for (const ride of dueRides) {
+            const result = await this.rideRepo
+                .createQueryBuilder()
+                .update(ride_entity_1.Ride)
+                .set({ status: ride_entity_1.RideStatus.PENDING })
+                .where('id = :id AND status = :status', { id: ride.id, status: ride_entity_1.RideStatus.SCHEDULED })
+                .execute();
+            if (!result.affected)
+                continue;
+            ride.status = ride_entity_1.RideStatus.PENDING;
+            this.logger.log(`Course programmée activée: ${ride.id}`);
+            await this.activatePendingRide(ride);
+        }
     }
     async findAllForAdmin(query) {
         const page = query.page ?? 1;
@@ -245,6 +430,7 @@ exports.RidesService = RidesService = RidesService_1 = __decorate([
         drivers_service_1.DriversService,
         config_1.ConfigService,
         settings_service_1.SettingsService,
-        wallet_service_1.WalletService])
+        wallet_service_1.WalletService,
+        promotions_service_1.PromotionsService])
 ], RidesService);
 //# sourceMappingURL=rides.service.js.map
