@@ -5,11 +5,15 @@ import { Repository } from 'typeorm';
 import { Ride, RideStatus } from './entities/ride.entity';
 import { CreateRideDto } from './dto/create-ride.dto';
 import { CompleteRideDto } from './dto/complete-ride.dto';
+import { AdminRidesQueryDto } from './dto/admin-rides-query.dto';
 import { GeolocationGateway } from '../geolocation/geolocation.gateway';
 import { DriversService } from '../drivers/drivers.service';
 import { DriverStatus } from '../drivers/entities/driver.entity';
 import { computeFare } from './utils/pricing.util';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { SettingsService } from '../settings/settings.service';
+import { WalletService } from '../wallet/wallet.service';
+import { PaginatedResult } from '../../common/dto/pagination-query.dto';
 
 @Injectable()
 export class RidesService {
@@ -21,6 +25,8 @@ export class RidesService {
     private readonly geolocationGateway: GeolocationGateway,
     private readonly driversService: DriversService,
     private readonly config: ConfigService,
+    private readonly settingsService: SettingsService,
+    private readonly walletService: WalletService,
   ) {}
 
   async createRide(userId: string, dto: CreateRideDto): Promise<Ride> {
@@ -74,6 +80,11 @@ export class RidesService {
   // ── Acceptation : le premier UPDATE conditionnel gagne ────────────────────
 
   async acceptRide(rideId: string, driverId: string): Promise<Ride> {
+    const driver = await this.driversService.findById(driverId);
+    if (!driver.isActive) {
+      throw new ForbiddenException(driver.blockedReason ?? 'Compte chauffeur bloqué');
+    }
+
     const result = await this.rideRepo
       .createQueryBuilder()
       .update(Ride)
@@ -87,8 +98,7 @@ export class RidesService {
 
     await this.driversService.updateStatus(driverId, DriverStatus.BUSY);
 
-    const ride   = await this.rideRepo.findOne({ where: { id: rideId } });
-    const driver = await this.driversService.findById(driverId);
+    const ride = await this.rideRepo.findOne({ where: { id: rideId } });
     await this.geolocationGateway.notifyRideAccepted(ride, driver);
 
     return ride;
@@ -149,7 +159,12 @@ export class RidesService {
 
     const endLatitude  = dto.endLatitude  ?? existing.endLatitude  ?? existing.startLatitude;
     const endLongitude = dto.endLongitude ?? existing.endLongitude ?? existing.startLongitude;
-    const price = computeFare(existing.startLatitude, existing.startLongitude, endLatitude, endLongitude);
+    const settings = await this.settingsService.getSettings();
+    const price = computeFare(
+      existing.startLatitude, existing.startLongitude,
+      endLatitude, endLongitude,
+      Number(settings.pricePerKm), Number(settings.minimumFare),
+    );
 
     const result = await this.rideRepo
       .createQueryBuilder()
@@ -168,6 +183,7 @@ export class RidesService {
 
     await this.driversService.updateStatus(driverId, DriverStatus.ONLINE);
     await this.driversService.incrementTotalRides(driverId);
+    await this.walletService.deductCommission(driverId, rideId, price, Number(settings.commissionPercent));
 
     const ride = await this.rideRepo.findOne({ where: { id: rideId } });
     await this.geolocationGateway.notifyRideCompleted(ride);
@@ -229,5 +245,28 @@ export class RidesService {
     }, timeoutMs);
 
     timer.unref();
+  }
+
+  // ═══════════════════════════ Administration ═══════════════════════════════
+
+  async findAllForAdmin(query: AdminRidesQueryDto): Promise<PaginatedResult<Ride>> {
+    const page  = query.page  ?? 1;
+    const limit = query.limit ?? 20;
+
+    const qb = this.rideRepo.createQueryBuilder('ride').orderBy('ride.createdAt', 'DESC');
+    if (query.status)   qb.andWhere('ride.status = :status', { status: query.status });
+    if (query.driverId) qb.andWhere('ride."driverId" = :driverId', { driverId: query.driverId });
+    if (query.userId)   qb.andWhere('ride."userId" = :userId', { userId: query.userId });
+    if (query.from)      qb.andWhere('ride.createdAt >= :from', { from: query.from });
+    if (query.to)         qb.andWhere('ride.createdAt <= :to', { to: query.to });
+
+    const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+    return { data, total, page, limit };
+  }
+
+  async findByIdForAdmin(id: string): Promise<Ride> {
+    const ride = await this.rideRepo.findOne({ where: { id } });
+    if (!ride) throw new NotFoundException('Course non trouvée');
+    return ride;
   }
 }

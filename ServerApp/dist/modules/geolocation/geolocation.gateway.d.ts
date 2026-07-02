@@ -30,5 +30,6 @@ export declare class GeolocationGateway implements OnGatewayConnection, OnGatewa
     notifyRideCompleted(ride: Ride): Promise<void>;
     notifyRideCancelled(room: string, rideId: string, reason: RideCancelReason): void;
     notifyRideUnavailable(driverId: string, rideId: string): void;
+    notifyCustom(room: string, event: string, payload: unknown): void;
 }
 export {};

@@ -15,6 +15,7 @@ var AuthService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const jwt_1 = require("@nestjs/jwt");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
@@ -24,11 +25,12 @@ const driver_entity_1 = require("../drivers/entities/driver.entity");
 const send_otp_dto_1 = require("./dto/send-otp.dto");
 const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
 let AuthService = AuthService_1 = class AuthService {
-    constructor(userRepo, driverRepo, jwtService, whatsappService) {
+    constructor(userRepo, driverRepo, jwtService, whatsappService, config) {
         this.userRepo = userRepo;
         this.driverRepo = driverRepo;
         this.jwtService = jwtService;
         this.whatsappService = whatsappService;
+        this.config = config;
         this.logger = new common_1.Logger(AuthService_1.name);
         this.otpStore = new Map();
     }
@@ -100,6 +102,9 @@ let AuthService = AuthService_1 = class AuthService {
             if (!isValid) {
                 throw new common_1.UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
             }
+            if (!driver.isActive) {
+                throw new common_1.ForbiddenException(driver.blockedReason ?? 'Compte bloqué');
+            }
             const accessToken = this.jwtService.sign({ sub: driver.id, phone: driver.phone, role: 'driver' });
             return { accessToken };
         }
@@ -118,7 +123,34 @@ let AuthService = AuthService_1 = class AuthService {
         if (!isValid) {
             throw new common_1.UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
         }
+        if (!user.isActive) {
+            throw new common_1.ForbiddenException(user.blockedReason ?? 'Compte bloqué');
+        }
         const accessToken = this.jwtService.sign({ sub: user.id, phone: user.phone, role: user.role });
+        return { accessToken };
+    }
+    async bootstrapAdmin(dto) {
+        const expectedSecret = this.config.get('ADMIN_BOOTSTRAP_SECRET');
+        if (!expectedSecret || dto.secret !== expectedSecret) {
+            throw new common_1.ForbiddenException('Secret invalide');
+        }
+        const adminCount = await this.userRepo.count({ where: { role: user_entity_1.UserRole.ADMIN } });
+        if (adminCount > 0) {
+            throw new common_1.ForbiddenException('Un admin existe déjà — utilisez POST /admin/users/admins avec un compte admin existant');
+        }
+        const existing = await this.userRepo.findOne({ where: { phone: dto.phone } });
+        if (existing)
+            throw new common_1.BadRequestException('Un compte avec ce numéro existe déjà');
+        const passwordHash = await bcrypt.hash(dto.password, 10);
+        const admin = this.userRepo.create({
+            phone: dto.phone,
+            name: dto.name,
+            passwordHash,
+            role: user_entity_1.UserRole.ADMIN,
+        });
+        await this.userRepo.save(admin);
+        this.logger.log(`Premier compte admin créé: ${admin.id}`);
+        const accessToken = this.jwtService.sign({ sub: admin.id, phone: admin.phone, role: 'admin' });
         return { accessToken };
     }
 };
@@ -130,6 +162,7 @@ exports.AuthService = AuthService = AuthService_1 = __decorate([
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         jwt_1.JwtService,
-        whatsapp_service_1.WhatsappService])
+        whatsapp_service_1.WhatsappService,
+        config_1.ConfigService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

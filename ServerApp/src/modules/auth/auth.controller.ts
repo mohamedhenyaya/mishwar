@@ -1,9 +1,12 @@
 import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { RegisterVerifyDto } from './dto/register-verify.dto';
 import { LoginDto } from './dto/login.dto';
+import { AdminBootstrapDto } from './dto/admin-bootstrap.dto';
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -27,5 +30,16 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  // Amorçage — crée le tout premier compte admin (une seule fois, secret requis)
+  @Post('admin/bootstrap')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Créer le tout premier compte administrateur',
+    description: 'Réservé à la mise en route de la plateforme. Nécessite ADMIN_BOOTSTRAP_SECRET et échoue si un admin existe déjà — utilisez ensuite POST /admin/users/admins en tant qu\'admin authentifié.',
+  })
+  bootstrapAdmin(@Body() dto: AdminBootstrapDto) {
+    return this.authService.bootstrapAdmin(dto);
   }
 }

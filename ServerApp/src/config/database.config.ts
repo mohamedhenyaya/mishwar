@@ -3,6 +3,9 @@ import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { User } from '../modules/users/entities/user.entity';
 import { Driver } from '../modules/drivers/entities/driver.entity';
 import { Ride } from '../modules/rides/entities/ride.entity';
+import { PlatformSettings } from '../modules/settings/entities/platform-settings.entity';
+import { WalletTransaction } from '../modules/wallet/entities/wallet-transaction.entity';
+import { Notification } from '../modules/notifications/entities/notification.entity';
 
 export const databaseConfig = (config: ConfigService): TypeOrmModuleOptions => ({
   type: 'postgres',
@@ -11,7 +14,7 @@ export const databaseConfig = (config: ConfigService): TypeOrmModuleOptions => (
   username: config.get<string>('DB_USERNAME', 'vtc_user'),
   password: config.get<string>('DB_PASSWORD', 'vtc_password'),
   database: config.get<string>('DB_NAME', 'vtc_db'),
-  entities: [User, Driver, Ride],
+  entities: [User, Driver, Ride, PlatformSettings, WalletTransaction, Notification],
   // synchronize crée/met à jour les tables automatiquement — DÉSACTIVER en production
   synchronize: config.get<string>('NODE_ENV') !== 'production',
   logging:     config.get<string>('NODE_ENV') === 'development',

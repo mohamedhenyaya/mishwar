@@ -7,6 +7,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { apiPost } from '../services/api';
+import { searchPlaces, PlaceSuggestion } from '../services/places';
 import { RootStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booking'>;
@@ -59,6 +60,8 @@ export default function BookingScreen({ navigation, route }: Props) {
   const [vehicleType,    setVehicleType]    = useState('economy');
   const [loading,        setLoading]        = useState(false);
   const [inputFocused,   setInputFocused]   = useState(false);
+  const [suggestions,    setSuggestions]    = useState<PlaceSuggestion[]>([]);
+  const [searching,      setSearching]      = useState(false);
 
   const inputRef = useRef<TextInput>(null);
 
@@ -73,6 +76,35 @@ export default function BookingScreen({ navigation, route }: Props) {
       Animated.spring(slideAnim, { toValue: 0, tension: 80, friction: 12, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  // ── Autocomplete de lieux (debounce 350ms) ────────────────────────────────
+
+  const searchSeq = useRef(0);
+
+  useEffect(() => {
+    const query = destination.trim();
+    if (query.length < 2) {
+      setSuggestions([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    const seq = ++searchSeq.current;
+
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchPlaces(query, startLatitude, startLongitude);
+        if (seq === searchSeq.current) setSuggestions(results);
+      } catch {
+        if (seq === searchSeq.current) setSuggestions([]);
+      } finally {
+        if (seq === searchSeq.current) setSearching(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [destination, startLatitude, startLongitude]);
 
   const handleFocus = () => {
     setInputFocused(true);
@@ -205,6 +237,43 @@ export default function BookingScreen({ navigation, route }: Props) {
               );
             })}
           </View>
+
+          {/* ── Suggestions de lieux (pendant la frappe) ─────────────────── */}
+          {inputFocused && destination.trim().length >= 2 && (
+            <>
+              <Text style={styles.sectionTitle}>
+                {searching ? 'Recherche…' : 'Suggestions'}
+              </Text>
+              <View style={styles.recentList}>
+                {suggestions.map((place, idx) => (
+                  <TouchableOpacity
+                    key={place.placeId}
+                    style={[
+                      styles.recentItem,
+                      idx === suggestions.length - 1 && styles.recentItemLast,
+                    ]}
+                    onPress={() => {
+                      setDestination(place.mainText || place.description);
+                      inputRef.current?.blur();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.recentIconWrap}>
+                      <Text style={styles.recentIconText}>📍</Text>
+                    </View>
+                    <View style={styles.recentContent}>
+                      <Text style={styles.recentLabel} numberOfLines={1}>{place.mainText}</Text>
+                      <Text style={styles.recentSub} numberOfLines={1}>{place.secondaryText}</Text>
+                    </View>
+                    <Text style={styles.recentChevron}>›</Text>
+                  </TouchableOpacity>
+                ))}
+                {!searching && suggestions.length === 0 && (
+                  <Text style={styles.emptySuggestions}>Aucun lieu trouvé</Text>
+                )}
+              </View>
+            </>
+          )}
 
           {/* ── Destinations récentes ─────────────────────────────────── */}
           {!inputFocused && (
@@ -374,6 +443,10 @@ const styles = StyleSheet.create({
   recentLabel: { fontSize: 14, fontWeight: '600', color: C.text },
   recentSub: { fontSize: 12, color: C.subtle, marginTop: 2 },
   recentChevron: { fontSize: 20, color: '#C7C7CC', fontWeight: '300' },
+  emptySuggestions: {
+    fontSize: 13, color: C.subtle, textAlign: 'center',
+    paddingVertical: 20,
+  },
 
   // Footer
   footer: {

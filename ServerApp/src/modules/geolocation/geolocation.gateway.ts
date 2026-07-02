@@ -7,7 +7,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { forwardRef, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { DriversService } from '../drivers/drivers.service';
@@ -30,6 +30,7 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
   private readonly driverActiveRide = new Map<string, string>();
 
   constructor(
+    @Inject(forwardRef(() => DriversService))
     private readonly driversService: DriversService,
     private readonly jwtService: JwtService,
   ) {}
@@ -216,5 +217,11 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
 
   notifyRideUnavailable(driverId: string, rideId: string): void {
     this.server.to(`driver:${driverId}`).emit('ride:unavailable', { rideId });
+  }
+
+  // ── Émission générique ciblée — réutilisée par NotificationsModule, blocage admin, etc. ──
+
+  notifyCustom(room: string, event: string, payload: unknown): void {
+    this.server.to(room).emit(event, payload);
   }
 }

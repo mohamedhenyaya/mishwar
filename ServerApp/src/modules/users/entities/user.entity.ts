@@ -34,6 +34,15 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ nullable: true })
+  blockedReason: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  blockedAt: Date | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  balance: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

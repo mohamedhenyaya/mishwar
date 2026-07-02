@@ -1,18 +1,21 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
 import { Driver } from '../drivers/entities/driver.entity';
 import { SendOtpDto, AuthRole } from './dto/send-otp.dto';
 import { RegisterVerifyDto } from './dto/register-verify.dto';
 import { LoginDto } from './dto/login.dto';
+import { AdminBootstrapDto } from './dto/admin-bootstrap.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 interface OtpEntry {
@@ -33,6 +36,7 @@ export class AuthService {
     private readonly driverRepo: Repository<Driver>,
     private readonly jwtService: JwtService,
     private readonly whatsappService: WhatsappService,
+    private readonly config: ConfigService,
   ) {}
 
   // ── Inscription : étape 1 — envoyer OTP ──────────────────────────────────
@@ -121,6 +125,9 @@ export class AuthService {
       if (!isValid) {
         throw new UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
       }
+      if (!driver.isActive) {
+        throw new ForbiddenException(driver.blockedReason ?? 'Compte bloqué');
+      }
 
       const accessToken = this.jwtService.sign({ sub: driver.id, phone: driver.phone, role: 'driver' });
       return { accessToken };
@@ -143,8 +150,44 @@ export class AuthService {
     if (!isValid) {
       throw new UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
     }
+    if (!user.isActive) {
+      throw new ForbiddenException(user.blockedReason ?? 'Compte bloqué');
+    }
 
     const accessToken = this.jwtService.sign({ sub: user.id, phone: user.phone, role: user.role });
+    return { accessToken };
+  }
+
+  // ── Amorçage : créer le tout premier compte admin ─────────────────────────
+  // Ne fonctionne qu'une seule fois (tant qu'aucun admin n'existe) et exige le secret serveur.
+
+  async bootstrapAdmin(dto: AdminBootstrapDto): Promise<{ accessToken: string }> {
+    const expectedSecret = this.config.get<string>('ADMIN_BOOTSTRAP_SECRET');
+    if (!expectedSecret || dto.secret !== expectedSecret) {
+      throw new ForbiddenException('Secret invalide');
+    }
+
+    const adminCount = await this.userRepo.count({ where: { role: UserRole.ADMIN } });
+    if (adminCount > 0) {
+      throw new ForbiddenException(
+        'Un admin existe déjà — utilisez POST /admin/users/admins avec un compte admin existant',
+      );
+    }
+
+    const existing = await this.userRepo.findOne({ where: { phone: dto.phone } });
+    if (existing) throw new BadRequestException('Un compte avec ce numéro existe déjà');
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const admin = this.userRepo.create({
+      phone: dto.phone,
+      name:  dto.name,
+      passwordHash,
+      role:  UserRole.ADMIN,
+    });
+    await this.userRepo.save(admin);
+    this.logger.log(`Premier compte admin créé: ${admin.id}`);
+
+    const accessToken = this.jwtService.sign({ sub: admin.id, phone: admin.phone, role: 'admin' });
     return { accessToken };
   }
 }

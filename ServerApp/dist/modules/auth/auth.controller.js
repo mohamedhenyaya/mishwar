@@ -14,10 +14,12 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const auth_service_1 = require("./auth.service");
 const send_otp_dto_1 = require("./dto/send-otp.dto");
 const register_verify_dto_1 = require("./dto/register-verify.dto");
 const login_dto_1 = require("./dto/login.dto");
+const admin_bootstrap_dto_1 = require("./dto/admin-bootstrap.dto");
 let AuthController = class AuthController {
     constructor(authService) {
         this.authService = authService;
@@ -30,6 +32,9 @@ let AuthController = class AuthController {
     }
     login(dto) {
         return this.authService.login(dto);
+    }
+    bootstrapAdmin(dto) {
+        return this.authService.bootstrapAdmin(dto);
     }
 };
 exports.AuthController = AuthController;
@@ -57,7 +62,20 @@ __decorate([
     __metadata("design:paramtypes", [login_dto_1.LoginDto]),
     __metadata("design:returntype", void 0)
 ], AuthController.prototype, "login", null);
+__decorate([
+    (0, common_1.Post)('admin/bootstrap'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Créer le tout premier compte administrateur',
+        description: 'Réservé à la mise en route de la plateforme. Nécessite ADMIN_BOOTSTRAP_SECRET et échoue si un admin existe déjà — utilisez ensuite POST /admin/users/admins en tant qu\'admin authentifié.',
+    }),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [admin_bootstrap_dto_1.AdminBootstrapDto]),
+    __metadata("design:returntype", void 0)
+], AuthController.prototype, "bootstrapAdmin", null);
 exports.AuthController = AuthController = __decorate([
+    (0, swagger_1.ApiTags)('auth'),
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService])
 ], AuthController);

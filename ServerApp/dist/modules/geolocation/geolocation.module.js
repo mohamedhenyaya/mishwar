@@ -16,7 +16,7 @@ let GeolocationModule = class GeolocationModule {
 exports.GeolocationModule = GeolocationModule;
 exports.GeolocationModule = GeolocationModule = __decorate([
     (0, common_1.Module)({
-        imports: [drivers_module_1.DriversModule, auth_module_1.AuthModule],
+        imports: [(0, common_1.forwardRef)(() => drivers_module_1.DriversModule), auth_module_1.AuthModule],
         providers: [geolocation_gateway_1.GeolocationGateway],
         exports: [geolocation_gateway_1.GeolocationGateway],
     })

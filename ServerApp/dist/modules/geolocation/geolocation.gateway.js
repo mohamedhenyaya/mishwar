@@ -163,6 +163,9 @@ let GeolocationGateway = GeolocationGateway_1 = class GeolocationGateway {
     notifyRideUnavailable(driverId, rideId) {
         this.server.to(`driver:${driverId}`).emit('ride:unavailable', { rideId });
     }
+    notifyCustom(room, event, payload) {
+        this.server.to(room).emit(event, payload);
+    }
 };
 exports.GeolocationGateway = GeolocationGateway;
 __decorate([
@@ -194,6 +197,7 @@ __decorate([
 ], GeolocationGateway.prototype, "handleUserLocation", null);
 exports.GeolocationGateway = GeolocationGateway = GeolocationGateway_1 = __decorate([
     (0, websockets_1.WebSocketGateway)({ cors: { origin: '*' } }),
+    __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => drivers_service_1.DriversService))),
     __metadata("design:paramtypes", [drivers_service_1.DriversService,
         jwt_1.JwtService])
 ], GeolocationGateway);

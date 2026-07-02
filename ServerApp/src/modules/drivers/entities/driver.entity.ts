@@ -64,6 +64,16 @@ export class Driver {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ nullable: true })
+  blockedReason: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  blockedAt: Date | null;
+
+  // Solde de crédit prépayé — la commission de chaque course terminée y est automatiquement déduite
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  balance: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -24,6 +24,9 @@ export declare class Driver {
     longitude: number | null;
     lastLocationUpdate: Date | null;
     isActive: boolean;
+    blockedReason: string | null;
+    blockedAt: Date | null;
+    balance: number;
     createdAt: Date;
     updatedAt: Date;
 }

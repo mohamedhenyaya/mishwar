@@ -23,12 +23,16 @@ const geolocation_gateway_1 = require("../geolocation/geolocation.gateway");
 const drivers_service_1 = require("../drivers/drivers.service");
 const driver_entity_1 = require("../drivers/entities/driver.entity");
 const pricing_util_1 = require("./utils/pricing.util");
+const settings_service_1 = require("../settings/settings.service");
+const wallet_service_1 = require("../wallet/wallet.service");
 let RidesService = RidesService_1 = class RidesService {
-    constructor(rideRepo, geolocationGateway, driversService, config) {
+    constructor(rideRepo, geolocationGateway, driversService, config, settingsService, walletService) {
         this.rideRepo = rideRepo;
         this.geolocationGateway = geolocationGateway;
         this.driversService = driversService;
         this.config = config;
+        this.settingsService = settingsService;
+        this.walletService = walletService;
         this.logger = new common_1.Logger(RidesService_1.name);
     }
     async createRide(userId, dto) {
@@ -71,6 +75,10 @@ let RidesService = RidesService_1 = class RidesService {
         return ride;
     }
     async acceptRide(rideId, driverId) {
+        const driver = await this.driversService.findById(driverId);
+        if (!driver.isActive) {
+            throw new common_1.ForbiddenException(driver.blockedReason ?? 'Compte chauffeur bloqué');
+        }
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
@@ -82,7 +90,6 @@ let RidesService = RidesService_1 = class RidesService {
         }
         await this.driversService.updateStatus(driverId, driver_entity_1.DriverStatus.BUSY);
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
-        const driver = await this.driversService.findById(driverId);
         await this.geolocationGateway.notifyRideAccepted(ride, driver);
         return ride;
     }
@@ -134,7 +141,8 @@ let RidesService = RidesService_1 = class RidesService {
             throw new common_1.ForbiddenException('Cette course ne vous est pas assignée');
         const endLatitude = dto.endLatitude ?? existing.endLatitude ?? existing.startLatitude;
         const endLongitude = dto.endLongitude ?? existing.endLongitude ?? existing.startLongitude;
-        const price = (0, pricing_util_1.computeFare)(existing.startLatitude, existing.startLongitude, endLatitude, endLongitude);
+        const settings = await this.settingsService.getSettings();
+        const price = (0, pricing_util_1.computeFare)(existing.startLatitude, existing.startLongitude, endLatitude, endLongitude, Number(settings.pricePerKm), Number(settings.minimumFare));
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
@@ -150,6 +158,7 @@ let RidesService = RidesService_1 = class RidesService {
         }
         await this.driversService.updateStatus(driverId, driver_entity_1.DriverStatus.ONLINE);
         await this.driversService.incrementTotalRides(driverId);
+        await this.walletService.deductCommission(driverId, rideId, price, Number(settings.commissionPercent));
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
         await this.geolocationGateway.notifyRideCompleted(ride);
         return ride;
@@ -203,6 +212,29 @@ let RidesService = RidesService_1 = class RidesService {
         }, timeoutMs);
         timer.unref();
     }
+    async findAllForAdmin(query) {
+        const page = query.page ?? 1;
+        const limit = query.limit ?? 20;
+        const qb = this.rideRepo.createQueryBuilder('ride').orderBy('ride.createdAt', 'DESC');
+        if (query.status)
+            qb.andWhere('ride.status = :status', { status: query.status });
+        if (query.driverId)
+            qb.andWhere('ride."driverId" = :driverId', { driverId: query.driverId });
+        if (query.userId)
+            qb.andWhere('ride."userId" = :userId', { userId: query.userId });
+        if (query.from)
+            qb.andWhere('ride.createdAt >= :from', { from: query.from });
+        if (query.to)
+            qb.andWhere('ride.createdAt <= :to', { to: query.to });
+        const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+        return { data, total, page, limit };
+    }
+    async findByIdForAdmin(id) {
+        const ride = await this.rideRepo.findOne({ where: { id } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        return ride;
+    }
 };
 exports.RidesService = RidesService;
 exports.RidesService = RidesService = RidesService_1 = __decorate([
@@ -211,6 +243,8 @@ exports.RidesService = RidesService = RidesService_1 = __decorate([
     __metadata("design:paramtypes", [typeorm_2.Repository,
         geolocation_gateway_1.GeolocationGateway,
         drivers_service_1.DriversService,
-        config_1.ConfigService])
+        config_1.ConfigService,
+        settings_service_1.SettingsService,
+        wallet_service_1.WalletService])
 ], RidesService);
 //# sourceMappingURL=rides.service.js.map

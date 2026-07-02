@@ -1,10 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { GeolocationGateway } from './geolocation.gateway';
 import { DriversModule } from '../drivers/drivers.module';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [DriversModule, AuthModule],
+  imports: [forwardRef(() => DriversModule), AuthModule],
   providers: [GeolocationGateway],
   exports: [GeolocationGateway],
 })
