@@ -18,7 +18,7 @@ class VerifyOtpDto {
 exports.VerifyOtpDto = VerifyOtpDto;
 __decorate([
     (0, swagger_1.ApiProperty)({ example: '+213612345678' }),
-    (0, class_validator_1.IsMobilePhone)(),
+    (0, class_validator_1.IsPhoneNumber)(),
     __metadata("design:type", String)
 ], VerifyOtpDto.prototype, "phone", void 0);
 __decorate([

@@ -69,6 +69,21 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
+    // Le rôle est celui enregistré à l'étape send-otp — jamais fourni par le client ici
+    if (entry.role === AuthRole.DRIVER) {
+      let driver = await this.driverRepo.findOne({ where: { phone: dto.phone } });
+      if (driver) {
+        await this.driverRepo.update(driver.id, { passwordHash });
+      } else {
+        driver = this.driverRepo.create({ phone: dto.phone, passwordHash });
+        await this.driverRepo.save(driver);
+        this.logger.log(`Nouveau chauffeur inscrit: ${driver.id}`);
+      }
+
+      const accessToken = this.jwtService.sign({ sub: driver.id, phone: driver.phone, role: 'driver' });
+      return { accessToken };
+    }
+
     // Crée ou met à jour le compte avec le hash du mot de passe
     let user = await this.userRepo.findOne({ where: { phone: dto.phone } });
     if (user) {
@@ -86,6 +101,31 @@ export class AuthService {
   // ── Connexion : téléphone + mot de passe ─────────────────────────────────
 
   async login(dto: LoginDto): Promise<{ accessToken: string }> {
+    const role = dto.role ?? AuthRole.USER;
+
+    if (role === AuthRole.DRIVER) {
+      const driver = await this.driverRepo
+        .createQueryBuilder('driver')
+        .addSelect('driver.passwordHash')
+        .where('driver.phone = :phone', { phone: dto.phone })
+        .getOne();
+
+      if (!driver) {
+        throw new UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
+      }
+      if (!driver.passwordHash) {
+        throw new UnauthorizedException('Ce compte n\'a pas encore de mot de passe — utilisez l\'inscription');
+      }
+
+      const isValid = await bcrypt.compare(dto.password, driver.passwordHash);
+      if (!isValid) {
+        throw new UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
+      }
+
+      const accessToken = this.jwtService.sign({ sub: driver.id, phone: driver.phone, role: 'driver' });
+      return { accessToken };
+    }
+
     const user = await this.userRepo
       .createQueryBuilder('user')
       .addSelect('user.passwordHash')

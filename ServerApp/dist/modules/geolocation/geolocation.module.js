@@ -10,12 +10,13 @@ exports.GeolocationModule = void 0;
 const common_1 = require("@nestjs/common");
 const geolocation_gateway_1 = require("./geolocation.gateway");
 const drivers_module_1 = require("../drivers/drivers.module");
+const auth_module_1 = require("../auth/auth.module");
 let GeolocationModule = class GeolocationModule {
 };
 exports.GeolocationModule = GeolocationModule;
 exports.GeolocationModule = GeolocationModule = __decorate([
     (0, common_1.Module)({
-        imports: [drivers_module_1.DriversModule],
+        imports: [drivers_module_1.DriversModule, auth_module_1.AuthModule],
         providers: [geolocation_gateway_1.GeolocationGateway],
         exports: [geolocation_gateway_1.GeolocationGateway],
     })

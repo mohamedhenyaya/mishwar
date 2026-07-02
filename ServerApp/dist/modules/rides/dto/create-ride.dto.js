@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateRideDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
+const ride_entity_1 = require("../entities/ride.entity");
 class CreateRideDto {
 }
 exports.CreateRideDto = CreateRideDto;
@@ -33,6 +34,10 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateRideDto.prototype, "destinationName", void 0);
+__decorate([
+    (0, class_validator_1.IsEnum)(ride_entity_1.RideVehicleClass),
+    __metadata("design:type", String)
+], CreateRideDto.prototype, "vehicleType", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsNumber)(),

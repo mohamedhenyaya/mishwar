@@ -8,9 +8,16 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { DriversService } from '../drivers/drivers.service';
+import { Driver } from '../drivers/entities/driver.entity';
 import { Ride } from '../rides/entities/ride.entity';
+import { VEHICLE_CLASS_TO_DRIVER_TYPES } from '../rides/utils/vehicle-class.util';
+import { estimateEtaMinutes } from '../rides/utils/pricing.util';
+import { JwtPayload } from '../auth/strategies/jwt.strategy';
+
+type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -19,59 +26,94 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
 
   // driverId → socketId
   private readonly connectedDrivers = new Map<string, string>();
+  // driverId → rideId en cours (scope les mises à jour de position à la course active)
+  private readonly driverActiveRide = new Map<string, string>();
 
-  constructor(private readonly driversService: DriversService) {}
+  constructor(
+    private readonly driversService: DriversService,
+    private readonly jwtService: JwtService,
+  ) {}
 
-  handleConnection(client: Socket) {
+  // ── Connexion : authentifie via le JWT envoyé par le client (handshake.auth.token)
+
+  async handleConnection(client: Socket) {
     this.logger.log(`Client connecté: ${client.id}`);
+
+    const token = client.handshake.auth?.token as string | undefined;
+    if (!token) return; // connexion anonyme tolérée (aperçu carte non authentifié)
+
+    try {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(token);
+      client.data.sub  = payload.sub;
+      client.data.role = payload.role;
+
+      if (payload.role === 'driver') {
+        this.connectedDrivers.set(payload.sub, client.id);
+        client.join(`driver:${payload.sub}`);
+      } else {
+        client.join(`user:${payload.sub}`);
+      }
+    } catch {
+      this.logger.warn(`Token invalide sur la connexion socket: ${client.id}`);
+    }
   }
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client déconnecté: ${client.id}`);
-    for (const [driverId, socketId] of this.connectedDrivers) {
-      if (socketId === client.id) {
-        this.connectedDrivers.delete(driverId);
-        break;
-      }
+    if (client.data?.role === 'driver' && client.data?.sub) {
+      this.connectedDrivers.delete(client.data.sub);
     }
   }
 
-  // ── Chauffeur s'enregistre au démarrage ───────────────────────────────────
+  // ── Chauffeur (re)rejoint sa room, ex. après reconnexion ──────────────────
 
   @SubscribeMessage('driver:register')
-  handleDriverRegister(
-    @MessageBody() data: { driverId: string },
-    @ConnectedSocket() client: Socket,
-  ) {
-    this.connectedDrivers.set(data.driverId, client.id);
-    client.join(`driver:${data.driverId}`);
-    this.logger.log(`Chauffeur enregistré: ${data.driverId}`);
+  handleDriverRegister(@ConnectedSocket() client: Socket) {
+    if (client.data?.role !== 'driver') {
+      client.emit('auth:error', { message: 'Authentification chauffeur requise' });
+      return;
+    }
+    this.connectedDrivers.set(client.data.sub, client.id);
+    client.join(`driver:${client.data.sub}`);
+    client.emit('driver:registered', { driverId: client.data.sub });
   }
 
   // ── Chauffeur envoie sa position GPS ─────────────────────────────────────
 
   @SubscribeMessage('driver:position')
   async handleDriverPosition(
-    @MessageBody() data: { driverId: string; latitude: number; longitude: number },
+    @MessageBody() data: { latitude: number; longitude: number },
+    @ConnectedSocket() client: Socket,
   ) {
-    await this.driversService.updateLocation(data.driverId, {
-      latitude: data.latitude,
+    if (client.data?.role !== 'driver') return;
+    const driverId = client.data.sub as string;
+
+    await this.driversService.updateLocation(driverId, {
+      latitude:  data.latitude,
       longitude: data.longitude,
     });
 
-    this.server.emit('driver:position', {
-      driverId:  data.driverId,
+    const payload = {
+      driverId,
       latitude:  data.latitude,
       longitude: data.longitude,
       timestamp: new Date().toISOString(),
-    });
+    };
+
+    const activeRideId = this.driverActiveRide.get(driverId);
+    if (activeRideId) {
+      this.server.to(`ride:${activeRideId}`).emit('driver:position', payload);
+    } else {
+      // Aucune course active : diffusion globale conservée pour l'aperçu carte (HomeScreen)
+      this.server.emit('driver:position', payload);
+    }
   }
 
   // ── Utilisateur envoie sa position → reçoit les chauffeurs proches ────────
 
   @SubscribeMessage('user:location')
   async handleUserLocation(
-    @MessageBody() data: { userId?: string; latitude: number; longitude: number },
+    @MessageBody() data: { latitude: number; longitude: number },
     @ConnectedSocket() client: Socket,
   ) {
     const nearbyDrivers = await this.driversService.findNearby({
@@ -83,28 +125,96 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
     client.emit('drivers:update', nearbyDrivers);
   }
 
-  // ── Notifie tous les chauffeurs proches d'une nouvelle course ─────────────
+  // ── Notifie les chauffeurs proches compatibles d'une nouvelle course ──────
   // Appelé par RidesService après création d'une course
 
-  async notifyNearbyDrivers(ride: Ride): Promise<void> {
-    const nearbyDrivers = await this.driversService.findNearby({
-      lat: ride.startLatitude,
-      lng: ride.startLongitude,
-      radius: 5_000,
-    });
+  async notifyNearbyDrivers(ride: Ride): Promise<string[]> {
+    const vehicleTypes = VEHICLE_CLASS_TO_DRIVER_TYPES[ride.vehicleType];
+
+    const nearbyDrivers = await this.driversService.findNearby(
+      { lat: ride.startLatitude, lng: ride.startLongitude, radius: 5_000 },
+      vehicleTypes,
+    );
 
     this.logger.log(
       `Course ${ride.id}: notification de ${nearbyDrivers.length} chauffeur(s) proche(s)`,
     );
 
-    // Émettre à tous les clients connectés — les chauffeurs filtrent côté app
-    this.server.emit('ride:new', {
-      rideId:         ride.id,
-      startLatitude:  ride.startLatitude,
-      startLongitude: ride.startLongitude,
+    const payload = {
+      rideId:          ride.id,
+      startLatitude:   ride.startLatitude,
+      startLongitude:  ride.startLongitude,
       destinationName: ride.destinationName,
-      status:         ride.status,
-      nearbyDriverIds: nearbyDrivers.map((d: any) => d.id),
+      vehicleType:     ride.vehicleType,
+      createdAt:       ride.createdAt,
+    };
+
+    for (const driver of nearbyDrivers) {
+      this.server.to(`driver:${driver.id}`).emit('ride:new', payload);
+    }
+
+    return nearbyDrivers.map((d) => d.id);
+  }
+
+  // ── Course acceptée : notifie le rider, libère les autres chauffeurs ──────
+
+  async notifyRideAccepted(ride: Ride, driver: Driver): Promise<void> {
+    this.driverActiveRide.set(driver.id, ride.id);
+    await this.server.in(`driver:${driver.id}`).socketsJoin(`ride:${ride.id}`);
+    await this.server.in(`user:${ride.userId}`).socketsJoin(`ride:${ride.id}`);
+
+    this.server.to(`user:${ride.userId}`).emit('ride:accepted', {
+      rideId:   ride.id,
+      driverId: driver.id,
+      eta:      estimateEtaMinutes(driver, ride),
+      driver: {
+        id:           driver.id,
+        name:         driver.name,
+        phone:        driver.phone,
+        vehicleModel: driver.vehicleModel,
+        vehiclePlate: driver.vehiclePlate,
+        rating:       driver.rating,
+        latitude:     driver.latitude,
+        longitude:    driver.longitude,
+      },
     });
+
+    for (const driverId of ride.notifiedDriverIds) {
+      if (driverId !== driver.id) {
+        this.notifyRideUnavailable(driverId, ride.id);
+      }
+    }
+  }
+
+  async notifyRideStarted(ride: Ride): Promise<void> {
+    this.server.to(`user:${ride.userId}`).emit('ride:started', {
+      rideId:    ride.id,
+      startedAt: new Date().toISOString(),
+    });
+  }
+
+  async notifyRideCompleted(ride: Ride): Promise<void> {
+    const payload = {
+      rideId:      ride.id,
+      price:       ride.price,
+      completedAt: new Date().toISOString(),
+    };
+
+    this.server.to(`user:${ride.userId}`).emit('ride:completed', payload);
+    await this.server.in(`user:${ride.userId}`).socketsLeave(`ride:${ride.id}`);
+
+    if (ride.driverId) {
+      this.server.to(`driver:${ride.driverId}`).emit('ride:completed', payload);
+      await this.server.in(`driver:${ride.driverId}`).socketsLeave(`ride:${ride.id}`);
+      this.driverActiveRide.delete(ride.driverId);
+    }
+  }
+
+  notifyRideCancelled(room: string, rideId: string, reason: RideCancelReason): void {
+    this.server.to(room).emit('ride:cancelled', { rideId, reason });
+  }
+
+  notifyRideUnavailable(driverId: string, rideId: string): void {
+    this.server.to(`driver:${driverId}`).emit('ride:unavailable', { rideId });
   }
 }

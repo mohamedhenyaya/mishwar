@@ -21,6 +21,7 @@ const typeorm_2 = require("typeorm");
 const bcrypt = require("bcryptjs");
 const user_entity_1 = require("../users/entities/user.entity");
 const driver_entity_1 = require("../drivers/entities/driver.entity");
+const send_otp_dto_1 = require("./dto/send-otp.dto");
 const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
 let AuthService = AuthService_1 = class AuthService {
     constructor(userRepo, driverRepo, jwtService, whatsappService) {
@@ -56,6 +57,19 @@ let AuthService = AuthService_1 = class AuthService {
         }
         this.otpStore.delete(dto.phone);
         const passwordHash = await bcrypt.hash(dto.password, 10);
+        if (entry.role === send_otp_dto_1.AuthRole.DRIVER) {
+            let driver = await this.driverRepo.findOne({ where: { phone: dto.phone } });
+            if (driver) {
+                await this.driverRepo.update(driver.id, { passwordHash });
+            }
+            else {
+                driver = this.driverRepo.create({ phone: dto.phone, passwordHash });
+                await this.driverRepo.save(driver);
+                this.logger.log(`Nouveau chauffeur inscrit: ${driver.id}`);
+            }
+            const accessToken = this.jwtService.sign({ sub: driver.id, phone: driver.phone, role: 'driver' });
+            return { accessToken };
+        }
         let user = await this.userRepo.findOne({ where: { phone: dto.phone } });
         if (user) {
             await this.userRepo.update(user.id, { passwordHash });
@@ -69,6 +83,26 @@ let AuthService = AuthService_1 = class AuthService {
         return { accessToken };
     }
     async login(dto) {
+        const role = dto.role ?? send_otp_dto_1.AuthRole.USER;
+        if (role === send_otp_dto_1.AuthRole.DRIVER) {
+            const driver = await this.driverRepo
+                .createQueryBuilder('driver')
+                .addSelect('driver.passwordHash')
+                .where('driver.phone = :phone', { phone: dto.phone })
+                .getOne();
+            if (!driver) {
+                throw new common_1.UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
+            }
+            if (!driver.passwordHash) {
+                throw new common_1.UnauthorizedException('Ce compte n\'a pas encore de mot de passe — utilisez l\'inscription');
+            }
+            const isValid = await bcrypt.compare(dto.password, driver.passwordHash);
+            if (!isValid) {
+                throw new common_1.UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
+            }
+            const accessToken = this.jwtService.sign({ sub: driver.id, phone: driver.phone, role: 'driver' });
+            return { accessToken };
+        }
         const user = await this.userRepo
             .createQueryBuilder('user')
             .addSelect('user.passwordHash')

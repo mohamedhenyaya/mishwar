@@ -6,6 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { RootStackParamList } from '../types';
 import { SECURE_STORE_KEY } from '../config/constants';
+import { navigationRef } from './navigationRef';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import LoginScreen   from '../screens/LoginScreen';
 import AuthScreen    from '../screens/AuthScreen';
@@ -34,7 +35,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         initialRouteName={isAuthenticated ? 'Home' : 'Welcome'}
         screenOptions={{

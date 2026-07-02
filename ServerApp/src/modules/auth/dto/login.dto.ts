@@ -1,10 +1,17 @@
-import { IsString, IsMobilePhone, MinLength } from 'class-validator';
+import { IsString, IsPhoneNumber, MinLength, IsOptional, IsEnum } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { AuthRole } from './send-otp.dto';
 
 export class LoginDto {
-  @IsMobilePhone()
+  @IsPhoneNumber()
   phone: string;
 
   @IsString()
   @MinLength(6, { message: 'Le mot de passe doit contenir au moins 6 caractères' })
   password: string;
+
+  @ApiPropertyOptional({ enum: AuthRole, default: AuthRole.USER })
+  @IsOptional()
+  @IsEnum(AuthRole)
+  role?: AuthRole;
 }

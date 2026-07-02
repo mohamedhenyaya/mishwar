@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Ride = exports.RideStatus = void 0;
+exports.Ride = exports.RideVehicleClass = exports.RideStatus = void 0;
 const typeorm_1 = require("typeorm");
 var RideStatus;
 (function (RideStatus) {
@@ -19,6 +19,12 @@ var RideStatus;
     RideStatus["COMPLETED"] = "COMPLETED";
     RideStatus["CANCELLED"] = "CANCELLED";
 })(RideStatus || (exports.RideStatus = RideStatus = {}));
+var RideVehicleClass;
+(function (RideVehicleClass) {
+    RideVehicleClass["ECONOMY"] = "economy";
+    RideVehicleClass["COMFORT"] = "comfort";
+    RideVehicleClass["PREMIUM"] = "premium";
+})(RideVehicleClass || (exports.RideVehicleClass = RideVehicleClass = {}));
 let Ride = class Ride {
 };
 exports.Ride = Ride;
@@ -57,11 +63,27 @@ __decorate([
 __decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
+        enum: RideVehicleClass,
+        default: RideVehicleClass.ECONOMY,
+    }),
+    __metadata("design:type", String)
+], Ride.prototype, "vehicleType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
         enum: RideStatus,
         default: RideStatus.PENDING,
     }),
     __metadata("design:type", String)
 ], Ride.prototype, "status", void 0);
+__decorate([
+    (0, typeorm_1.Column)('uuid', { array: true, default: '{}' }),
+    __metadata("design:type", Array)
+], Ride.prototype, "notifiedDriverIds", void 0);
+__decorate([
+    (0, typeorm_1.Column)('uuid', { array: true, default: '{}' }),
+    __metadata("design:type", Array)
+], Ride.prototype, "rejectedDriverIds", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'decimal', precision: 8, scale: 2, nullable: true }),
     __metadata("design:type", Number)

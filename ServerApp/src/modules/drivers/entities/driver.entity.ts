@@ -30,6 +30,9 @@ export class Driver {
   @Column({ nullable: true })
   name: string;
 
+  @Column({ nullable: true, select: false })
+  passwordHash: string;
+
   @Column({ type: 'enum', enum: DriverStatus, default: DriverStatus.OFFLINE })
   status: DriverStatus;
 

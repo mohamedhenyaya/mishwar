@@ -1,7 +1,7 @@
-import { IsString, IsMobilePhone, Length, MinLength } from 'class-validator';
+import { IsString, IsPhoneNumber, Length, MinLength } from 'class-validator';
 
 export class RegisterVerifyDto {
-  @IsMobilePhone()
+  @IsPhoneNumber()
   phone: string;
 
   @IsString()

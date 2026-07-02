@@ -13,6 +13,7 @@ const ride_entity_1 = require("./entities/ride.entity");
 const rides_controller_1 = require("./rides.controller");
 const rides_service_1 = require("./rides.service");
 const geolocation_module_1 = require("../geolocation/geolocation.module");
+const drivers_module_1 = require("../drivers/drivers.module");
 let RidesModule = class RidesModule {
 };
 exports.RidesModule = RidesModule;
@@ -21,6 +22,7 @@ exports.RidesModule = RidesModule = __decorate([
         imports: [
             typeorm_1.TypeOrmModule.forFeature([ride_entity_1.Ride]),
             geolocation_module_1.GeolocationModule,
+            drivers_module_1.DriversModule,
         ],
         controllers: [rides_controller_1.RidesController],
         providers: [rides_service_1.RidesService],

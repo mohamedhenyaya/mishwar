@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Driver, DriverStatus } from './entities/driver.entity';
+import { Driver, DriverStatus, VehicleType } from './entities/driver.entity';
 import { NearbyDriversDto } from './dto/nearby-drivers.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 
@@ -29,7 +29,7 @@ export class DriversService {
   // Rayon terrestre : 6 371 000 m.
   // Précision suffisante pour des distances < 50 km.
 
-  async findNearby(dto: NearbyDriversDto): Promise<NearbyDriverResult[]> {
+  async findNearby(dto: NearbyDriversDto, vehicleTypes?: VehicleType[]): Promise<NearbyDriverResult[]> {
     const radius = dto.radius ?? 5_000;
 
     const rows = await this.driverRepo.query(
@@ -54,6 +54,7 @@ export class DriversService {
         AND latitude  IS NOT NULL
         AND longitude IS NOT NULL
         AND "isActive" = true
+        AND ($4::text[] IS NULL OR "vehicleType"::text = ANY($4))
       HAVING
         6371000 * 2 * ASIN(SQRT(
           POWER(SIN((RADIANS($1) - RADIANS(latitude))  / 2), 2) +
@@ -63,7 +64,7 @@ export class DriversService {
       ORDER BY "distanceMeters" ASC
       LIMIT 20
       `,
-      [dto.lat, dto.lng, radius],
+      [dto.lat, dto.lng, radius, vehicleTypes ?? null],
     );
 
     return rows.map((r: any) => ({
@@ -98,5 +99,9 @@ export class DriversService {
     const driver = await this.driverRepo.findOne({ where: { id } });
     if (!driver) throw new NotFoundException('Chauffeur non trouvé');
     return driver;
+  }
+
+  async incrementTotalRides(id: string): Promise<void> {
+    await this.driverRepo.increment({ id }, 'totalRides', 1);
   }
 }

@@ -21,7 +21,7 @@ let DriversService = class DriversService {
     constructor(driverRepo) {
         this.driverRepo = driverRepo;
     }
-    async findNearby(dto) {
+    async findNearby(dto, vehicleTypes) {
         const radius = dto.radius ?? 5_000;
         const rows = await this.driverRepo.query(`
       SELECT
@@ -44,6 +44,7 @@ let DriversService = class DriversService {
         AND latitude  IS NOT NULL
         AND longitude IS NOT NULL
         AND "isActive" = true
+        AND ($4::text[] IS NULL OR "vehicleType"::text = ANY($4))
       HAVING
         6371000 * 2 * ASIN(SQRT(
           POWER(SIN((RADIANS($1) - RADIANS(latitude))  / 2), 2) +
@@ -52,7 +53,7 @@ let DriversService = class DriversService {
         )) <= $3
       ORDER BY "distanceMeters" ASC
       LIMIT 20
-      `, [dto.lat, dto.lng, radius]);
+      `, [dto.lat, dto.lng, radius, vehicleTypes ?? null]);
         return rows.map((r) => ({
             ...r,
             latitude: parseFloat(r.latitude),
@@ -77,6 +78,9 @@ let DriversService = class DriversService {
         if (!driver)
             throw new common_1.NotFoundException('Chauffeur non trouvé');
         return driver;
+    }
+    async incrementTotalRides(id) {
+        await this.driverRepo.increment({ id }, 'totalRides', 1);
     }
 };
 exports.DriversService = DriversService;

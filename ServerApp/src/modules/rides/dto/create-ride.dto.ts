@@ -1,5 +1,6 @@
-import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
+import { RideVehicleClass } from '../entities/ride.entity';
 
 export class CreateRideDto {
   @IsNumber()
@@ -16,6 +17,9 @@ export class CreateRideDto {
 
   @IsString()
   destinationName: string;
+
+  @IsEnum(RideVehicleClass)
+  vehicleType: RideVehicleClass;
 
   @IsOptional()
   @IsNumber()

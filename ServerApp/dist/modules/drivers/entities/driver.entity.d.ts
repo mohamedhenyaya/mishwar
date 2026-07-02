@@ -13,6 +13,7 @@ export declare class Driver {
     id: string;
     phone: string;
     name: string;
+    passwordHash: string;
     status: DriverStatus;
     vehicleType: VehicleType;
     vehicleModel: string;

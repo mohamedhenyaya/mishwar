@@ -11,11 +11,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LoginDto = void 0;
 const class_validator_1 = require("class-validator");
+const swagger_1 = require("@nestjs/swagger");
+const send_otp_dto_1 = require("./send-otp.dto");
 class LoginDto {
 }
 exports.LoginDto = LoginDto;
 __decorate([
-    (0, class_validator_1.IsMobilePhone)(),
+    (0, class_validator_1.IsPhoneNumber)(),
     __metadata("design:type", String)
 ], LoginDto.prototype, "phone", void 0);
 __decorate([
@@ -23,4 +25,10 @@ __decorate([
     (0, class_validator_1.MinLength)(6, { message: 'Le mot de passe doit contenir au moins 6 caractères' }),
     __metadata("design:type", String)
 ], LoginDto.prototype, "password", void 0);
+__decorate([
+    (0, swagger_1.ApiPropertyOptional)({ enum: send_otp_dto_1.AuthRole, default: send_otp_dto_1.AuthRole.USER }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(send_otp_dto_1.AuthRole),
+    __metadata("design:type", String)
+], LoginDto.prototype, "role", void 0);
 //# sourceMappingURL=login.dto.js.map

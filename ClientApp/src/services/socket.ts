@@ -11,8 +11,31 @@ const EVENTS = {
   DRIVER_POSITION: 'driver:position',
   USER_LOCATION: 'user:location',
   RIDE_ACCEPTED: 'ride:accepted',
+  RIDE_STARTED: 'ride:started',
+  RIDE_COMPLETED: 'ride:completed',
+  RIDE_UNAVAILABLE: 'ride:unavailable',
   RIDE_CANCELLED: 'ride:cancelled',
 } as const;
+
+// ─── Payload types ────────────────────────────────────────────────────────────
+
+export interface RideAcceptedDriver {
+  id: string;
+  name: string;
+  phone: string;
+  vehicleModel: string;
+  vehiclePlate: string;
+  rating: number;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export interface RideAcceptedPayload {
+  rideId: string;
+  driverId: string;
+  eta: number;
+  driver: RideAcceptedDriver;
+}
 
 // ─── Singleton service ────────────────────────────────────────────────────────
 
@@ -66,11 +89,23 @@ class SocketService {
     this.socket?.on(EVENTS.DRIVER_POSITION, cb);
   }
 
-  onRideAccepted(cb: (payload: { driverId: string; rideId: string; eta?: number }) => void): void {
+  onRideAccepted(cb: (payload: RideAcceptedPayload) => void): void {
     this.socket?.on(EVENTS.RIDE_ACCEPTED, cb);
   }
 
-  onRideCancelled(cb: (payload: { rideId: string }) => void): void {
+  onRideStarted(cb: (payload: { rideId: string; startedAt: string }) => void): void {
+    this.socket?.on(EVENTS.RIDE_STARTED, cb);
+  }
+
+  onRideCompleted(cb: (payload: { rideId: string; price: number; completedAt: string }) => void): void {
+    this.socket?.on(EVENTS.RIDE_COMPLETED, cb);
+  }
+
+  onRideUnavailable(cb: (payload: { rideId: string }) => void): void {
+    this.socket?.on(EVENTS.RIDE_UNAVAILABLE, cb);
+  }
+
+  onRideCancelled(cb: (payload: { rideId: string; reason?: string }) => void): void {
     this.socket?.on(EVENTS.RIDE_CANCELLED, cb);
   }
 
@@ -86,6 +121,18 @@ class SocketService {
 
   offRideAccepted(): void {
     this.socket?.off(EVENTS.RIDE_ACCEPTED);
+  }
+
+  offRideStarted(): void {
+    this.socket?.off(EVENTS.RIDE_STARTED);
+  }
+
+  offRideCompleted(): void {
+    this.socket?.off(EVENTS.RIDE_COMPLETED);
+  }
+
+  offRideUnavailable(): void {
+    this.socket?.off(EVENTS.RIDE_UNAVAILABLE);
   }
 
   offRideCancelled(): void {

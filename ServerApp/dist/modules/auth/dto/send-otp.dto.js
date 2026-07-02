@@ -21,8 +21,8 @@ class SendOtpDto {
 }
 exports.SendOtpDto = SendOtpDto;
 __decorate([
-    (0, swagger_1.ApiProperty)({ example: '+213612345678', description: 'Numéro au format international' }),
-    (0, class_validator_1.IsMobilePhone)(),
+    (0, swagger_1.ApiProperty)({ example: '+213612345678', description: 'Numéro au format international (E.164)' }),
+    (0, class_validator_1.IsPhoneNumber)(),
     __metadata("design:type", String)
 ], SendOtpDto.prototype, "phone", void 0);
 __decorate([

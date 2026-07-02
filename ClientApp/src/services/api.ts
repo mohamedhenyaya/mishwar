@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL, SECURE_STORE_KEY } from '../config/constants';
+import { resetToWelcome } from '../navigation/navigationRef';
 
 // ─── Instance Axios ───────────────────────────────────────────────────────────
 
@@ -28,9 +29,13 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error) => {
-    if (error.response?.status === 401) {
+    // Ne redirige que si la requête envoyait déjà un token (session expirée/invalide) —
+    // un 401 sur /auth/login ou /auth/register/verify est une erreur de saisie normale,
+    // pas une session à couper.
+    const hadAuthHeader = !!error.config?.headers?.Authorization;
+    if (error.response?.status === 401 && hadAuthHeader) {
       await SecureStore.deleteItemAsync(SECURE_STORE_KEY);
-      // TODO: naviguer vers AuthScreen via navigationRef
+      resetToWelcome();
     }
     return Promise.reject(error);
   },

@@ -16,42 +16,76 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GeolocationGateway = void 0;
 const websockets_1 = require("@nestjs/websockets");
 const common_1 = require("@nestjs/common");
+const jwt_1 = require("@nestjs/jwt");
 const socket_io_1 = require("socket.io");
 const drivers_service_1 = require("../drivers/drivers.service");
+const vehicle_class_util_1 = require("../rides/utils/vehicle-class.util");
+const pricing_util_1 = require("../rides/utils/pricing.util");
 let GeolocationGateway = GeolocationGateway_1 = class GeolocationGateway {
-    constructor(driversService) {
+    constructor(driversService, jwtService) {
         this.driversService = driversService;
+        this.jwtService = jwtService;
         this.logger = new common_1.Logger(GeolocationGateway_1.name);
         this.connectedDrivers = new Map();
+        this.driverActiveRide = new Map();
     }
-    handleConnection(client) {
+    async handleConnection(client) {
         this.logger.log(`Client connecté: ${client.id}`);
+        const token = client.handshake.auth?.token;
+        if (!token)
+            return;
+        try {
+            const payload = await this.jwtService.verifyAsync(token);
+            client.data.sub = payload.sub;
+            client.data.role = payload.role;
+            if (payload.role === 'driver') {
+                this.connectedDrivers.set(payload.sub, client.id);
+                client.join(`driver:${payload.sub}`);
+            }
+            else {
+                client.join(`user:${payload.sub}`);
+            }
+        }
+        catch {
+            this.logger.warn(`Token invalide sur la connexion socket: ${client.id}`);
+        }
     }
     handleDisconnect(client) {
         this.logger.log(`Client déconnecté: ${client.id}`);
-        for (const [driverId, socketId] of this.connectedDrivers) {
-            if (socketId === client.id) {
-                this.connectedDrivers.delete(driverId);
-                break;
-            }
+        if (client.data?.role === 'driver' && client.data?.sub) {
+            this.connectedDrivers.delete(client.data.sub);
         }
     }
-    handleDriverRegister(data, client) {
-        this.connectedDrivers.set(data.driverId, client.id);
-        client.join(`driver:${data.driverId}`);
-        this.logger.log(`Chauffeur enregistré: ${data.driverId}`);
+    handleDriverRegister(client) {
+        if (client.data?.role !== 'driver') {
+            client.emit('auth:error', { message: 'Authentification chauffeur requise' });
+            return;
+        }
+        this.connectedDrivers.set(client.data.sub, client.id);
+        client.join(`driver:${client.data.sub}`);
+        client.emit('driver:registered', { driverId: client.data.sub });
     }
-    async handleDriverPosition(data) {
-        await this.driversService.updateLocation(data.driverId, {
+    async handleDriverPosition(data, client) {
+        if (client.data?.role !== 'driver')
+            return;
+        const driverId = client.data.sub;
+        await this.driversService.updateLocation(driverId, {
             latitude: data.latitude,
             longitude: data.longitude,
         });
-        this.server.emit('driver:position', {
-            driverId: data.driverId,
+        const payload = {
+            driverId,
             latitude: data.latitude,
             longitude: data.longitude,
             timestamp: new Date().toISOString(),
-        });
+        };
+        const activeRideId = this.driverActiveRide.get(driverId);
+        if (activeRideId) {
+            this.server.to(`ride:${activeRideId}`).emit('driver:position', payload);
+        }
+        else {
+            this.server.emit('driver:position', payload);
+        }
     }
     async handleUserLocation(data, client) {
         const nearbyDrivers = await this.driversService.findNearby({
@@ -62,20 +96,72 @@ let GeolocationGateway = GeolocationGateway_1 = class GeolocationGateway {
         client.emit('drivers:update', nearbyDrivers);
     }
     async notifyNearbyDrivers(ride) {
-        const nearbyDrivers = await this.driversService.findNearby({
-            lat: ride.startLatitude,
-            lng: ride.startLongitude,
-            radius: 5_000,
-        });
+        const vehicleTypes = vehicle_class_util_1.VEHICLE_CLASS_TO_DRIVER_TYPES[ride.vehicleType];
+        const nearbyDrivers = await this.driversService.findNearby({ lat: ride.startLatitude, lng: ride.startLongitude, radius: 5_000 }, vehicleTypes);
         this.logger.log(`Course ${ride.id}: notification de ${nearbyDrivers.length} chauffeur(s) proche(s)`);
-        this.server.emit('ride:new', {
+        const payload = {
             rideId: ride.id,
             startLatitude: ride.startLatitude,
             startLongitude: ride.startLongitude,
             destinationName: ride.destinationName,
-            status: ride.status,
-            nearbyDriverIds: nearbyDrivers.map((d) => d.id),
+            vehicleType: ride.vehicleType,
+            createdAt: ride.createdAt,
+        };
+        for (const driver of nearbyDrivers) {
+            this.server.to(`driver:${driver.id}`).emit('ride:new', payload);
+        }
+        return nearbyDrivers.map((d) => d.id);
+    }
+    async notifyRideAccepted(ride, driver) {
+        this.driverActiveRide.set(driver.id, ride.id);
+        await this.server.in(`driver:${driver.id}`).socketsJoin(`ride:${ride.id}`);
+        await this.server.in(`user:${ride.userId}`).socketsJoin(`ride:${ride.id}`);
+        this.server.to(`user:${ride.userId}`).emit('ride:accepted', {
+            rideId: ride.id,
+            driverId: driver.id,
+            eta: (0, pricing_util_1.estimateEtaMinutes)(driver, ride),
+            driver: {
+                id: driver.id,
+                name: driver.name,
+                phone: driver.phone,
+                vehicleModel: driver.vehicleModel,
+                vehiclePlate: driver.vehiclePlate,
+                rating: driver.rating,
+                latitude: driver.latitude,
+                longitude: driver.longitude,
+            },
         });
+        for (const driverId of ride.notifiedDriverIds) {
+            if (driverId !== driver.id) {
+                this.notifyRideUnavailable(driverId, ride.id);
+            }
+        }
+    }
+    async notifyRideStarted(ride) {
+        this.server.to(`user:${ride.userId}`).emit('ride:started', {
+            rideId: ride.id,
+            startedAt: new Date().toISOString(),
+        });
+    }
+    async notifyRideCompleted(ride) {
+        const payload = {
+            rideId: ride.id,
+            price: ride.price,
+            completedAt: new Date().toISOString(),
+        };
+        this.server.to(`user:${ride.userId}`).emit('ride:completed', payload);
+        await this.server.in(`user:${ride.userId}`).socketsLeave(`ride:${ride.id}`);
+        if (ride.driverId) {
+            this.server.to(`driver:${ride.driverId}`).emit('ride:completed', payload);
+            await this.server.in(`driver:${ride.driverId}`).socketsLeave(`ride:${ride.id}`);
+            this.driverActiveRide.delete(ride.driverId);
+        }
+    }
+    notifyRideCancelled(room, rideId, reason) {
+        this.server.to(room).emit('ride:cancelled', { rideId, reason });
+    }
+    notifyRideUnavailable(driverId, rideId) {
+        this.server.to(`driver:${driverId}`).emit('ride:unavailable', { rideId });
     }
 };
 exports.GeolocationGateway = GeolocationGateway;
@@ -85,17 +171,17 @@ __decorate([
 ], GeolocationGateway.prototype, "server", void 0);
 __decorate([
     (0, websockets_1.SubscribeMessage)('driver:register'),
-    __param(0, (0, websockets_1.MessageBody)()),
-    __param(1, (0, websockets_1.ConnectedSocket)()),
+    __param(0, (0, websockets_1.ConnectedSocket)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, socket_io_1.Socket]),
+    __metadata("design:paramtypes", [socket_io_1.Socket]),
     __metadata("design:returntype", void 0)
 ], GeolocationGateway.prototype, "handleDriverRegister", null);
 __decorate([
     (0, websockets_1.SubscribeMessage)('driver:position'),
     __param(0, (0, websockets_1.MessageBody)()),
+    __param(1, (0, websockets_1.ConnectedSocket)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, socket_io_1.Socket]),
     __metadata("design:returntype", Promise)
 ], GeolocationGateway.prototype, "handleDriverPosition", null);
 __decorate([
@@ -108,6 +194,7 @@ __decorate([
 ], GeolocationGateway.prototype, "handleUserLocation", null);
 exports.GeolocationGateway = GeolocationGateway = GeolocationGateway_1 = __decorate([
     (0, websockets_1.WebSocketGateway)({ cors: { origin: '*' } }),
-    __metadata("design:paramtypes", [drivers_service_1.DriversService])
+    __metadata("design:paramtypes", [drivers_service_1.DriversService,
+        jwt_1.JwtService])
 ], GeolocationGateway);
 //# sourceMappingURL=geolocation.gateway.js.map

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsMobilePhone } from 'class-validator';
+import { IsEnum, IsPhoneNumber } from 'class-validator';
 
 export enum AuthRole {
   USER   = 'user',
@@ -7,8 +7,8 @@ export enum AuthRole {
 }
 
 export class SendOtpDto {
-  @ApiProperty({ example: '+213612345678', description: 'Numéro au format international' })
-  @IsMobilePhone()
+  @ApiProperty({ example: '+213612345678', description: 'Numéro au format international (E.164)' })
+  @IsPhoneNumber()
   phone: string;
 
   @ApiProperty({ enum: AuthRole, default: AuthRole.USER })

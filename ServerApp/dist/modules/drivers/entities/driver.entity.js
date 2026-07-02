@@ -40,6 +40,10 @@ __decorate([
     __metadata("design:type", String)
 ], Driver.prototype, "name", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ nullable: true, select: false }),
+    __metadata("design:type", String)
+], Driver.prototype, "passwordHash", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'enum', enum: DriverStatus, default: DriverStatus.OFFLINE }),
     __metadata("design:type", String)
 ], Driver.prototype, "status", void 0);

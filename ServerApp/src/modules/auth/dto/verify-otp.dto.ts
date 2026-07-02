@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsMobilePhone, IsString, Length } from 'class-validator';
+import { IsEnum, IsPhoneNumber, IsString, Length } from 'class-validator';
 import { AuthRole } from './send-otp.dto';
 
 export class VerifyOtpDto {
   @ApiProperty({ example: '+213612345678' })
-  @IsMobilePhone()
+  @IsPhoneNumber()
   phone: string;
 
   @ApiProperty({ example: '123456', description: 'Code OTP à 6 chiffres' })

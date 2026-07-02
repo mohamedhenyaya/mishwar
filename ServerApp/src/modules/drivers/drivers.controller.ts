@@ -2,6 +2,8 @@ import { Body, Controller, Get, Patch, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DriversService } from './drivers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { NearbyDriversDto } from './dto/nearby-drivers.dto';
@@ -21,7 +23,8 @@ export class DriversController {
 
   @Get('me')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('driver')
   @ApiOperation({ summary: 'Profil du chauffeur connecté' })
   getProfile(@CurrentUser() user: JwtPayload) {
     return this.driversService.findById(user.sub);
@@ -29,7 +32,8 @@ export class DriversController {
 
   @Patch('location')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('driver')
   @ApiOperation({ summary: 'Mettre à jour la position GPS (REST fallback)' })
   updateLocation(@CurrentUser() user: JwtPayload, @Body() dto: UpdateLocationDto) {
     return this.driversService.updateLocation(user.sub, dto);
@@ -37,7 +41,8 @@ export class DriversController {
 
   @Patch('status')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('driver')
   @ApiOperation({ summary: 'Passer ONLINE / OFFLINE / BUSY' })
   updateStatus(
     @CurrentUser() user: JwtPayload,

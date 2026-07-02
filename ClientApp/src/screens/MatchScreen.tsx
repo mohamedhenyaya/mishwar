@@ -6,7 +6,10 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { socketService } from '../services/socket';
+import * as SecureStore from 'expo-secure-store';
+import { socketService, RideAcceptedDriver } from '../services/socket';
+import { apiPost } from '../services/api';
+import { SECURE_STORE_KEY } from '../config/constants';
 import { RootStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Match'>;
@@ -106,6 +109,8 @@ export default function MatchScreen({ navigation, route }: Props) {
 
   const [status, setStatus] = useState<MatchStatus>('searching');
   const [eta,    setEta]    = useState(0);
+  const [driver, setDriver] = useState<RideAcceptedDriver | null>(null);
+  const [tripStarted, setTripStarted] = useState(false);
 
   // Animations d'entrée / transition
   const fadeIn    = useRef(new Animated.Value(0)).current;
@@ -128,34 +133,57 @@ export default function MatchScreen({ navigation, route }: Props) {
     ]).start();
   };
 
-  // ── Socket + simulation DEV ────────────────────────────────────────────────
+  // ── Socket temps réel ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    socketService.connect();
+    let cancelled = false;
 
-    socketService.onRideAccepted(({ rideId: acceptedId }) => {
-      if (acceptedId === rideId) {
-        setEta(Math.floor(Math.random() * 5) + 2);
+    (async () => {
+      const token = await SecureStore.getItemAsync(SECURE_STORE_KEY);
+      if (cancelled) return;
+
+      socketService.connect(token ?? undefined);
+
+      socketService.onRideAccepted((payload) => {
+        if (payload.rideId !== rideId) return;
+        setDriver(payload.driver);
+        setEta(payload.eta);
         setStatus('found');
         showDriverCard();
-      }
-    });
+      });
 
-    socketService.onRideCancelled(() => setStatus('cancelled'));
+      socketService.onRideStarted(({ rideId: startedId }) => {
+        if (startedId === rideId) setTripStarted(true);
+      });
 
-    // Simulation en développement (3 secondes)
-    const timer = setTimeout(() => {
-      setEta(4);
-      setStatus('found');
-      showDriverCard();
-    }, 3_000);
+      socketService.onRideCompleted(({ rideId: completedId }) => {
+        if (completedId === rideId) navigation.popToTop();
+      });
+
+      socketService.onRideCancelled(({ rideId: cancelledId }) => {
+        if (cancelledId === rideId) setStatus('cancelled');
+      });
+    })();
 
     return () => {
-      clearTimeout(timer);
+      cancelled = true;
       socketService.offRideAccepted();
+      socketService.offRideStarted();
+      socketService.offRideCompleted();
       socketService.offRideCancelled();
     };
   }, [rideId]);
+
+  // ── Annulation côté serveur (libère la course) ────────────────────────────
+
+  const cancelSearch = async () => {
+    try {
+      await apiPost(`/rides/${rideId}/cancel`, {});
+    } catch {
+      // best-effort — la course a peut-être déjà été acceptée/annulée/expirée
+    }
+    navigation.goBack();
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -174,7 +202,7 @@ export default function MatchScreen({ navigation, route }: Props) {
         </TouchableOpacity>
         <Text style={styles.topBarTitle}>
           {status === 'searching' ? 'Recherche en cours' :
-           status === 'found'     ? 'Chauffeur trouvé'  : 'Course annulée'}
+           status === 'found'     ? (tripStarted ? 'Course en cours' : 'Chauffeur trouvé') : 'Course annulée'}
         </Text>
         <View style={{ width: 36 }} />
       </View>
@@ -203,7 +231,7 @@ export default function MatchScreen({ navigation, route }: Props) {
 
             <TouchableOpacity
               style={styles.cancelBtn}
-              onPress={() => navigation.goBack()}
+              onPress={cancelSearch}
               activeOpacity={0.8}
             >
               <Text style={styles.cancelBtnText}>Annuler la recherche</Text>
@@ -239,16 +267,18 @@ export default function MatchScreen({ navigation, route }: Props) {
               {/* Avatar */}
               <View style={styles.driverAvatarWrap}>
                 <View style={styles.driverAvatar}>
-                  <Text style={styles.driverAvatarText}>A</Text>
+                  <Text style={styles.driverAvatarText}>{(driver?.name?.[0] ?? '?').toUpperCase()}</Text>
                 </View>
                 <View style={styles.driverOnline} />
               </View>
 
               {/* Infos */}
               <View style={styles.driverInfo}>
-                <Text style={styles.driverName}>Ahmed Benali</Text>
-                <Stars rating={4.8} />
-                <Text style={styles.driverMeta}>Toyota Corolla · Blanc · AB-123-DZ</Text>
+                <Text style={styles.driverName}>{driver?.name ?? 'Chauffeur'}</Text>
+                <Stars rating={driver?.rating ?? 5} />
+                <Text style={styles.driverMeta}>
+                  {driver?.vehicleModel ?? 'Véhicule'} · {driver?.vehiclePlate ?? '—'}
+                </Text>
               </View>
 
               {/* Actions */}
