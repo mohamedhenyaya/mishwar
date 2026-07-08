@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
-import { captainSocketService } from '../services/socket';
+import { useDriverStatus } from '../context/DriverStatusContext';
 import { Coordinates, HomeScreenProps } from '../types';
 import { C, G, SH, RADIUS } from '../theme';
 
@@ -22,9 +22,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
+  const { isOnline, goOnline, goOffline } = useDriverStatus();
   const [location,   setLocation]   = useState<Coordinates | null>(null);
   const [region,     setRegion]     = useState<Region | null>(null);
-  const [isOnline,   setIsOnline]   = useState(false);
   const [now,        setNow]        = useState(new Date());
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [todayRides,    setTodayRides]    = useState(0);
@@ -71,33 +71,18 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
   useEffect(() => {
     initLocation();
-    captainSocketService.connect();
-    return () => captainSocketService.disconnect();
   }, [initLocation]);
 
-  // Location tracking when online
-  useEffect(() => {
-    if (!isOnline || !location) return;
-    const id = setInterval(async () => {
-      try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        const coords: Coordinates = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-        setLocation(coords);
-        captainSocketService.updateLocation(coords);
-      } catch { /* silent */ }
-    }, 10_000);
-    return () => clearInterval(id);
-  }, [isOnline, location]);
-
-  const toggleOnline = () => {
+  const toggleOnline = async () => {
     Animated.sequence([
       Animated.timing(pillScale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
       Animated.spring(pillScale, { toValue: 1,   tension: 80, useNativeDriver: true }),
     ]).start();
-    if (!isOnline && location) captainSocketService.goOnline(location);
-    else captainSocketService.goOffline();
-    setIsOnline((v) => !v);
-    if (!isOnline) { setTodayRides((n) => n); }
+    if (isOnline) {
+      await goOffline();
+    } else {
+      await goOnline();
+    }
   };
 
   const centerMap = () => {

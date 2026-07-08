@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import { DriversService } from '../drivers/drivers.service';
 import { Driver } from '../drivers/entities/driver.entity';
 import { Ride } from '../rides/entities/ride.entity';
+import { RidesService } from '../rides/rides.service';
 import { VEHICLE_CLASS_TO_DRIVER_TYPES } from '../rides/utils/vehicle-class.util';
 import { estimateEtaMinutes } from '../rides/utils/pricing.util';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -32,6 +33,8 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
   constructor(
     @Inject(forwardRef(() => DriversService))
     private readonly driversService: DriversService,
+    @Inject(forwardRef(() => RidesService))
+    private readonly ridesService: RidesService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -104,6 +107,11 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
     const activeRideId = this.driverActiveRide.get(driverId);
     if (activeRideId) {
       this.server.to(`ride:${activeRideId}`).emit('driver:position', payload);
+
+      const meterSnapshot = await this.ridesService.recordMeterPing(activeRideId, data.latitude, data.longitude);
+      if (meterSnapshot) {
+        this.server.to(`ride:${activeRideId}`).emit('ride:meter', { rideId: activeRideId, ...meterSnapshot });
+      }
     } else {
       // Aucune course active : diffusion globale conservée pour l'aperçu carte (HomeScreen)
       this.server.emit('driver:position', payload);

@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
 import { Button } from '../components/ui';
+import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radius, spacing, typography, motion } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
@@ -20,6 +21,7 @@ const { height } = Dimensions.get('window');
 
 export default function WelcomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
 
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(24)).current;
@@ -44,7 +46,7 @@ export default function WelcomeScreen({ navigation }: Props) {
             <Ionicons name="car-sport" size={34} color={colors.textInverse} />
           </View>
           <Text style={styles.appName}>Mishwar</Text>
-          <Text style={styles.tagline}>Votre trajet, votre prix</Text>
+          <Text style={styles.tagline}>{t('welcomeTagline')}</Text>
         </View>
 
         <View style={styles.illustrationWrap}>
@@ -58,18 +60,16 @@ export default function WelcomeScreen({ navigation }: Props) {
           { paddingBottom: insets.bottom + 32, opacity: fade, transform: [{ translateY: slide }] },
         ]}
       >
-        <Text style={styles.welcomeTitle}>Bienvenue !</Text>
-        <Text style={styles.welcomeSubtitle}>
-          Réservez un trajet ou connectez-vous à votre compte existant.
-        </Text>
+        <Text style={styles.welcomeTitle}>{t('welcomeTitle')}</Text>
+        <Text style={styles.welcomeSubtitle}>{t('welcomeSubtitle')}</Text>
 
         <View style={{ gap: spacing.md }}>
           <Button
-            label="Créer un compte"
+            label={t('welcomeCreateAccount')}
             onPress={() => navigation.navigate('Auth', { mode: 'register' })}
           />
           <Button
-            label="J'ai déjà un compte"
+            label={t('welcomeHaveAccount')}
             variant="outline"
             onPress={() => navigation.navigate('Login')}
           />
@@ -78,8 +78,7 @@ export default function WelcomeScreen({ navigation }: Props) {
         <View style={styles.waNote}>
           <Ionicons name="logo-whatsapp" size={15} color={colors.whatsapp} style={{ marginTop: 1 }} />
           <Text style={styles.waNoteText}>
-            Inscription via <Text style={styles.waNoteGreen}>WhatsApp OTP</Text> · Connexion par mot de
-            passe.
+            {t('welcomeOtpNotePrefix')}<Text style={styles.waNoteGreen}>WhatsApp OTP</Text>{t('welcomeOtpNoteSuffix')}
           </Text>
         </View>
       </Animated.View>

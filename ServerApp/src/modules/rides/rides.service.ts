@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  forwardRef,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { Ride, RideStatus } from './entities/ride.entity';
 import { CreateRideDto } from './dto/create-ride.dto';
 import { CompleteRideDto } from './dto/complete-ride.dto';
@@ -18,6 +20,7 @@ import { CreateScheduledRideDto } from './dto/create-scheduled-ride.dto';
 import { UpdateScheduledRideDto } from './dto/update-scheduled-ride.dto';
 import { EstimateRideDto } from './dto/estimate-ride.dto';
 import { DriverCancelRideDto } from './dto/driver-cancel-ride.dto';
+import { LeaderboardPeriod } from './dto/leaderboard-query.dto';
 import { GeolocationGateway } from '../geolocation/geolocation.gateway';
 import { DriversService } from '../drivers/drivers.service';
 import { DriverStatus } from '../drivers/entities/driver.entity';
@@ -27,12 +30,53 @@ import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SettingsService } from '../settings/settings.service';
 import { WalletService } from '../wallet/wallet.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { UsersService } from '../users/users.service';
 import { PaginatedResult, PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 const AVG_TRIP_SPEED_KMH = 30;
 // Une course programmée est activée (PENDING + notification des chauffeurs) dès qu'elle entre dans cette fenêtre
 const SCHEDULED_ACTIVATION_WINDOW_MS = 5 * 60 * 1_000;
 const SCHEDULED_POLL_INTERVAL_MS = 60 * 1_000;
+// Compteur temps réel (trajet ouvert) : sous ce seuil, le déplacement est considéré comme du bruit GPS → arrêt
+const METER_STOP_THRESHOLD_METERS = 25;
+// Cap du temps crédité par ping, pour éviter un saut énorme après une coupure réseau/reconnexion
+const METER_MAX_PING_GAP_SECONDS = 30;
+// Nombre d'utilisateurs affichés dans le classement (le rang du client reste calculé même hors podium)
+const LEADERBOARD_LIMIT = 50;
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  name: string;
+  points: number;
+  isCurrentUser: boolean;
+}
+
+export interface LeaderboardResult {
+  period: LeaderboardPeriod;
+  entries: LeaderboardEntry[];
+  currentUser: { rank: number; points: number } | null;
+}
+
+// Début de la période (heure locale du serveur) — un point par course terminée depuis cette date
+function getLeaderboardPeriodStart(period: LeaderboardPeriod): Date {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  switch (period) {
+    case LeaderboardPeriod.DAY:
+      return start;
+    case LeaderboardPeriod.WEEK: {
+      const dayIndex = (start.getDay() + 6) % 7; // lundi = 0 ... dimanche = 6
+      start.setDate(start.getDate() - dayIndex);
+      return start;
+    }
+    case LeaderboardPeriod.MONTH:
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    case LeaderboardPeriod.YEAR:
+      return new Date(now.getFullYear(), 0, 1);
+  }
+}
 
 @Injectable()
 export class RidesService implements OnModuleInit {
@@ -41,12 +85,15 @@ export class RidesService implements OnModuleInit {
   constructor(
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
+    @Inject(forwardRef(() => GeolocationGateway))
     private readonly geolocationGateway: GeolocationGateway,
+    @Inject(forwardRef(() => DriversService))
     private readonly driversService: DriversService,
     private readonly config: ConfigService,
     private readonly settingsService: SettingsService,
     private readonly walletService: WalletService,
     private readonly promotionsService: PromotionsService,
+    private readonly usersService: UsersService,
   ) {}
 
   // ── Sondeur des courses programmées — couvre aussi le redémarrage du serveur ──
@@ -62,6 +109,18 @@ export class RidesService implements OnModuleInit {
   }
 
   async createRide(userId: string, dto: CreateRideDto): Promise<Ride> {
+    const isOpenTrip = dto.isOpenTrip ?? false;
+
+    let estimatedPrice: number | null = null;
+    if (!isOpenTrip && dto.endLatitude != null && dto.endLongitude != null) {
+      const settings = await this.settingsService.getSettings();
+      estimatedPrice = computeFare(
+        dto.startLatitude, dto.startLongitude,
+        dto.endLatitude, dto.endLongitude,
+        Number(settings.pricePerKm), Number(settings.minimumFare),
+      );
+    }
+
     const ride = this.rideRepo.create({
       userId,
       startLatitude:  dto.startLatitude,
@@ -71,6 +130,8 @@ export class RidesService implements OnModuleInit {
       endLongitude:  dto.endLongitude ?? null,
       vehicleType:   dto.vehicleType,
       couponCode:    dto.couponCode ?? null,
+      isOpenTrip,
+      estimatedPrice,
       status: RideStatus.PENDING,
     });
 
@@ -104,7 +165,7 @@ export class RidesService implements OnModuleInit {
     });
   }
 
-  async findByIdForParticipant(id: string, jwt: JwtPayload): Promise<Ride> {
+  async findByIdForParticipant(id: string, jwt: JwtPayload): Promise<Ride & { riderName?: string; riderPhone?: string }> {
     const ride = await this.rideRepo.findOne({ where: { id } });
     if (!ride) throw new NotFoundException('Course non trouvée');
 
@@ -112,6 +173,12 @@ export class RidesService implements OnModuleInit {
     const isAssignedDriver = jwt.role === 'driver' && ride.driverId === jwt.sub;
     if (!isRider && !isAssignedDriver) {
       throw new ForbiddenException('Accès refusé à cette course');
+    }
+
+    // Le chauffeur a besoin de savoir qui il récupère — le rider n'a pas besoin de ses propres infos
+    if (isAssignedDriver) {
+      const rider = await this.usersService.findById(ride.userId);
+      return { ...ride, riderName: rider.name ?? undefined, riderPhone: rider.phone };
     }
     return ride;
   }
@@ -171,10 +238,24 @@ export class RidesService implements OnModuleInit {
   }
 
   async startRide(rideId: string, driverId: string): Promise<Ride> {
+    const existing = await this.rideRepo.findOne({ where: { id: rideId } });
+    if (!existing) throw new NotFoundException('Course non trouvée');
+
+    const startedAt = new Date();
+    const meterSeed = existing.isOpenTrip
+      ? {
+          lastMeterLatitude:  existing.startLatitude,
+          lastMeterLongitude: existing.startLongitude,
+          lastMeterAt:        startedAt,
+          traveledDistanceKm: 0,
+          stoppedSeconds:     0,
+        }
+      : {};
+
     const result = await this.rideRepo
       .createQueryBuilder()
       .update(Ride)
-      .set({ status: RideStatus.IN_PROGRESS })
+      .set({ status: RideStatus.IN_PROGRESS, startedAt, ...meterSeed })
       .where('id = :id AND status = :status AND "driverId" = :driverId', {
         id: rideId,
         status: RideStatus.ACCEPTED,
@@ -191,19 +272,85 @@ export class RidesService implements OnModuleInit {
     return ride;
   }
 
+  // ── Compteur temps réel (trajet ouvert) — appelé à chaque ping GPS du chauffeur ─
+  // distance parcourue × pricePerKm + temps d'arrêt × perStopMinuteRate, minimum minimumFare
+
+  async recordMeterPing(
+    rideId: string,
+    latitude: number,
+    longitude: number,
+  ): Promise<{ distanceKm: number; stoppedMinutes: number; price: number } | null> {
+    const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+    if (!ride || !ride.isOpenTrip || ride.status !== RideStatus.IN_PROGRESS) return null;
+    if (ride.lastMeterLatitude == null || ride.lastMeterLongitude == null || !ride.lastMeterAt) return null;
+
+    const now = new Date();
+    const elapsedSeconds = Math.min(
+      METER_MAX_PING_GAP_SECONDS,
+      Math.max(0, (now.getTime() - ride.lastMeterAt.getTime()) / 1000),
+    );
+    const movedMeters = haversineMeters(
+      Number(ride.lastMeterLatitude), Number(ride.lastMeterLongitude),
+      latitude, longitude,
+    );
+
+    let traveledDistanceKm = Number(ride.traveledDistanceKm);
+    let stoppedSeconds = ride.stoppedSeconds;
+    if (movedMeters < METER_STOP_THRESHOLD_METERS) {
+      stoppedSeconds += Math.round(elapsedSeconds);
+    } else {
+      traveledDistanceKm += movedMeters / 1000;
+    }
+
+    const settings = await this.settingsService.getSettings();
+    const livePrice = Math.max(
+      Math.round(
+        (traveledDistanceKm * Number(settings.pricePerKm) +
+          (stoppedSeconds / 60) * Number(settings.perStopMinuteRate)) * 100,
+      ) / 100,
+      Number(settings.minimumFare),
+    );
+
+    await this.rideRepo.update(rideId, {
+      traveledDistanceKm,
+      stoppedSeconds,
+      livePrice,
+      lastMeterLatitude:  latitude,
+      lastMeterLongitude: longitude,
+      lastMeterAt:        now,
+    });
+
+    return {
+      distanceKm:     Math.round(traveledDistanceKm * 100) / 100,
+      stoppedMinutes: Math.round((stoppedSeconds / 60) * 10) / 10,
+      price:          livePrice,
+    };
+  }
+
   async completeRide(rideId: string, driverId: string, dto: CompleteRideDto): Promise<Ride> {
     const existing = await this.rideRepo.findOne({ where: { id: rideId } });
     if (!existing) throw new NotFoundException('Course non trouvée');
     if (existing.driverId !== driverId) throw new ForbiddenException('Cette course ne vous est pas assignée');
 
-    const endLatitude  = dto.endLatitude  ?? existing.endLatitude  ?? existing.startLatitude;
-    const endLongitude = dto.endLongitude ?? existing.endLongitude ?? existing.startLongitude;
+    const endLatitude  = dto.endLatitude  ?? existing.lastMeterLatitude  ?? existing.endLatitude  ?? existing.startLatitude;
+    const endLongitude = dto.endLongitude ?? existing.lastMeterLongitude ?? existing.endLongitude ?? existing.startLongitude;
     const settings = await this.settingsService.getSettings();
-    const grossPrice = computeFare(
-      existing.startLatitude, existing.startLongitude,
-      endLatitude, endLongitude,
-      Number(settings.pricePerKm), Number(settings.minimumFare),
-    );
+
+    // Trajet ouvert : le prix vient du compteur temps réel (distance parcourue + temps d'arrêt),
+    // pas de la distance à vol d'oiseau départ→arrivée (destination inconnue à l'avance)
+    const grossPrice = existing.isOpenTrip
+      ? Math.max(
+          Math.round(
+            (Number(existing.traveledDistanceKm) * Number(settings.pricePerKm) +
+              (existing.stoppedSeconds / 60) * Number(settings.perStopMinuteRate)) * 100,
+          ) / 100,
+          Number(settings.minimumFare),
+        )
+      : computeFare(
+          existing.startLatitude, existing.startLongitude,
+          endLatitude, endLongitude,
+          Number(settings.pricePerKm), Number(settings.minimumFare),
+        );
 
     // Le coupon n'est appliqué qu'à la complétion, une fois le tarif connu — un code invalide/expiré
     // n'empêche jamais de terminer la course, il annule simplement la remise
@@ -524,5 +671,47 @@ export class RidesService implements OnModuleInit {
     const ride = await this.rideRepo.findOne({ where: { id } });
     if (!ride) throw new NotFoundException('Course non trouvée');
     return ride;
+  }
+
+  // ── Classement — un point par course terminée sur la période ──────────────
+
+  async getLeaderboard(period: LeaderboardPeriod, currentUserId: string): Promise<LeaderboardResult> {
+    const from = getLeaderboardPeriodStart(period);
+
+    // Comptage en mémoire plutôt qu'un GROUP BY brut — évite les pièges de casse/guillemets
+    // des noms de colonnes camelCase de TypeORM dans une requête SQL manuelle
+    const completedRides = await this.rideRepo.find({
+      where: { status: RideStatus.COMPLETED, createdAt: MoreThanOrEqual(from) },
+      select: ['userId'],
+    });
+
+    const pointsByUser = new Map<string, number>();
+    for (const ride of completedRides) {
+      pointsByUser.set(ride.userId, (pointsByUser.get(ride.userId) ?? 0) + 1);
+    }
+
+    const ranked = [...pointsByUser.entries()]
+      .map(([userId, points]) => ({ userId, points }))
+      .sort((a, b) => b.points - a.points)
+      .map((r, idx) => ({ ...r, rank: idx + 1 }));
+
+    const top = ranked.slice(0, LEADERBOARD_LIMIT);
+    const users = await this.usersService.findByIds(top.map((r) => r.userId));
+    const nameById = new Map(users.map((u) => [u.id, u.name || 'Utilisateur']));
+
+    const entries: LeaderboardEntry[] = top.map((r) => ({
+      rank: r.rank,
+      userId: r.userId,
+      name: nameById.get(r.userId) ?? 'Utilisateur',
+      points: r.points,
+      isCurrentUser: r.userId === currentUserId,
+    }));
+
+    const currentUserRanked = ranked.find((r) => r.userId === currentUserId);
+    const currentUser = currentUserRanked
+      ? { rank: currentUserRanked.rank, points: currentUserRanked.points }
+      : null;
+
+    return { period, entries, currentUser };
   }
 }

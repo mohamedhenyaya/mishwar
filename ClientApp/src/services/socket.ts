@@ -15,6 +15,7 @@ const EVENTS = {
   RIDE_COMPLETED: 'ride:completed',
   RIDE_UNAVAILABLE: 'ride:unavailable',
   RIDE_CANCELLED: 'ride:cancelled',
+  RIDE_METER: 'ride:meter',
 } as const;
 
 // ─── Payload types ────────────────────────────────────────────────────────────
@@ -35,6 +36,13 @@ export interface RideAcceptedPayload {
   driverId: string;
   eta: number;
   driver: RideAcceptedDriver;
+}
+
+export interface RideMeterPayload {
+  rideId: string;
+  distanceKm: number;
+  stoppedMinutes: number;
+  price: number;
 }
 
 // ─── Singleton service ────────────────────────────────────────────────────────
@@ -109,6 +117,10 @@ class SocketService {
     this.socket?.on(EVENTS.RIDE_CANCELLED, cb);
   }
 
+  onRideMeter(cb: (payload: RideMeterPayload) => void): void {
+    this.socket?.on(EVENTS.RIDE_METER, cb);
+  }
+
   // ── Cleanup helpers ───────────────────────────────────────────────────────
 
   offDriversUpdate(): void {
@@ -137,6 +149,10 @@ class SocketService {
 
   offRideCancelled(): void {
     this.socket?.off(EVENTS.RIDE_CANCELLED);
+  }
+
+  offRideMeter(): void {
+    this.socket?.off(EVENTS.RIDE_METER);
   }
 }
 

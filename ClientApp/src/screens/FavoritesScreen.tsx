@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, FavoritePlace } from '../types';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../services/api';
 import { Button, ScreenHeader, TextField } from '../components/ui';
+import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radius, shadows, spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Favorites'>;
@@ -18,6 +19,7 @@ interface ReverseGeocodeResult { address: string }
 
 export default function FavoritesScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [favorites, setFavorites] = useState<FavoritePlace[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,7 +47,7 @@ export default function FavoritesScreen({ navigation }: Props) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission requise', 'Autorisez la géolocalisation pour utiliser votre position actuelle.');
+        Alert.alert(t('favoritesPermissionTitle'), t('favoritesPermissionMessage'));
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -58,7 +60,7 @@ export default function FavoritesScreen({ navigation }: Props) {
         setAddress(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
       }
     } catch {
-      Alert.alert('Erreur', "Impossible d'obtenir votre position.");
+      Alert.alert(t('commonError'), t('favoritesLocationErrorDefault'));
     } finally {
       setLocating(false);
     }
@@ -84,23 +86,23 @@ export default function FavoritesScreen({ navigation }: Props) {
       setFavorites((prev) => [created, ...prev]);
       resetForm();
     } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.message ?? "Impossible d'ajouter ce favori.");
+      Alert.alert(t('commonError'), e?.response?.data?.message ?? t('favoritesAddErrorDefault'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = (item: FavoritePlace) => {
-    Alert.alert('Supprimer', `Supprimer "${item.label}" de vos favoris ?`, [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('favoritesDeleteTitle'), t('favoritesDeleteMessage')(item.label), [
+      { text: t('commonCancel'), style: 'cancel' },
       {
-        text: 'Supprimer', style: 'destructive',
+        text: t('commonDelete'), style: 'destructive',
         onPress: async () => {
           try {
             await apiDelete(`/places/favorites/${item.id}`);
             setFavorites((prev) => prev.filter((f) => f.id !== item.id));
           } catch (e: any) {
-            Alert.alert('Erreur', e?.response?.data?.message ?? 'Suppression impossible.');
+            Alert.alert(t('commonError'), e?.response?.data?.message ?? t('favoritesDeleteErrorDefault'));
           }
         },
       },
@@ -113,7 +115,7 @@ export default function FavoritesScreen({ navigation }: Props) {
       const updated = await apiPatch<FavoritePlace, { label: string }>(`/places/favorites/${item.id}`, { label: editLabel.trim() });
       setFavorites((prev) => prev.map((f) => (f.id === item.id ? updated : f)));
     } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.message ?? 'Modification impossible.');
+      Alert.alert(t('commonError'), e?.response?.data?.message ?? t('favoritesEditErrorDefault'));
     } finally {
       setEditingId(null);
     }
@@ -122,7 +124,7 @@ export default function FavoritesScreen({ navigation }: Props) {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScreenHeader
-        title="Mes favoris"
+        title={t('favoritesTitle')}
         onBack={() => navigation.goBack()}
         right={
           <TouchableOpacity onPress={() => setAdding((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -134,7 +136,7 @@ export default function FavoritesScreen({ navigation }: Props) {
       {adding && (
         <View style={styles.addCard}>
           <Button
-            label={locating ? 'Localisation…' : 'Utiliser ma position actuelle'}
+            label={locating ? t('favoritesLocating') : t('favoritesUseCurrentLocation')}
             icon="locate"
             variant="secondary"
             size="md"
@@ -143,9 +145,9 @@ export default function FavoritesScreen({ navigation }: Props) {
           />
           {coords && (
             <View style={{ gap: spacing.md, marginTop: spacing.md }}>
-              <TextField label="Nom (ex: Maison, Travail)" value={label} onChangeText={setLabel} placeholder="Maison" />
-              <TextField label="Adresse" value={address} onChangeText={setAddress} placeholder="Adresse détectée" multiline />
-              <Button label="Enregistrer" onPress={handleSave} disabled={!label.trim() || saving} loading={saving} />
+              <TextField label={t('favoritesNameLabel')} value={label} onChangeText={setLabel} placeholder={t('favoritesNamePlaceholder')} />
+              <TextField label={t('favoritesAddressLabel')} value={address} onChangeText={setAddress} placeholder={t('favoritesAddressPlaceholder')} multiline />
+              <Button label={t('commonSave')} onPress={handleSave} disabled={!label.trim() || saving} loading={saving} />
             </View>
           )}
         </View>
@@ -189,8 +191,8 @@ export default function FavoritesScreen({ navigation }: Props) {
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Ionicons name="heart-outline" size={44} color={colors.textTertiary} />
-              <Text style={styles.emptyTitle}>Aucun favori</Text>
-              <Text style={styles.emptySub}>Ajoutez vos adresses fréquentes pour réserver plus vite.</Text>
+              <Text style={styles.emptyTitle}>{t('favoritesEmpty')}</Text>
+              <Text style={styles.emptySub}>{t('favoritesEmptySub')}</Text>
             </View>
           }
         />

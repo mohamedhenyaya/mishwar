@@ -7,6 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COUNTRIES, Country, DEFAULT_COUNTRY } from '../data/countries';
+import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radius, shadows, spacing, typography } from '../theme';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ interface PhoneInputProps {
 const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
   ({ value, onChange, placeholder = 'XX XX XX XX', inputStyle, containerStyle, onSubmitEditing, returnKeyType = 'done' }, ref) => {
     const insets = useSafeAreaInsets();
+    const { t } = useLanguage();
 
     const [country,      setCountry]      = useState<Country>(DEFAULT_COUNTRY);
     const [localNumber,  setLocalNumber]  = useState('');
@@ -103,7 +105,7 @@ const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
 
             {/* Header modal */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Sélectionner un pays</Text>
+              <Text style={styles.modalTitle}>{t('phoneSelectCountry')}</Text>
               <TouchableOpacity
                 onPress={() => { setModalVisible(false); setSearch(''); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -119,7 +121,7 @@ const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
                 style={styles.searchInput}
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Rechercher un pays ou un indicatif…"
+                placeholder={t('phoneSearchCountry')}
                 placeholderTextColor={colors.placeholder}
                 autoFocus
                 returnKeyType="search"
@@ -155,7 +157,7 @@ const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
               }}
               ListEmptyComponent={
                 <View style={styles.emptyWrap}>
-                  <Text style={styles.emptyText}>Aucun pays trouvé</Text>
+                  <Text style={styles.emptyText}>{t('phoneNoCountryFound')}</Text>
                 </View>
               }
             />

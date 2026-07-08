@@ -25,6 +25,7 @@ const update_scheduled_ride_dto_1 = require("./dto/update-scheduled-ride.dto");
 const estimate_ride_dto_1 = require("./dto/estimate-ride.dto");
 const driver_cancel_ride_dto_1 = require("./dto/driver-cancel-ride.dto");
 const cancel_ride_dto_1 = require("./dto/cancel-ride.dto");
+const leaderboard_query_dto_1 = require("./dto/leaderboard-query.dto");
 const rides_service_1 = require("./rides.service");
 let RidesController = class RidesController {
     constructor(ridesService) {
@@ -50,6 +51,9 @@ let RidesController = class RidesController {
     }
     myRides(user) {
         return this.ridesService.findByUser(user.sub);
+    }
+    leaderboard(user, dto) {
+        return this.ridesService.getLeaderboard(dto.period, user.sub);
     }
     findOne(user, id) {
         return this.ridesService.findByIdForParticipant(id, user);
@@ -138,6 +142,15 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "myRides", null);
+__decorate([
+    (0, common_1.Get)('leaderboard'),
+    (0, roles_decorator_1.Roles)('user'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, leaderboard_query_dto_1.LeaderboardQueryDto]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "leaderboard", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),

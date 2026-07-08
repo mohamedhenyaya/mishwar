@@ -73,6 +73,36 @@ export class Ride {
   @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
   price: number | null;
 
+  // Trajet ouvert : destination inconnue à la création, tarif calculé en temps réel via le compteur
+  @Column({ default: false })
+  isOpenTrip: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  startedAt: Date | null;
+
+  // Tarif indicatif figé à la création pour une course classique (destination connue) — jamais recalculé
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  estimatedPrice: number | null;
+
+  // ── Compteur temps réel (trajet ouvert uniquement) ────────────────────────
+  @Column({ type: 'decimal', precision: 8, scale: 3, default: 0 })
+  traveledDistanceKm: number;
+
+  @Column({ type: 'int', default: 0 })
+  stoppedSeconds: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  lastMeterLatitude: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  lastMeterLongitude: number | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastMeterAt: Date | null;
+
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  livePrice: number | null;
+
   // Note donnée par le rider au driver après la course
   @Column({ type: 'decimal', precision: 2, scale: 1, nullable: true })
   ratingForDriver: number | null;

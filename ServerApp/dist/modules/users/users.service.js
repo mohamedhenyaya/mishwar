@@ -33,6 +33,11 @@ let UsersService = class UsersService {
         await this.userRepo.update(id, dto);
         return this.findById(id);
     }
+    async findByIds(ids) {
+        if (ids.length === 0)
+            return [];
+        return this.userRepo.find({ where: { id: (0, typeorm_2.In)(ids) } });
+    }
     async findAllPaginated(query) {
         const page = query.page ?? 1;
         const limit = query.limit ?? 20;

@@ -26,6 +26,12 @@ export const colors = {
   warningMuted: '#FDF3E0',
   star: '#F5B400',
 
+  // Itinéraire (départ / arrivée)
+  routeOrigin: '#1FAA59',
+  routeOriginMuted: '#E4F7EC',
+  routeDestination: '#123C7A',
+  routeDestinationMuted: '#E7ECFA',
+
   // Neutres
   bg: '#F7F7FA',
   surface: '#FFFFFF',

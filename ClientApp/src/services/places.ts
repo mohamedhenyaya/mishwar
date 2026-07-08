@@ -17,3 +17,13 @@ export async function searchPlaces(
   if (lng != null) params.set('lng', String(lng));
   return apiGet<PlaceSuggestion[]>(`/places/autocomplete?${params.toString()}`);
 }
+
+export interface PlaceDetails {
+  formattedAddress: string;
+  latitude: number;
+  longitude: number;
+}
+
+export async function getPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
+  return apiGet<PlaceDetails | null>(`/places/details?placeId=${encodeURIComponent(placeId)}`);
+}

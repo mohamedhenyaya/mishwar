@@ -9,6 +9,7 @@ export declare class UsersService {
     constructor(userRepo: Repository<User>);
     findById(id: string): Promise<User>;
     update(id: string, dto: UpdateUserDto): Promise<User>;
+    findByIds(ids: string[]): Promise<User[]>;
     findAllPaginated(query: AdminUsersQueryDto): Promise<PaginatedResult<User>>;
     getStats(id: string): Promise<{
         user: User;

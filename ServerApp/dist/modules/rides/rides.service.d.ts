@@ -9,13 +9,30 @@ import { CreateScheduledRideDto } from './dto/create-scheduled-ride.dto';
 import { UpdateScheduledRideDto } from './dto/update-scheduled-ride.dto';
 import { EstimateRideDto } from './dto/estimate-ride.dto';
 import { DriverCancelRideDto } from './dto/driver-cancel-ride.dto';
+import { LeaderboardPeriod } from './dto/leaderboard-query.dto';
 import { GeolocationGateway } from '../geolocation/geolocation.gateway';
 import { DriversService } from '../drivers/drivers.service';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { SettingsService } from '../settings/settings.service';
 import { WalletService } from '../wallet/wallet.service';
 import { PromotionsService } from '../promotions/promotions.service';
+import { UsersService } from '../users/users.service';
 import { PaginatedResult, PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+export interface LeaderboardEntry {
+    rank: number;
+    userId: string;
+    name: string;
+    points: number;
+    isCurrentUser: boolean;
+}
+export interface LeaderboardResult {
+    period: LeaderboardPeriod;
+    entries: LeaderboardEntry[];
+    currentUser: {
+        rank: number;
+        points: number;
+    } | null;
+}
 export declare class RidesService implements OnModuleInit {
     private readonly rideRepo;
     private readonly geolocationGateway;
@@ -24,17 +41,26 @@ export declare class RidesService implements OnModuleInit {
     private readonly settingsService;
     private readonly walletService;
     private readonly promotionsService;
+    private readonly usersService;
     private readonly logger;
-    constructor(rideRepo: Repository<Ride>, geolocationGateway: GeolocationGateway, driversService: DriversService, config: ConfigService, settingsService: SettingsService, walletService: WalletService, promotionsService: PromotionsService);
+    constructor(rideRepo: Repository<Ride>, geolocationGateway: GeolocationGateway, driversService: DriversService, config: ConfigService, settingsService: SettingsService, walletService: WalletService, promotionsService: PromotionsService, usersService: UsersService);
     onModuleInit(): void;
     createRide(userId: string, dto: CreateRideDto): Promise<Ride>;
     private activatePendingRide;
     findById(id: string): Promise<Ride | null>;
     findByUser(userId: string): Promise<Ride[]>;
-    findByIdForParticipant(id: string, jwt: JwtPayload): Promise<Ride>;
+    findByIdForParticipant(id: string, jwt: JwtPayload): Promise<Ride & {
+        riderName?: string;
+        riderPhone?: string;
+    }>;
     acceptRide(rideId: string, driverId: string): Promise<Ride>;
     rejectRide(rideId: string, driverId: string): Promise<void>;
     startRide(rideId: string, driverId: string): Promise<Ride>;
+    recordMeterPing(rideId: string, latitude: number, longitude: number): Promise<{
+        distanceKm: number;
+        stoppedMinutes: number;
+        price: number;
+    } | null>;
     completeRide(rideId: string, driverId: string, dto: CompleteRideDto): Promise<Ride>;
     cancelRide(rideId: string, userId: string, reason?: string): Promise<void>;
     driverCancelRide(rideId: string, driverId: string, dto: DriverCancelRideDto): Promise<void>;
@@ -53,4 +79,5 @@ export declare class RidesService implements OnModuleInit {
     private activateDueScheduledRides;
     findAllForAdmin(query: AdminRidesQueryDto): Promise<PaginatedResult<Ride>>;
     findByIdForAdmin(id: string): Promise<Ride>;
+    getLeaderboard(period: LeaderboardPeriod, currentUserId: string): Promise<LeaderboardResult>;
 }

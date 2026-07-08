@@ -5,10 +5,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../services/secureStorage';
 import { apiGet, apiPatch } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { TabScreenProps, UserProfile } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radius, shadows, spacing, typography } from '../theme';
 
 type Props = TabScreenProps<'Profile'>;
@@ -34,6 +35,7 @@ function MenuRow({ icon, label, onPress, danger }: MenuRowProps) {
 
 export default function ProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editName, setEditName] = useState(false);
@@ -61,17 +63,17 @@ export default function ProfileScreen({ navigation }: Props) {
       setEditName(false);
       setEditEmail(false);
     } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.message ?? 'Impossible de mettre à jour le profil.');
+      Alert.alert(t('commonError'), e?.response?.data?.message ?? t('profileUpdateErrorDefault'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleLogout = () => {
-    Alert.alert('Déconnexion', 'Voulez-vous vous déconnecter ?', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('profileLogoutTitle'), t('profileLogoutMessage'), [
+      { text: t('commonCancel'), style: 'cancel' },
       {
-        text: 'Déconnecter', style: 'destructive',
+        text: t('profileLogoutConfirm'), style: 'destructive',
         onPress: async () => {
           await SecureStore.deleteItemAsync(SECURE_STORE_KEY);
           navigation.replace('Welcome');
@@ -91,7 +93,7 @@ export default function ProfileScreen({ navigation }: Props) {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>Profil</Text>
+        <Text style={styles.title}>{t('profileTitle')}</Text>
 
         <View style={styles.card}>
           <View style={styles.avatarWrap}>
@@ -106,7 +108,7 @@ export default function ProfileScreen({ navigation }: Props) {
                 style={styles.editInput}
                 value={name}
                 onChangeText={setName}
-                placeholder="Votre nom"
+                placeholder={t('profileNamePlaceholder')}
                 placeholderTextColor={colors.placeholder}
                 autoFocus
               />
@@ -116,7 +118,7 @@ export default function ProfileScreen({ navigation }: Props) {
             </View>
           ) : (
             <TouchableOpacity onPress={() => setEditName(true)} style={styles.nameRow} activeOpacity={0.7}>
-              <Text style={styles.name}>{profile?.name || 'Ajouter votre nom'}</Text>
+              <Text style={styles.name}>{profile?.name || t('profileAddName')}</Text>
               <Ionicons name="pencil-outline" size={14} color={colors.textTertiary} />
             </TouchableOpacity>
           )}
@@ -124,12 +126,12 @@ export default function ProfileScreen({ navigation }: Props) {
 
           <View style={styles.ratingChip}>
             <Ionicons name="star" size={13} color={colors.star} />
-            <Text style={styles.ratingText}>{profile?.rating.toFixed(1)} · {profile?.ratingCount ?? 0} courses</Text>
+            <Text style={styles.ratingText}>{Number(profile?.rating ?? 0).toFixed(1)} · {profile?.ratingCount ?? 0}{t('profileRatingSuffix')}</Text>
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Informations</Text>
+          <Text style={styles.sectionLabel}>{t('profileInfoSection')}</Text>
 
           <View style={styles.infoRow}>
             <Ionicons name="mail-outline" size={17} color={colors.textSecondary} />
@@ -139,7 +141,7 @@ export default function ProfileScreen({ navigation }: Props) {
                   style={[styles.editInput, { flex: 1 }]}
                   value={email}
                   onChangeText={setEmail}
-                  placeholder="Votre email"
+                  placeholder={t('profileEmailPlaceholder')}
                   placeholderTextColor={colors.placeholder}
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -151,20 +153,19 @@ export default function ProfileScreen({ navigation }: Props) {
               </>
             ) : (
               <TouchableOpacity onPress={() => setEditEmail(true)} style={{ flex: 1 }}>
-                <Text style={styles.infoValue}>{profile?.email || 'Non renseigné'}</Text>
+                <Text style={styles.infoValue}>{profile?.email || t('profileNotProvided')}</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
 
         <View style={styles.card}>
-          <MenuRow icon="heart-outline" label="Mes favoris" onPress={() => navigation.navigate('Favorites')} />
-          <MenuRow icon="headset-outline" label="Support" onPress={() => navigation.navigate('Support')} />
-          <MenuRow icon="wallet-outline" label="Portefeuille" onPress={() => navigation.navigate('Wallet')} />
+          <MenuRow icon="heart-outline" label={t('profileFavorites')} onPress={() => navigation.navigate('Favorites')} />
+          <MenuRow icon="headset-outline" label={t('profileSupport')} onPress={() => navigation.navigate('Support')} />
         </View>
 
         <View style={styles.card}>
-          <MenuRow icon="log-out-outline" label="Se déconnecter" onPress={handleLogout} danger />
+          <MenuRow icon="log-out-outline" label={t('profileLogout')} onPress={handleLogout} danger />
         </View>
       </ScrollView>
     </View>

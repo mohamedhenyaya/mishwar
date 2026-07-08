@@ -1,5 +1,5 @@
 // ─── Navigation ──────────────────────────────────────────────────────────────
-// "Home/Trips/Wallet/Profile" vivent dans une barre d'onglets (voir
+// "Home/Trips/Ranking/Profile" vivent dans une barre d'onglets (voir
 // navigation/MainTabs.tsx) ; les autres écrans restent des Stack.Screen
 // classiques empilés par-dessus.
 
@@ -10,7 +10,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 export type TabParamList = {
   Home: undefined;
   Trips: undefined;
-  Wallet: undefined;
+  Ranking: undefined;
   Profile: undefined;
 };
 
@@ -19,11 +19,9 @@ export type RootStackParamList = {
   Auth: { mode: 'register' };
   Login: undefined;
   Main: undefined;
-  Booking: { destination?: string; startLatitude?: number; startLongitude?: number };
-  Match: { rideId: string };
+  Match: { rideId: string; isOpenTrip?: boolean; estimatedPrice?: number };
   Favorites: undefined;
   Support: undefined;
-  Recharge: undefined;
 };
 
 export type TabScreenProps<T extends keyof TabParamList> = CompositeScreenProps<
@@ -62,7 +60,6 @@ export interface UserProfile {
   phone: string;
   name: string | null;
   email: string | null;
-  balance: number;
   rating: number;
   ratingCount: number;
 }
@@ -96,12 +93,20 @@ export interface FavoritePlace {
   createdAt: string;
 }
 
-export interface WalletTransaction {
-  id: string;
-  type: 'admin_credit' | 'admin_debit' | 'commission_deduction';
-  amount: number;
-  note: string | null;
-  createdAt: string;
+export type LeaderboardPeriod = 'day' | 'week' | 'month' | 'year';
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  name: string;
+  points: number;
+  isCurrentUser: boolean;
+}
+
+export interface LeaderboardResult {
+  period: LeaderboardPeriod;
+  entries: LeaderboardEntry[];
+  currentUser: { rank: number; points: number } | null;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────

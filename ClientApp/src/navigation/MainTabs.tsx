@@ -3,10 +3,11 @@ import { Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { TabParamList } from '../types';
-import HomeScreen from '../screens/HomeScreen';
+import ItineraryScreen from '../screens/ItineraryScreen';
 import TripsScreen from '../screens/TripsScreen';
-import WalletScreen from '../screens/WalletScreen';
+import RankingScreen from '../screens/RankingScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import { useLanguage } from '../i18n/LanguageContext';
 import { colors, typography } from '../theme';
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -14,18 +15,19 @@ const Tab = createBottomTabNavigator<TabParamList>();
 const ICONS: Record<keyof TabParamList, { active: keyof typeof Ionicons.glyphMap; inactive: keyof typeof Ionicons.glyphMap }> = {
   Home:    { active: 'home',          inactive: 'home-outline' },
   Trips:   { active: 'reader',        inactive: 'reader-outline' },
-  Wallet:  { active: 'wallet',        inactive: 'wallet-outline' },
+  Ranking: { active: 'trophy',        inactive: 'trophy-outline' },
   Profile: { active: 'person',        inactive: 'person-outline' },
 };
 
-const LABELS: Record<keyof TabParamList, string> = {
-  Home: 'Accueil',
-  Trips: 'Trajets',
-  Wallet: 'Portefeuille',
-  Profile: 'Profil',
-};
-
 export default function MainTabs() {
+  const { t } = useLanguage();
+  const LABELS: Record<keyof TabParamList, string> = {
+    Home: t('tabHome'),
+    Trips: t('tabTrips'),
+    Ranking: t('tabRanking'),
+    Profile: t('tabProfile'),
+  };
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -49,9 +51,9 @@ export default function MainTabs() {
         ),
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: LABELS.Home }} />
+      <Tab.Screen name="Home" component={ItineraryScreen} options={{ tabBarLabel: LABELS.Home }} />
       <Tab.Screen name="Trips" component={TripsScreen} options={{ tabBarLabel: LABELS.Trips }} />
-      <Tab.Screen name="Wallet" component={WalletScreen} options={{ tabBarLabel: LABELS.Wallet }} />
+      <Tab.Screen name="Ranking" component={RankingScreen} options={{ tabBarLabel: LABELS.Ranking }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: LABELS.Profile }} />
     </Tab.Navigator>
   );

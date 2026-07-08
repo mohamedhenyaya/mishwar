@@ -12,12 +12,13 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../services/secureStorage';
 import { apiPost } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { RootStackParamList } from '../types';
 import PhoneInput from '../components/PhoneInput';
 import { Button, IconButton, TextField } from '../components/ui';
+import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radius, spacing, typography, motion } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Auth'>;
@@ -41,6 +42,7 @@ function ProgressBar({ step }: { step: Step }) {
 
 export default function AuthScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
 
   const [step,     setStep]     = useState<Step>('phone');
   const [phone,    setPhone]    = useState('');
@@ -84,11 +86,11 @@ export default function AuthScreen({ navigation }: Props) {
         '/auth/send-otp',
         { phone: phone.trim(), role: 'user' },
       );
-      if (res.otp) Alert.alert('Mode DEV', `Code OTP : ${res.otp}`);
+      if (res.otp) Alert.alert(t('authDevModeTitle'), `${t('authDevModeMessagePrefix')}${res.otp}`);
       setStep('otp');
       setTimeout(() => otpRef.current?.focus(), 300);
     } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.message ?? "Impossible d'envoyer le code.");
+      Alert.alert(t('commonError'), e?.response?.data?.message ?? t('authSendErrorMessage'));
     } finally {
       setLoading(false);
     }
@@ -98,7 +100,7 @@ export default function AuthScreen({ navigation }: Props) {
 
   const handleOtpNext = () => {
     if (otp.length !== 6) {
-      Alert.alert('Code invalide', 'Le code doit contenir 6 chiffres.');
+      Alert.alert(t('authInvalidCodeTitle'), t('authInvalidCodeMessage'));
       return;
     }
     setStep('password');
@@ -108,11 +110,11 @@ export default function AuthScreen({ navigation }: Props) {
 
   const handleRegister = async () => {
     if (password.length < 6) {
-      Alert.alert('Mot de passe trop court', 'Minimum 6 caractères.');
+      Alert.alert(t('authPasswordTooShortTitle'), t('authPasswordTooShortMessage'));
       return;
     }
     if (password !== confirm) {
-      Alert.alert('Mots de passe différents', 'Les deux mots de passe doivent correspondre.');
+      Alert.alert(t('authPasswordDiffTitle'), t('authPasswordDiffMessage'));
       return;
     }
 
@@ -125,8 +127,8 @@ export default function AuthScreen({ navigation }: Props) {
       await SecureStore.setItemAsync(SECURE_STORE_KEY, res.accessToken);
       navigation.replace('Main');
     } catch (e: any) {
-      const msg = e?.response?.data?.message ?? 'Erreur lors de la création du compte.';
-      Alert.alert('Erreur', msg);
+      const msg = e?.response?.data?.message ?? t('authRegisterErrorDefault');
+      Alert.alert(t('commonError'), msg);
       if (e?.response?.status === 401) { setStep('otp'); setOtp(''); }
     } finally {
       setLoading(false);
@@ -160,14 +162,14 @@ export default function AuthScreen({ navigation }: Props) {
 
           {step === 'phone' && (
             <>
-              <Text style={styles.title}>Créer un compte</Text>
+              <Text style={styles.title}>{t('authPhoneTitle')}</Text>
               <Text style={styles.subtitle}>
-                Entrez votre numéro — vous recevrez un code via{' '}
+                {t('authPhoneSubtitlePrefix')}
                 <Text style={styles.waText}>WhatsApp</Text>
               </Text>
 
               <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Numéro de téléphone</Text>
+                <Text style={styles.label}>{t('authPhoneNumberLabel')}</Text>
                 <PhoneInput
                   value={phone}
                   onChange={setPhone}
@@ -177,7 +179,7 @@ export default function AuthScreen({ navigation }: Props) {
               </View>
 
               <Button
-                label="Recevoir le code WhatsApp"
+                label={t('authReceiveCode')}
                 variant="whatsapp"
                 icon="logo-whatsapp"
                 onPress={handleSendOtp}
@@ -186,9 +188,9 @@ export default function AuthScreen({ navigation }: Props) {
               />
 
               <Text style={styles.switchText}>
-                Déjà un compte ?{' '}
+                {t('authAlreadyAccount')}
                 <Text style={styles.switchLink} onPress={() => navigation.replace('Login')}>
-                  Se connecter
+                  {t('authLogin')}
                 </Text>
               </Text>
             </>
@@ -198,15 +200,15 @@ export default function AuthScreen({ navigation }: Props) {
             <>
               <View style={styles.waBadge}>
                 <Ionicons name="checkmark-circle" size={16} color={colors.whatsappDark} />
-                <Text style={styles.waBadgeText}>Code envoyé sur WhatsApp au {phone}</Text>
+                <Text style={styles.waBadgeText}>{t('authCodeSentTo')}{phone}</Text>
               </View>
 
-              <Text style={styles.title}>Vérification</Text>
-              <Text style={styles.subtitle}>Entrez le code à 6 chiffres reçu sur WhatsApp</Text>
+              <Text style={styles.title}>{t('authVerificationTitle')}</Text>
+              <Text style={styles.subtitle}>{t('authVerificationSubtitle')}</Text>
 
               <TextField
                 ref={otpRef}
-                label="Code OTP"
+                label={t('authOtpLabel')}
                 value={otp}
                 onChangeText={(v) => setOtp(v.replace(/\D/g, '').slice(0, 6))}
                 placeholder="• • • • • •"
@@ -217,45 +219,45 @@ export default function AuthScreen({ navigation }: Props) {
                 style={styles.otpInput}
               />
 
-              <Button label="Continuer" onPress={handleOtpNext} disabled={otp.length < 6} />
+              <Button label={t('authContinue')} onPress={handleOtpNext} disabled={otp.length < 6} />
 
               <Text style={styles.switchText} onPress={handleSendOtp}>
-                Code non reçu ? <Text style={styles.switchLink}>Renvoyer</Text>
+                {t('authCodeNotReceived')}<Text style={styles.switchLink}>{t('authResend')}</Text>
               </Text>
             </>
           )}
 
           {step === 'password' && (
             <>
-              <Text style={styles.title}>Créer un mot de passe</Text>
-              <Text style={styles.subtitle}>Choisissez un mot de passe pour sécuriser votre compte</Text>
+              <Text style={styles.title}>{t('authCreatePasswordTitle')}</Text>
+              <Text style={styles.subtitle}>{t('authCreatePasswordSubtitle')}</Text>
 
               <TextField
-                label="Mot de passe"
+                label={t('authPasswordLabel')}
                 icon="lock-closed-outline"
                 isPassword
                 value={password}
                 onChangeText={setPassword}
-                placeholder="Minimum 6 caractères"
+                placeholder={t('authPasswordPlaceholder')}
                 returnKeyType="next"
                 onSubmitEditing={() => confirmRef.current?.focus()}
               />
 
               <TextField
                 ref={confirmRef}
-                label="Confirmer le mot de passe"
+                label={t('authConfirmPasswordLabel')}
                 icon="lock-closed-outline"
                 isPassword
                 value={confirm}
                 onChangeText={setConfirm}
-                placeholder="Répétez le mot de passe"
+                placeholder={t('authConfirmPasswordPlaceholder')}
                 returnKeyType="done"
                 onSubmitEditing={handleRegister}
-                error={confirm.length > 0 && confirm !== password ? 'Les mots de passe ne correspondent pas' : undefined}
+                error={confirm.length > 0 && confirm !== password ? t('authPasswordMismatch') : undefined}
               />
 
               <Button
-                label="Créer mon compte"
+                label={t('authCreateAccountBtn')}
                 onPress={handleRegister}
                 loading={loading}
                 disabled={password.length < 6 || password !== confirm}

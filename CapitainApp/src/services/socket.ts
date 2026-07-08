@@ -3,24 +3,28 @@ import { Coordinates } from '../types';
 import { SOCKET_URL } from '../config/constants';
 
 const EVENTS = {
-  CAPTAIN_ONLINE:    'captain:online',
-  CAPTAIN_OFFLINE:   'captain:offline',
-  CAPTAIN_LOCATION:  'captain:location',
-  RIDE_REQUEST:      'ride:request',
-  RIDE_ACCEPTED:     'ride:accepted',
-  RIDE_STARTED:      'ride:started',
-  RIDE_COMPLETED:    'ride:completed',
-  RIDE_CANCELLED:    'ride:cancelled',
+  DRIVER_REGISTER: 'driver:register',
+  DRIVER_POSITION: 'driver:position',
+  RIDE_NEW:        'ride:new',
+  RIDE_METER:      'ride:meter',
+  RIDE_CANCELLED:  'ride:cancelled',
+  RIDE_UNAVAILABLE:'ride:unavailable',
 } as const;
 
-export interface RideRequestPayload {
-  rideId:      string;
-  clientName:  string;
-  clientPhone: string;
-  origin:      Coordinates & { label: string };
-  destination: Coordinates & { label: string };
-  price:       number;
-  distance:    number;
+export interface RideNewPayload {
+  rideId:          string;
+  startLatitude:   number;
+  startLongitude:  number;
+  destinationName: string | null;
+  vehicleType:     string;
+  createdAt:       string;
+}
+
+export interface RideMeterPayload {
+  rideId:         string;
+  distanceKm:     number;
+  stoppedMinutes: number;
+  price:          number;
 }
 
 class CaptainSocketService {
@@ -49,22 +53,18 @@ class CaptainSocketService {
     this.socket = null;
   }
 
-  goOnline(coords: Coordinates):  void { this.socket?.emit(EVENTS.CAPTAIN_ONLINE,   coords); }
-  goOffline():                    void { this.socket?.emit(EVENTS.CAPTAIN_OFFLINE); }
-  updateLocation(coords: Coordinates): void { this.socket?.emit(EVENTS.CAPTAIN_LOCATION, coords); }
-  acceptRide(rideId: string):     void { this.socket?.emit(EVENTS.RIDE_ACCEPTED, { rideId }); }
-  startRide(rideId: string):      void { this.socket?.emit(EVENTS.RIDE_STARTED,  { rideId }); }
-  completeRide(rideId: string):   void { this.socket?.emit(EVENTS.RIDE_COMPLETED, { rideId }); }
+  registerDriver():                   void { this.socket?.emit(EVENTS.DRIVER_REGISTER); }
+  updateLocation(coords: Coordinates): void { this.socket?.emit(EVENTS.DRIVER_POSITION, coords); }
 
-  onRideRequest(cb: (payload: RideRequestPayload) => void): void {
-    this.socket?.on(EVENTS.RIDE_REQUEST, cb);
-  }
-  onRideCancelled(cb: (payload: { rideId: string }) => void): void {
-    this.socket?.on(EVENTS.RIDE_CANCELLED, cb);
-  }
+  onRideNew(cb: (payload: RideNewPayload) => void):       void { this.socket?.on(EVENTS.RIDE_NEW, cb); }
+  onRideMeter(cb: (payload: RideMeterPayload) => void):   void { this.socket?.on(EVENTS.RIDE_METER, cb); }
+  onRideCancelled(cb: (payload: { rideId: string }) => void): void { this.socket?.on(EVENTS.RIDE_CANCELLED, cb); }
+  onRideUnavailable(cb: (payload: { rideId: string }) => void): void { this.socket?.on(EVENTS.RIDE_UNAVAILABLE, cb); }
 
-  offRideRequest():   void { this.socket?.off(EVENTS.RIDE_REQUEST); }
-  offRideCancelled(): void { this.socket?.off(EVENTS.RIDE_CANCELLED); }
+  offRideNew():         void { this.socket?.off(EVENTS.RIDE_NEW); }
+  offRideMeter():        void { this.socket?.off(EVENTS.RIDE_METER); }
+  offRideCancelled():    void { this.socket?.off(EVENTS.RIDE_CANCELLED); }
+  offRideUnavailable():  void { this.socket?.off(EVENTS.RIDE_UNAVAILABLE); }
 }
 
 export const captainSocketService = new CaptainSocketService();

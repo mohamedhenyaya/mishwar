@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { User, UserRole } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -25,6 +25,11 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto): Promise<User> {
     await this.userRepo.update(id, dto);
     return this.findById(id);
+  }
+
+  async findByIds(ids: string[]): Promise<User[]> {
+    if (ids.length === 0) return [];
+    return this.userRepo.find({ where: { id: In(ids) } });
   }
 
   // ═══════════════════════════ Administration ═══════════════════════════════

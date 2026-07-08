@@ -41,7 +41,13 @@ interface GoogleGeocodeResponse {
   results?: GoogleGeocodeResult[];
 }
 
+interface GooglePlaceDetailsResponse {
+  formattedAddress?: string;
+  location?: { latitude: number; longitude: number };
+}
+
 const GOOGLE_AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete';
+const GOOGLE_PLACE_DETAILS_URL = 'https://places.googleapis.com/v1/places';
 const GOOGLE_GEOCODE_URL = 'https://maps.googleapis.com/maps/api/geocode/json';
 const BIAS_RADIUS_METERS = 20_000;
 
@@ -110,6 +116,41 @@ export class PlacesService {
         secondaryText:  p.structuredFormat?.secondaryText?.text ?? '',
         description:    p.text?.text ?? '',
       }));
+  }
+
+  async placeDetails(placeId: string): Promise<{ formattedAddress: string; latitude: number; longitude: number } | null> {
+    if (!this.apiKey) {
+      this.logger.warn('GOOGLE_PLACES_API_KEY non configurée — place details désactivé');
+      return null;
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(`${GOOGLE_PLACE_DETAILS_URL}/${encodeURIComponent(placeId)}`, {
+        headers: {
+          'X-Goog-Api-Key': this.apiKey,
+          'X-Goog-FieldMask': 'location,formattedAddress',
+        },
+      });
+    } catch (err: any) {
+      this.logger.error(`Appel Google Place Details échoué: ${err.message}`);
+      throw new ServiceUnavailableException('Détails du lieu indisponibles');
+    }
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      this.logger.error(`Google Place Details a répondu ${res.status}: ${errBody}`);
+      throw new ServiceUnavailableException('Détails du lieu indisponibles');
+    }
+
+    const data = (await res.json()) as GooglePlaceDetailsResponse;
+    if (!data.location) return null;
+
+    return {
+      formattedAddress: data.formattedAddress ?? '',
+      latitude: data.location.latitude,
+      longitude: data.location.longitude,
+    };
   }
 
   async reverseGeocode(lat: number, lng: number): Promise<{ formattedAddress: string; placeId?: string } | null> {

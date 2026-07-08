@@ -19,11 +19,13 @@ const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const socket_io_1 = require("socket.io");
 const drivers_service_1 = require("../drivers/drivers.service");
+const rides_service_1 = require("../rides/rides.service");
 const vehicle_class_util_1 = require("../rides/utils/vehicle-class.util");
 const pricing_util_1 = require("../rides/utils/pricing.util");
 let GeolocationGateway = GeolocationGateway_1 = class GeolocationGateway {
-    constructor(driversService, jwtService) {
+    constructor(driversService, ridesService, jwtService) {
         this.driversService = driversService;
+        this.ridesService = ridesService;
         this.jwtService = jwtService;
         this.logger = new common_1.Logger(GeolocationGateway_1.name);
         this.connectedDrivers = new Map();
@@ -82,6 +84,10 @@ let GeolocationGateway = GeolocationGateway_1 = class GeolocationGateway {
         const activeRideId = this.driverActiveRide.get(driverId);
         if (activeRideId) {
             this.server.to(`ride:${activeRideId}`).emit('driver:position', payload);
+            const meterSnapshot = await this.ridesService.recordMeterPing(activeRideId, data.latitude, data.longitude);
+            if (meterSnapshot) {
+                this.server.to(`ride:${activeRideId}`).emit('ride:meter', { rideId: activeRideId, ...meterSnapshot });
+            }
         }
         else {
             this.server.emit('driver:position', payload);
@@ -198,7 +204,9 @@ __decorate([
 exports.GeolocationGateway = GeolocationGateway = GeolocationGateway_1 = __decorate([
     (0, websockets_1.WebSocketGateway)({ cors: { origin: '*' } }),
     __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => drivers_service_1.DriversService))),
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => rides_service_1.RidesService))),
     __metadata("design:paramtypes", [drivers_service_1.DriversService,
+        rides_service_1.RidesService,
         jwt_1.JwtService])
 ], GeolocationGateway);
 //# sourceMappingURL=geolocation.gateway.js.map

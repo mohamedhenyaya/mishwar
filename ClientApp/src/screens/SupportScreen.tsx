@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
 import { SUPPORT_EMAIL, SUPPORT_PHONE, SUPPORT_WHATSAPP } from '../config/constants';
 import { ScreenHeader } from '../components/ui';
+import { useLanguage } from '../i18n/LanguageContext';
 import { colors, radius, shadows, spacing, typography } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Support'>;
@@ -37,20 +38,21 @@ function Channel({ icon, color, bg, title, sub, onPress, last }: ChannelProps) {
 
 export default function SupportScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      <ScreenHeader title="Support" onBack={() => navigation.goBack()} />
+      <ScreenHeader title={t('supportTitle')} onBack={() => navigation.goBack()} />
 
       <View style={styles.content}>
-        <Text style={styles.intro}>Une question, un problème avec une course ? Contactez-nous directement.</Text>
+        <Text style={styles.intro}>{t('supportIntro')}</Text>
 
         <View style={styles.card}>
           <Channel
             icon="logo-whatsapp"
             color={colors.whatsappDark}
             bg={colors.whatsappMuted}
-            title="WhatsApp"
+            title={t('supportWhatsapp')}
             sub={SUPPORT_WHATSAPP}
             onPress={() => Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP.replace(/[^0-9]/g, '')}`)}
           />
@@ -58,7 +60,7 @@ export default function SupportScreen({ navigation }: Props) {
             icon="call"
             color={colors.accent}
             bg={colors.accentMuted}
-            title="Appeler le support"
+            title={t('supportCall')}
             sub={SUPPORT_PHONE}
             onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)}
           />
@@ -66,7 +68,7 @@ export default function SupportScreen({ navigation }: Props) {
             icon="mail"
             color={colors.text}
             bg={colors.surfaceAlt}
-            title="Envoyer un email"
+            title={t('supportEmail')}
             sub={SUPPORT_EMAIL}
             onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
             last
@@ -75,7 +77,7 @@ export default function SupportScreen({ navigation }: Props) {
 
         <View style={styles.hoursCard}>
           <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
-          <Text style={styles.hoursText}>Service disponible 24h/24, 7j/7</Text>
+          <Text style={styles.hoursText}>{t('supportHours')}</Text>
         </View>
       </View>
     </View>

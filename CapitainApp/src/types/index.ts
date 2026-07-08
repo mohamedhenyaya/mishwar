@@ -20,6 +20,7 @@ export type RootStackParamList = {
   MonCompte:   undefined;
   Performance: undefined;
   Recharge:    undefined;
+  ActiveTrip:  { rideId: string };
 };
 
 export type HomeScreenProps = CompositeScreenProps<

@@ -19,4 +19,10 @@ export class UpdateSettingsDto {
   @IsNumber()
   @Min(0)
   commissionPercent?: number;
+
+  @ApiPropertyOptional({ example: 5, description: 'Prix par minute d\'arrêt pendant un trajet ouvert (compteur temps réel)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  perStopMinuteRate?: number;
 }

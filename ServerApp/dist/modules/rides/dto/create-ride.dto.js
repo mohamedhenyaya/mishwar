@@ -31,6 +31,7 @@ __decorate([
     __metadata("design:type", Number)
 ], CreateRideDto.prototype, "startLongitude", void 0);
 __decorate([
+    (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateRideDto.prototype, "destinationName", void 0);
@@ -55,4 +56,9 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateRideDto.prototype, "couponCode", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsBoolean)(),
+    __metadata("design:type", Boolean)
+], CreateRideDto.prototype, "isOpenTrip", void 0);
 //# sourceMappingURL=create-ride.dto.js.map

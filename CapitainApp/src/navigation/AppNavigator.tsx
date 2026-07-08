@@ -16,6 +16,7 @@ import ParametresScreen    from '../screens/ParametresScreen';
 import MonCompteScreen     from '../screens/MonCompteScreen';
 import PerformanceScreen   from '../screens/PerformanceScreen';
 import RechargeScreen      from '../screens/RechargeScreen';
+import ActiveTripScreen    from '../screens/ActiveTripScreen';
 import { C } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -57,6 +58,7 @@ export default function AppNavigator() {
         <Stack.Screen name="MonCompte"   component={MonCompteScreen}  options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Performance" component={PerformanceScreen} options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Recharge"    component={RechargeScreen}   options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="ActiveTrip"  component={ActiveTripScreen} options={{ animation: 'slide_from_bottom' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

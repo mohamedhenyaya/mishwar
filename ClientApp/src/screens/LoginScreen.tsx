@@ -11,13 +11,14 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../services/secureStorage';
 import { Ionicons } from '@expo/vector-icons';
 import { apiPost } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { RootStackParamList } from '../types';
 import PhoneInput from '../components/PhoneInput';
 import { Button, IconButton, TextField } from '../components/ui';
+import { useLanguage } from '../i18n/LanguageContext';
 import { colors, spacing, typography, motion } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
@@ -26,6 +27,7 @@ interface LoginResponse { accessToken: string }
 
 export default function LoginScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
 
   const [phone,    setPhone]    = useState('');
   const [password, setPassword] = useState('');
@@ -55,10 +57,14 @@ export default function LoginScreen({ navigation }: Props) {
       await SecureStore.setItemAsync(SECURE_STORE_KEY, res.accessToken);
       navigation.replace('Main');
     } catch (e: any) {
-      Alert.alert(
-        'Connexion échouée',
-        e?.response?.data?.message ?? 'Numéro ou mot de passe incorrect.',
-      );
+      if (!e?.response) {
+        Alert.alert(t('commonError'), t('commonNetworkError'));
+      } else {
+        Alert.alert(
+          t('loginFailedTitle'),
+          e.response.data?.message ?? t('loginFailedMessage'),
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -84,11 +90,11 @@ export default function LoginScreen({ navigation }: Props) {
           <Text style={styles.appName}>Mishwar</Text>
         </View>
 
-        <Text style={styles.title}>Bon retour !</Text>
-        <Text style={styles.subtitle}>Connectez-vous à votre compte</Text>
+        <Text style={styles.title}>{t('loginTitle')}</Text>
+        <Text style={styles.subtitle}>{t('loginSubtitle')}</Text>
 
         <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Téléphone</Text>
+          <Text style={styles.label}>{t('loginPhoneLabel')}</Text>
           <PhoneInput
             value={phone}
             onChange={setPhone}
@@ -99,7 +105,7 @@ export default function LoginScreen({ navigation }: Props) {
 
         <TextField
           ref={passwordRef}
-          label="Mot de passe"
+          label={t('loginPasswordLabel')}
           icon="lock-closed-outline"
           isPassword
           value={password}
@@ -109,10 +115,10 @@ export default function LoginScreen({ navigation }: Props) {
           onSubmitEditing={handleLogin}
         />
 
-        <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+        <Text style={styles.forgotText}>{t('loginForgotPassword')}</Text>
 
         <Button
-          label="Se connecter"
+          label={t('loginSubmit')}
           onPress={handleLogin}
           loading={loading}
           disabled={!canSubmit}
@@ -120,9 +126,9 @@ export default function LoginScreen({ navigation }: Props) {
         />
 
         <Text style={styles.switchText}>
-          Pas encore de compte ?{' '}
+          {t('loginNoAccount')}
           <Text style={styles.switchLink} onPress={() => navigation.replace('Auth', { mode: 'register' })}>
-            Créer un compte
+            {t('loginCreateAccount')}
           </Text>
         </Text>
       </Animated.View>

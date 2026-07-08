@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -11,6 +11,7 @@ import { UpdateScheduledRideDto } from './dto/update-scheduled-ride.dto';
 import { EstimateRideDto } from './dto/estimate-ride.dto';
 import { DriverCancelRideDto } from './dto/driver-cancel-ride.dto';
 import { CancelRideDto } from './dto/cancel-ride.dto';
+import { LeaderboardQueryDto } from './dto/leaderboard-query.dto';
 import { RidesService } from './rides.service';
 
 @Controller('rides')
@@ -62,6 +63,12 @@ export class RidesController {
   @Roles('user')
   myRides(@CurrentUser() user: JwtPayload) {
     return this.ridesService.findByUser(user.sub);
+  }
+
+  @Get('leaderboard')
+  @Roles('user')
+  leaderboard(@CurrentUser() user: JwtPayload, @Query() dto: LeaderboardQueryDto) {
+    return this.ridesService.getLeaderboard(dto.period, user.sub);
   }
 
   @Get(':id')

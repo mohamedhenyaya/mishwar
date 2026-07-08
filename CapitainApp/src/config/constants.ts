@@ -1,4 +1,4 @@
-const DEV_HOST = '192.168.1.177';
+const DEV_HOST = '172.20.10.2';
 
 export const API_BASE_URL    = `http://${DEV_HOST}:3000/api/v1`;
 export const SOCKET_URL      = `http://${DEV_HOST}:3000`;

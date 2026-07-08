@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RideVehicleClass } from '../entities/ride.entity';
 
@@ -15,8 +15,9 @@ export class CreateRideDto {
   @Type(() => Number)
   startLongitude: number;
 
+  @IsOptional()
   @IsString()
-  destinationName: string;
+  destinationName?: string;
 
   @IsEnum(RideVehicleClass)
   vehicleType: RideVehicleClass;
@@ -34,4 +35,8 @@ export class CreateRideDto {
   @IsOptional()
   @IsString()
   couponCode?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isOpenTrip?: boolean;
 }

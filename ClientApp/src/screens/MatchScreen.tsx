@@ -7,23 +7,25 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
-import { socketService, RideAcceptedDriver } from '../services/socket';
+import * as SecureStore from '../services/secureStorage';
+import { socketService, RideAcceptedDriver, RideMeterPayload } from '../services/socket';
 import { apiPost } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { RootStackParamList } from '../types';
 import { Button, IconButton, ScreenHeader } from '../components/ui';
+import { useLanguage } from '../i18n/LanguageContext';
+import { StringTranslationKey } from '../i18n/translations';
 import { colors, radius, shadows, spacing, typography, motion } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Match'>;
-type MatchStatus = 'searching' | 'found' | 'cancelled';
+type MatchStatus = 'searching' | 'found' | 'cancelled' | 'completed';
 
-const CANCEL_REASONS = [
-  'Le chauffeur met trop de temps',
-  'Je ne pars plus',
-  'Trajet erroné',
-  'Changement de destination',
-  'Autre raison',
+const CANCEL_REASON_KEYS: StringTranslationKey[] = [
+  'matchCancelReason1',
+  'matchCancelReason2',
+  'matchCancelReason3',
+  'matchCancelReason4',
+  'matchCancelReason5',
 ];
 
 // ── Composant rings pulsants ───────────────────────────────────────────────────
@@ -107,12 +109,15 @@ function Stars({ rating }: { rating: number }) {
 
 export default function MatchScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { rideId } = route.params;
+  const { t } = useLanguage();
+  const { rideId, isOpenTrip = false, estimatedPrice } = route.params;
 
   const [status, setStatus] = useState<MatchStatus>('searching');
   const [eta,    setEta]    = useState(0);
   const [driver, setDriver] = useState<RideAcceptedDriver | null>(null);
   const [tripStarted, setTripStarted] = useState(false);
+  const [meter,  setMeter]  = useState<RideMeterPayload | null>(null);
+  const [finalPrice, setFinalPrice] = useState<number | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
 
   const fadeIn    = useRef(new Animated.Value(0)).current;
@@ -157,8 +162,14 @@ export default function MatchScreen({ navigation, route }: Props) {
         if (startedId === rideId) setTripStarted(true);
       });
 
-      socketService.onRideCompleted(({ rideId: completedId }) => {
-        if (completedId === rideId) navigation.popToTop();
+      socketService.onRideMeter((payload) => {
+        if (payload.rideId === rideId) setMeter(payload);
+      });
+
+      socketService.onRideCompleted(({ rideId: completedId, price }) => {
+        if (completedId !== rideId) return;
+        setFinalPrice(price);
+        setStatus('completed');
       });
 
       socketService.onRideCancelled(({ rideId: cancelledId }) => {
@@ -170,6 +181,7 @@ export default function MatchScreen({ navigation, route }: Props) {
       cancelled = true;
       socketService.offRideAccepted();
       socketService.offRideStarted();
+      socketService.offRideMeter();
       socketService.offRideCompleted();
       socketService.offRideCancelled();
     };
@@ -189,6 +201,7 @@ export default function MatchScreen({ navigation, route }: Props) {
 
   const handleClosePress = () => {
     if (status === 'searching') { setShowCancelModal(true); return; }
+    if (status === 'completed') { navigation.popToTop(); return; }
     navigation.goBack();
   };
 
@@ -201,8 +214,9 @@ export default function MatchScreen({ navigation, route }: Props) {
       <ScreenHeader
         bordered
         title={
-          status === 'searching' ? 'Recherche en cours' :
-          status === 'found'     ? (tripStarted ? 'Course en cours' : 'Chauffeur trouvé') : 'Course annulée'
+          status === 'searching' ? t('matchHeaderSearching') :
+          status === 'completed' ? t('matchHeaderCompleted') :
+          status === 'found'     ? (tripStarted ? t('matchHeaderInProgress') : t('matchHeaderFound')) : t('matchHeaderCancelled')
         }
         right={<IconButton name="close" size="sm" variant="muted" onPress={handleClosePress} />}
       />
@@ -215,13 +229,11 @@ export default function MatchScreen({ navigation, route }: Props) {
           <View style={styles.searchingSection}>
             <PulseRings />
 
-            <Text style={styles.searchingTitle}>Recherche de votre chauffeur</Text>
-            <Text style={styles.searchingSubtitle}>
-              Nous trouvons le meilleur chauffeur{'\n'}à proximité de vous…
-            </Text>
+            <Text style={styles.searchingTitle}>{t('matchSearchingTitle')}</Text>
+            <Text style={styles.searchingSubtitle}>{t('matchSearchingSubtitle')}</Text>
 
             <View style={styles.searchingInfo}>
-              {['Tarif le plus bas', 'Chauffeur le mieux noté', 'Le plus proche'].map((item) => (
+              {([t('matchInfoLowestPrice'), t('matchInfoTopRated'), t('matchInfoClosest')]).map((item) => (
                 <View key={item} style={styles.infoRow}>
                   <View style={styles.infoCheck}>
                     <Ionicons name="checkmark" size={12} color={colors.textInverse} />
@@ -232,7 +244,7 @@ export default function MatchScreen({ navigation, route }: Props) {
             </View>
 
             <Button
-              label="Annuler la recherche"
+              label={t('matchCancelSearch')}
               variant="outline"
               size="md"
               fullWidth={false}
@@ -247,15 +259,28 @@ export default function MatchScreen({ navigation, route }: Props) {
             <View style={styles.successCircle}>
               <Ionicons name="checkmark" size={30} color={colors.textInverse} />
             </View>
-            <Text style={styles.foundTitle}>Chauffeur trouvé !</Text>
+            <Text style={styles.foundTitle}>{tripStarted ? t('matchHeaderInProgress') : t('matchFoundTitle')}</Text>
 
-            <View style={styles.etaCard}>
-              <Text style={styles.etaLabel}>Arrivée estimée</Text>
-              <View style={styles.etaRow}>
-                <Text style={styles.etaNumber}>{eta}</Text>
-                <Text style={styles.etaUnit}> min</Text>
+            {!tripStarted ? (
+              <View style={styles.etaCard}>
+                <Text style={styles.etaLabel}>{t('matchEtaLabel')}</Text>
+                <View style={styles.etaRow}>
+                  <Text style={styles.etaNumber}>{eta}</Text>
+                  <Text style={styles.etaUnit}> min</Text>
+                </View>
               </View>
-            </View>
+            ) : (
+              <View style={styles.priceCard}>
+                {isOpenTrip ? (
+                  <>
+                    <Text style={styles.priceDistance}>{(meter?.distanceKm ?? 0).toFixed(2)} km</Text>
+                    <Text style={styles.priceAmount}>{meter?.price ?? estimatedPrice ?? 0} MRU</Text>
+                  </>
+                ) : (
+                  <Text style={styles.priceAmount}>{estimatedPrice ?? 0} MRU</Text>
+                )}
+              </View>
+            )}
 
             <Animated.View
               style={[
@@ -271,10 +296,10 @@ export default function MatchScreen({ navigation, route }: Props) {
               </View>
 
               <View style={styles.driverInfo}>
-                <Text style={styles.driverName}>{driver?.name ?? 'Chauffeur'}</Text>
+                <Text style={styles.driverName}>{driver?.name ?? t('matchDriverFallback')}</Text>
                 <Stars rating={driver?.rating ?? 5} />
                 <Text style={styles.driverMeta}>
-                  {driver?.vehicleModel ?? 'Véhicule'} · {driver?.vehiclePlate ?? '—'}
+                  {driver?.vehicleModel ?? t('matchVehicleFallback')} · {driver?.vehiclePlate ?? '—'}
                 </Text>
               </View>
 
@@ -284,9 +309,28 @@ export default function MatchScreen({ navigation, route }: Props) {
               </View>
             </Animated.View>
 
-            <Text style={styles.rideId}>Course #{rideId.slice(0, 8).toUpperCase()}</Text>
+            <Text style={styles.rideId}>{t('matchRideIdPrefix')}{rideId.slice(0, 8).toUpperCase()}</Text>
 
-            <Button label="Terminer" onPress={() => navigation.popToTop()} />
+            {tripStarted && (
+              <Text style={styles.waitingHint}>{t('matchWaitingHint')}</Text>
+            )}
+          </View>
+        )}
+
+        {/* ── Completed ─────────────────────────────────────────────── */}
+        {status === 'completed' && (
+          <View style={styles.foundSection}>
+            <View style={styles.successCircle}>
+              <Ionicons name="checkmark" size={30} color={colors.textInverse} />
+            </View>
+            <Text style={styles.foundTitle}>{t('matchHeaderCompleted')}</Text>
+
+            <View style={styles.priceCard}>
+              <Text style={styles.priceLabel}>{t('matchPriceFinalLabel')}</Text>
+              <Text style={styles.priceAmount}>{finalPrice ?? 0} MRU</Text>
+            </View>
+
+            <Button label={t('matchBackHome')} onPress={() => navigation.popToTop()} />
           </View>
         )}
 
@@ -296,16 +340,13 @@ export default function MatchScreen({ navigation, route }: Props) {
             <View style={styles.cancelledCircle}>
               <Ionicons name="close" size={28} color={colors.textInverse} />
             </View>
-            <Text style={styles.cancelledTitle}>Trajet annulé</Text>
-            <Text style={styles.cancelledSubtitle}>
-              Aucun chauffeur disponible pour le moment.{'\n'}
-              Réessayez dans quelques instants.
-            </Text>
+            <Text style={styles.cancelledTitle}>{t('matchCancelledTitle')}</Text>
+            <Text style={styles.cancelledSubtitle}>{t('matchCancelledSubtitle')}</Text>
 
-            <Button label="Réessayer" onPress={() => navigation.goBack()} />
+            <Button label={t('matchRetry')} onPress={() => navigation.goBack()} />
 
             <TouchableOpacity style={styles.homeLink} onPress={() => navigation.popToTop()}>
-              <Text style={styles.homeLinkText}>Retour à l'accueil</Text>
+              <Text style={styles.homeLinkText}>{t('matchBackHome')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -325,24 +366,27 @@ export default function MatchScreen({ navigation, route }: Props) {
             <View style={styles.modalIconWrap}>
               <Ionicons name="alert-circle" size={28} color={colors.warning} />
             </View>
-            <Text style={styles.modalTitle}>Choisissez une raison d'annulation</Text>
-            <Text style={styles.modalSubtitle}>Cela nous aide à améliorer le service</Text>
+            <Text style={styles.modalTitle}>{t('matchCancelReasonTitle')}</Text>
+            <Text style={styles.modalSubtitle}>{t('matchCancelReasonSubtitle')}</Text>
 
-            {CANCEL_REASONS.map((reason) => (
-              <TouchableOpacity
-                key={reason}
-                style={styles.reasonRow}
-                onPress={() => confirmCancel(reason)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.reasonDot} />
-                <Text style={styles.reasonText}>{reason}</Text>
-                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
-              </TouchableOpacity>
-            ))}
+            {CANCEL_REASON_KEYS.map((key) => {
+              const reason = t(key);
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={styles.reasonRow}
+                  onPress={() => confirmCancel(reason)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.reasonDot} />
+                  <Text style={styles.reasonText}>{reason}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+                </TouchableOpacity>
+              );
+            })}
 
             <Button
-              label="Retour"
+              label={t('matchBack')}
               variant="secondary"
               onPress={() => setShowCancelModal(false)}
               style={{ marginTop: spacing.md }}
@@ -416,6 +460,17 @@ const styles = StyleSheet.create({
   etaRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 4 },
   etaNumber: { fontSize: 52, fontWeight: '800', color: colors.accent, lineHeight: 60 },
   etaUnit: { fontSize: 20, fontWeight: '600', color: colors.accent, marginBottom: 8 },
+
+  priceCard: {
+    backgroundColor: colors.accentMuted, borderRadius: radius.lg,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.xxxl,
+    alignItems: 'center', alignSelf: 'stretch',
+    borderWidth: 1.5, borderColor: colors.accentMuted,
+  },
+  priceLabel: { ...typography.overline, color: colors.accent },
+  priceDistance: { ...typography.bodySm, color: colors.accent, fontWeight: '600' },
+  priceAmount: { fontSize: 40, fontWeight: '800', color: colors.accent, marginTop: 4 },
+  waitingHint: { ...typography.bodySm, color: colors.textSecondary, textAlign: 'center' },
 
   driverCard: {
     backgroundColor: colors.surface, borderRadius: radius.xl,

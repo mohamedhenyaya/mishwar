@@ -4,15 +4,17 @@ import { Server, Socket } from 'socket.io';
 import { DriversService } from '../drivers/drivers.service';
 import { Driver } from '../drivers/entities/driver.entity';
 import { Ride } from '../rides/entities/ride.entity';
+import { RidesService } from '../rides/rides.service';
 type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled' | 'driver_cancelled';
 export declare class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly driversService;
+    private readonly ridesService;
     private readonly jwtService;
     server: Server;
     private readonly logger;
     private readonly connectedDrivers;
     private readonly driverActiveRide;
-    constructor(driversService: DriversService, jwtService: JwtService);
+    constructor(driversService: DriversService, ridesService: RidesService, jwtService: JwtService);
     handleConnection(client: Socket): Promise<void>;
     handleDisconnect(client: Socket): void;
     handleDriverRegister(client: Socket): void;

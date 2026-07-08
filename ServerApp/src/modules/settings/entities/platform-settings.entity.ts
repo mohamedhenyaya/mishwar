@@ -20,6 +20,10 @@ export class PlatformSettings {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 10 })
   commissionPercent: number;
 
+  // Trajet ouvert : prix ajouté par minute d'arrêt pendant la course (compteur temps réel)
+  @Column({ type: 'decimal', precision: 8, scale: 2, default: 5 })
+  perStopMinuteRate: number;
+
   @UpdateDateColumn()
   updatedAt: Date;
 }

@@ -100,7 +100,6 @@ export default function LoginScreen({ navigation }: Props) {
 
       {/* ── Form card ── */}
       <Animated.View style={[styles.formCard, { opacity: mountAnim, transform: [{ translateY: slideUp }] }]}>
-        <Text style={styles.formTitle}>Bon retour ! 👋</Text>
         <Text style={styles.formSub}>Connectez-vous pour accéder à vos courses.</Text>
 
         <View style={styles.fields}>

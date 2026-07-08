@@ -25,6 +25,15 @@ export declare class Ride {
     notifiedDriverIds: string[];
     rejectedDriverIds: string[];
     price: number | null;
+    isOpenTrip: boolean;
+    startedAt: Date | null;
+    estimatedPrice: number | null;
+    traveledDistanceKm: number;
+    stoppedSeconds: number;
+    lastMeterLatitude: number | null;
+    lastMeterLongitude: number | null;
+    lastMeterAt: Date | null;
+    livePrice: number | null;
     ratingForDriver: number | null;
     ratingForRider: number | null;
     scheduledAt: Date | null;

@@ -18,8 +18,9 @@ export class CreateScheduledRideDto {
   @Type(() => Number)
   startLongitude: number;
 
+  @IsOptional()
   @IsString()
-  destinationName: string;
+  destinationName?: string;
 
   @IsEnum(RideVehicleClass)
   vehicleType: RideVehicleClass;

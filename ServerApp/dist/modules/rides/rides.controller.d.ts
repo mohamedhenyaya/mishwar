@@ -6,6 +6,7 @@ import { UpdateScheduledRideDto } from './dto/update-scheduled-ride.dto';
 import { EstimateRideDto } from './dto/estimate-ride.dto';
 import { DriverCancelRideDto } from './dto/driver-cancel-ride.dto';
 import { CancelRideDto } from './dto/cancel-ride.dto';
+import { LeaderboardQueryDto } from './dto/leaderboard-query.dto';
 import { RidesService } from './rides.service';
 export declare class RidesController {
     private readonly ridesService;
@@ -21,7 +22,11 @@ export declare class RidesController {
     updateScheduled(user: JwtPayload, id: string, dto: UpdateScheduledRideDto): Promise<import("./entities/ride.entity").Ride>;
     cancelScheduled(user: JwtPayload, id: string): Promise<void>;
     myRides(user: JwtPayload): Promise<import("./entities/ride.entity").Ride[]>;
-    findOne(user: JwtPayload, id: string): Promise<import("./entities/ride.entity").Ride>;
+    leaderboard(user: JwtPayload, dto: LeaderboardQueryDto): Promise<import("./rides.service").LeaderboardResult>;
+    findOne(user: JwtPayload, id: string): Promise<import("./entities/ride.entity").Ride & {
+        riderName?: string;
+        riderPhone?: string;
+    }>;
     receipt(user: JwtPayload, id: string): Promise<Record<string, unknown>>;
     accept(user: JwtPayload, id: string): Promise<import("./entities/ride.entity").Ride>;
     reject(user: JwtPayload, id: string): Promise<void>;

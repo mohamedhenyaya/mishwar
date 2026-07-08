@@ -7,6 +7,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { AutocompleteQueryDto } from './dto/autocomplete-query.dto';
 import { ReverseGeocodeQueryDto } from './dto/reverse-geocode-query.dto';
+import { PlaceDetailsQueryDto } from './dto/place-details-query.dto';
 import { CreateFavoritePlaceDto } from './dto/create-favorite-place.dto';
 import { UpdateFavoritePlaceDto } from './dto/update-favorite-place.dto';
 import { PlacesService } from './places.service';
@@ -28,6 +29,12 @@ export class PlacesController {
   @ApiOperation({ summary: 'Adresse correspondant à des coordonnées GPS (Google Geocoding)' })
   reverseGeocode(@Query() query: ReverseGeocodeQueryDto) {
     return this.placesService.reverseGeocode(query.lat, query.lng);
+  }
+
+  @Get('details')
+  @ApiOperation({ summary: 'Coordonnées GPS correspondant à un placeId (Google Place Details)' })
+  placeDetails(@Query() query: PlaceDetailsQueryDto) {
+    return this.placesService.placeDetails(query.placeId);
   }
 
   @Post('favorites')
