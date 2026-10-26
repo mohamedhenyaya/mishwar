@@ -4,6 +4,7 @@ import {
   Platform, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -76,7 +77,7 @@ const sb = StyleSheet.create({
 // ─── OTP Boxes ────────────────────────────────────────────────────────────────
 
 function OtpInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const boxes = 6;
 
   return (
@@ -166,7 +167,7 @@ export default function AuthScreen({ navigation }: Props) {
   const [showPwd,  setShowPwd]  = useState(false);
   const [loading,  setLoading]  = useState(false);
 
-  const confirmRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
   const slideAnim  = useRef(new Animated.Value(0)).current;
   const mountAnim  = useRef(new Animated.Value(0)).current;
 

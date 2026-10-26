@@ -8,7 +8,9 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GeolocationModule = void 0;
 const common_1 = require("@nestjs/common");
+const typeorm_1 = require("@nestjs/typeorm");
 const geolocation_gateway_1 = require("./geolocation.gateway");
+const ride_entity_1 = require("../rides/entities/ride.entity");
 const drivers_module_1 = require("../drivers/drivers.module");
 const auth_module_1 = require("../auth/auth.module");
 let GeolocationModule = class GeolocationModule {
@@ -16,7 +18,7 @@ let GeolocationModule = class GeolocationModule {
 exports.GeolocationModule = GeolocationModule;
 exports.GeolocationModule = GeolocationModule = __decorate([
     (0, common_1.Module)({
-        imports: [drivers_module_1.DriversModule, auth_module_1.AuthModule],
+        imports: [typeorm_1.TypeOrmModule.forFeature([ride_entity_1.Ride]), drivers_module_1.DriversModule, auth_module_1.AuthModule],
         providers: [geolocation_gateway_1.GeolocationGateway],
         exports: [geolocation_gateway_1.GeolocationGateway],
     })

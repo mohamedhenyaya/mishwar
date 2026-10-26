@@ -4,6 +4,7 @@ import {
   Modal, FlatList, StyleSheet, TextStyle,
   ViewStyle, Platform,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COUNTRIES, Country, DEFAULT_COUNTRY } from '../data/countries';
 
@@ -30,7 +31,7 @@ interface PhoneInputProps {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PhoneInput = forwardRef<TextInput, PhoneInputProps>(
+const PhoneInput = forwardRef<TextInputInstance, PhoneInputProps>(
   ({ value, onChange, placeholder = 'XX XX XX XX', inputStyle, containerStyle, onSubmitEditing, returnKeyType = 'done' }, ref) => {
     const insets = useSafeAreaInsets();
 

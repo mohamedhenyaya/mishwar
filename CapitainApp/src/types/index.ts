@@ -8,6 +8,56 @@ export type RootStackParamList = {
   Historique: undefined;
   Parametres: undefined;
   MonCompte:  undefined;
+  Profil:     undefined;
+};
+
+// ─── Course en temps réel (réponses de l'API /rides) ─────────────────────────
+
+export type ApiRideStatus = 'PENDING' | 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type VehicleType   = 'sedan' | 'suv' | 'van' | 'moto';
+
+export interface PublicUser {
+  id:         string;
+  name:       string | null;
+  phone:      string;
+  photoUrl:   string | null;
+  rating:     number;
+  totalRides: number;
+}
+
+// Profil complet du chauffeur connecté (GET /drivers/me) — decimals Postgres en string
+export interface DriverProfile {
+  id:           string;
+  name:         string | null;
+  phone:        string;
+  photoUrl:     string | null;
+  status:       'ONLINE' | 'OFFLINE' | 'BUSY';
+  rating:       number | string;
+  totalRides:   number;
+  vehicleType:  VehicleType;
+  vehicleModel: string | null;
+  vehiclePlate: string | null;
+}
+
+export interface RideDetails {
+  id:              string;
+  status:          ApiRideStatus;
+  startLatitude:   number | string;
+  startLongitude:  number | string;
+  destinationName: string;
+  endLatitude:     number | string | null;
+  endLongitude:    number | string | null;
+  price:           number | string | null;
+  isOpenTrip:      boolean;
+  cancelledBy:     'rider' | 'driver' | 'system' | null;
+  user:            PublicUser;
+}
+
+export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
+  sedan: 'Berline',
+  suv:   'SUV',
+  van:   'Van',
+  moto:  'Moto',
 };
 
 // ─── Domain ───────────────────────────────────────────────────────────────────

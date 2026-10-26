@@ -1,9 +1,24 @@
+import Constants from 'expo-constants';
+
 /**
- * Remplace DEV_HOST par l'IP locale de ton PC quand tu testes sur un vrai appareil.
- * Windows : ipconfig → "Adresse IPv4"  ex: 192.168.1.100
- * Le tunnel Expo n'affecte pas NestJS — il faut une IP accessible depuis le téléphone.
+ * Adresse du serveur NestJS.
+ *
+ * En développement, l'IP du PC est lue automatiquement dans l'adresse du serveur Expo
+ * (hostUri, ex. "192.168.1.17:8081") : c'est celle que le téléphone utilise déjà pour
+ * charger l'app, donc elle suit les changements d'IP du Wi-Fi sans rien modifier.
+ *
+ * FALLBACK_HOST ne sert que si hostUri est absent ou passe par un tunnel Expo
+ * (le tunnel ne donne pas accès à NestJS) : Windows → ipconfig → « Adresse IPv4 ».
  */
-const DEV_HOST = '192.168.1.177'; // ← IP locale du PC (Wi-Fi) pour test sur appareil réel
+const FALLBACK_HOST = '192.168.1.17';
+
+function devHost(): string {
+  const host = Constants.expoConfig?.hostUri?.split(':')[0];
+  const isLanIp = !!host && /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  return isLanIp ? host : FALLBACK_HOST;
+}
+
+const DEV_HOST = devHost();
 
 export const API_BASE_URL = `http://${DEV_HOST}:3000/api/v1`;
 export const SOCKET_URL   = `http://${DEV_HOST}:3000`;

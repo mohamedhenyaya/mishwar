@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
@@ -56,8 +57,8 @@ export default function AuthScreen({ navigation }: Props) {
   const [showPwd,  setShowPwd]  = useState(false);
   const [loading,  setLoading]  = useState(false);
 
-  const otpRef      = useRef<TextInput>(null);
-  const confirmRef  = useRef<TextInput>(null);
+  const otpRef      = useRef<TextInputInstance>(null);
+  const confirmRef  = useRef<TextInputInstance>(null);
 
   // ── Retour ────────────────────────────────────────────────────────────────
 

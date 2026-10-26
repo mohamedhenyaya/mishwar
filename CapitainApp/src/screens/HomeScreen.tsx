@@ -3,7 +3,7 @@ import React, {
 } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
-  Animated, Dimensions, ScrollView,
+  Animated, Dimensions, ScrollView, Alert, ActivityIndicator, Linking, AppState,
 } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -12,9 +12,19 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
 
-import { captainSocketService } from '../services/socket';
+import { captainSocketService, MeterReading, RideRequestPayload } from '../services/socket';
+import { apiGet, apiPatch, apiPost } from '../services/api';
+import { ensureNotificationPermission, notify } from '../services/notifications';
+import { playAlert, startRinging, stopRinging } from '../services/alerts';
+import Avatar from '../components/Avatar';
+import CancellationModal, { CancellationNotice } from '../components/CancellationModal';
+import { openDirections } from '../services/directions';
+import MapPin from '../components/MapPin';
+import StarRating from '../components/StarRating';
 import { SECURE_STORE_KEY, APP_VERSION } from '../config/constants';
-import { Coordinates, RootStackParamList } from '../types';
+import {
+  Coordinates, DriverProfile, PublicUser, RideDetails, RootStackParamList,
+} from '../types';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
@@ -24,7 +34,7 @@ const DRAWER_WIDTH  = SW * 0.80;
 const DELTA         = { latitudeDelta: 0.012, longitudeDelta: 0.012 };
 
 const MENU_ITEMS = [
-  { key: 'Courses',         icon: '🚗', color: '#EDE9FF', route: null           },
+  { key: 'Mon profil',      icon: '👤', color: '#EDE9FF', route: 'Profil'     as const },
   { key: 'Notifications',   icon: '🔔', color: '#FFF3E0', route: null           },
   { key: 'Historique',      icon: '📋', color: '#E8F5E9', route: 'Historique' as const },
   { key: 'Mon compte',      icon: '💰', color: '#E3F2FD', route: 'MonCompte'  as const },
@@ -32,17 +42,122 @@ const MENU_ITEMS = [
   { key: 'Nous contacter',  icon: '💬', color: '#E0F7FA', route: null           },
 ];
 
+type RidePhase = 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS';
+
+interface ActiveRide {
+  rideId:          string;
+  destinationName: string;
+  price:           RideDetails['price'];
+  pickup:          Coordinates;
+  destination:     Coordinates | null;
+  isOpenTrip:      boolean;
+  user:            PublicUser;
+  phase:           RidePhase;
+}
+
+// Course terminée, en attente de la note du chauffeur sur le client
+interface RideToRate {
+  rideId: string;
+  user:   PublicUser;
+  price:  number;
+}
+
+const toCoords = (lat: number | string | null, lng: number | string | null): Coordinates | null =>
+  lat != null && lng != null ? { latitude: Number(lat), longitude: Number(lng) } : null;
+
+const toActiveRide = (d: RideDetails): ActiveRide => ({
+  rideId:          d.id,
+  destinationName: d.destinationName,
+  price:           d.price,
+  pickup:          toCoords(d.startLatitude, d.startLongitude)!,
+  destination:     toCoords(d.endLatitude, d.endLongitude),
+  isOpenTrip:      d.isOpenTrip,
+  user:            d.user,
+  phase:           d.status as RidePhase,
+});
+
+const PHASE_TITLES: Record<RidePhase, string> = {
+  ACCEPTED:    '📍  En route vers le client',
+  ARRIVED:     '🙋  Client en attente',
+  IN_PROGRESS: '🏁  Course en cours',
+};
+
+const formatPrice = (price: RideRequestPayload['price']) =>
+  price != null ? `${Math.round(Number(price))} MRU` : 'Au compteur';
+
+const apiErrorMessage = (e: any, fallback: string): string =>
+  e?.response?.data?.message ?? fallback;
+
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
   const [location,   setLocation]   = useState<Coordinates | null>(null);
+  const locationRef = useRef<Coordinates | null>(null);
+  locationRef.current = location;
   const [region,     setRegion]     = useState<Region | null>(null);
   const [isOnline,   setIsOnline]   = useState(false);
+  // Lus par les listeners socket (enregistrés une seule fois)
+  const isOnlineRef = useRef(false);
+  isOnlineRef.current = isOnline;
   const [now,        setNow]        = useState(new Date());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [todayRides,    setTodayRides]    = useState(0);
+  const [rideRequest,   setRideRequest]   = useState<RideRequestPayload | null>(null);
+  const [activeRide,    setActiveRide]    = useState<ActiveRide | null>(null);
+  const [busy,          setBusy]          = useState(false);
+  const [rideToRate,    setRideToRate]    = useState<RideToRate | null>(null);
+  const [clientRating,  setClientRating]  = useState(0);
+  const [profile,       setProfile]       = useState<DriverProfile | null>(null);
+  const [meter,         setMeter]         = useState<MeterReading | null>(null);
+
+  // Lu par les listeners socket (enregistrés une seule fois)
+  const activeRideIdRef = useRef<string | null>(null);
+  const activeRideRef   = useRef<ActiveRide | null>(null);
+  useEffect(() => {
+    activeRideIdRef.current = activeRide?.rideId ?? null;
+    activeRideRef.current   = activeRide;
+  }, [activeRide]);
+
+  // Popup « le client a annulé » — une seule fois par course (socket + vérification au premier plan)
+  const announcedCancellations = useRef(new Set<string>());
+  const [cancelNotice, setCancelNotice] = useState<CancellationNotice | null>(null);
+  const announceClientCancellation = (ride: ActiveRide) => {
+    if (announcedCancellations.current.has(ride.rideId)) return;
+    announcedCancellations.current.add(ride.rideId);
+    setActiveRide(null);
+    setMeter(null);
+    const name = ride.user.name ?? 'Le client';
+    playAlert('cancel');
+    notify('Course annulée par le client', `${name} a annulé la course.`);
+    setCancelNotice({
+      user:        ride.user,
+      destination: ride.isOpenTrip ? 'Trajet ouvert' : ride.destinationName,
+    });
+  };
+
+  // Sonnerie en boucle tant qu'une demande de course est affichée
+  // (arrêtée à l'acceptation, au refus, si la course est prise ailleurs ou annulée)
+  useEffect(() => {
+    if (rideRequest) startRinging();
+    else stopRinging();
+  }, [rideRequest?.rideId]);
+  useEffect(() => stopRinging, []);
+
+  // Annulation manquée pendant que l'app était en arrière-plan
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      const ride = activeRideRef.current;
+      if (state !== 'active' || !ride) return;
+      apiGet<RideDetails>(`/rides/${ride.rideId}`)
+        .then((d) => {
+          if (d.status === 'CANCELLED' && d.cancelledBy === 'rider') announceClientCancellation(ride);
+        })
+        .catch(() => {});
+    });
+    return () => sub.remove();
+  }, []);
 
   const drawerAnim  = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -86,35 +201,207 @@ export default function HomeScreen({ navigation }: Props) {
     setRegion({ ...coords, ...DELTA });
   }, []);
 
+  // Profil, statut et course en cours (reprise après redémarrage de l'app)
+  const loadProfile = useCallback(async () => {
+    try {
+      const me = await apiGet<DriverProfile>('/drivers/me');
+      setProfile(me);
+      setIsOnline(me.status !== 'OFFLINE');
+    } catch { /* réseau indisponible */ }
+  }, []);
+
+  useEffect(() => {
+    ensureNotificationPermission();
+    apiGet<RideDetails | null>('/rides/active')
+      .then((ride) => { if (ride) setActiveRide(toActiveRide(ride)); })
+      .catch(() => {});
+  }, []);
+
+  // Chargé à l'ouverture et au retour de l'écran profil (nom, photo, note)
+  useEffect(() => {
+    loadProfile();
+    return navigation.addListener('focus', loadProfile);
+  }, [navigation, loadProfile]);
+
   useEffect(() => {
     initLocation();
-    captainSocketService.connect();
-    return () => captainSocketService.disconnect();
+    let cancelled = false;
+
+    (async () => {
+      const token = await SecureStore.getItemAsync(SECURE_STORE_KEY);
+      if (!token || cancelled) return;
+      captainSocketService.connect(token);
+
+      // Le serveur repasse hors ligne un chauffeur déconnecté depuis plus de 60 s :
+      // à la reconnexion, on rétablit le statut « en ligne » choisi par le chauffeur
+      captainSocketService.onConnect(() => {
+        if (!isOnlineRef.current || activeRideIdRef.current) return;
+        apiPatch('/drivers/status', { status: 'ONLINE' })
+          .then(() => { if (locationRef.current) captainSocketService.updateLocation(locationRef.current); })
+          .catch(() => {});
+      });
+
+      captainSocketService.onRideRequest((payload) => {
+        setRideRequest((current) => current ?? payload);
+        notify('Nouvelle course 🚕', payload.isOpenTrip
+          ? 'Trajet ouvert · prix au compteur'
+          : `Destination : ${payload.destinationName} · ${formatPrice(payload.price)}`);
+      });
+      captainSocketService.onMeter((reading) => {
+        if (reading.rideId === activeRideIdRef.current) setMeter(reading);
+      });
+      // Course prise par un autre chauffeur, expirée ou annulée par le client
+      const dropRide = ({ rideId }: { rideId: string }) => {
+        setRideRequest((r) => (r?.rideId === rideId ? null : r));
+        const ride = activeRideRef.current;
+        if (ride?.rideId === rideId) announceClientCancellation(ride);
+      };
+      captainSocketService.onRideUnavailable(dropRide);
+      captainSocketService.onRideCancelled(dropRide);
+    })();
+
+    return () => {
+      cancelled = true;
+      captainSocketService.offRideRequest();
+      captainSocketService.offMeter();
+      captainSocketService.offRideUnavailable();
+      captainSocketService.offRideCancelled();
+      captainSocketService.disconnect();
+    };
   }, [initLocation]);
 
-  // Location tracking when online
+  // Position en direct tant que le chauffeur est en ligne (suivie par le client pendant la course)
   useEffect(() => {
-    if (!isOnline || !location) return;
-    const id = setInterval(async () => {
-      try {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    if (!isOnline) return;
+    let subscription: Location.LocationSubscription | null = null;
+    let stopped = false;
+
+    Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.High, timeInterval: 3_000, distanceInterval: 10 },
+      (loc) => {
         const coords: Coordinates = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
         setLocation(coords);
         captainSocketService.updateLocation(coords);
-      } catch { /* silent */ }
-    }, 10_000);
-    return () => clearInterval(id);
-  }, [isOnline, location]);
+      },
+    ).then((sub) => {
+      if (stopped) sub.remove();
+      else subscription = sub;
+    }).catch(() => { /* permission refusée */ });
 
-  const toggleOnline = () => {
+    return () => {
+      stopped = true;
+      subscription?.remove();
+    };
+  }, [isOnline]);
+
+  const toggleOnline = async () => {
+    if (activeRide || rideToRate) return; // pas de changement de statut pendant une course
     Animated.sequence([
       Animated.timing(pillScale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
       Animated.spring(pillScale, { toValue: 1,   tension: 80, useNativeDriver: true }),
     ]).start();
-    if (!isOnline && location) captainSocketService.goOnline(location);
-    else captainSocketService.goOffline();
-    setIsOnline((v) => !v);
-    if (!isOnline) { setTodayRides((n) => n); }
+
+    const goingOnline = !isOnline;
+    try {
+      await apiPatch('/drivers/status', { status: goingOnline ? 'ONLINE' : 'OFFLINE' });
+      // Position immédiate : le serveur ne cherche que les chauffeurs localisés
+      if (goingOnline && location) captainSocketService.updateLocation(location);
+      if (!goingOnline) setRideRequest(null);
+      setIsOnline(goingOnline);
+    } catch (e) {
+      Alert.alert('Erreur', apiErrorMessage(e, 'Impossible de changer le statut.'));
+    }
+  };
+
+  // ── Actions sur la course ──────────────────────────────────────────────────
+
+  const runRideAction = async (action: () => Promise<void>, fallback: string) => {
+    setBusy(true);
+    try {
+      await action();
+    } catch (e) {
+      Alert.alert('Erreur', apiErrorMessage(e, fallback));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const acceptRide = () => rideRequest && runRideAction(async () => {
+    try {
+      // La réponse contient le profil du client
+      const details = await apiPost<RideDetails>(`/rides/${rideRequest.rideId}/accept`, {});
+      setActiveRide(toActiveRide(details));
+    } finally {
+      setRideRequest(null);
+    }
+  }, 'Cette course n\'est plus disponible.');
+
+  const rejectRide = () => rideRequest && runRideAction(async () => {
+    setRideRequest(null);
+    await apiPost(`/rides/${rideRequest.rideId}/reject`, {});
+  }, 'Impossible de refuser la course.');
+
+  const arriveRide = () => activeRide && runRideAction(async () => {
+    await apiPost(`/rides/${activeRide.rideId}/arrive`, {});
+    setActiveRide({ ...activeRide, phase: 'ARRIVED' });
+  }, 'Impossible de signaler votre arrivée.');
+
+  const startRide = () => activeRide && runRideAction(async () => {
+    await apiPost(`/rides/${activeRide.rideId}/start`, {});
+    setActiveRide({ ...activeRide, phase: 'IN_PROGRESS' });
+  }, 'Impossible de démarrer la course.');
+
+  const completeRide = () => activeRide && runRideAction(async () => {
+    // Sans destination connue, le prix est calculé sur la position d'arrivée réelle
+    const body = activeRide.destination == null && location
+      ? { endLatitude: location.latitude, endLongitude: location.longitude }
+      : {};
+    const ride = await apiPost<{ price: number | string | null }>(`/rides/${activeRide.rideId}/complete`, body);
+    const price = Math.round(Number(ride.price ?? 0));
+    setTodayRides((n) => n + 1);
+    setTodayEarnings((sum) => sum + price);
+    setActiveRide(null);
+    setMeter(null);
+    setClientRating(0);
+    setRideToRate({ rideId: activeRide.rideId, user: activeRide.user, price });
+    playAlert('success');
+  }, 'Impossible de terminer la course.');
+
+  const submitClientRating = (skip = false) => rideToRate && runRideAction(async () => {
+    if (!skip) await apiPost(`/rides/${rideToRate.rideId}/rate`, { rating: clientRating });
+    setRideToRate(null);
+    loadProfile(); // nombre de courses à jour
+  }, 'Impossible d\'envoyer la note.');
+
+  const callClient = (user: PublicUser) => {
+    Linking.openURL(`tel:${user.phone}`).catch(() => Alert.alert('Appel impossible', user.phone));
+  };
+
+  // Avant l'arrivée : itinéraire vers le client. Ensuite : vers la destination (absente en trajet ouvert).
+  const navigationTarget = (ride: ActiveRide): { coords: Coordinates; title: string } | null =>
+    ride.phase === 'ACCEPTED'
+      ? { coords: ride.pickup, title: 'Aller chercher le client' }
+      : ride.destination ? { coords: ride.destination, title: 'Aller à la destination' } : null;
+
+  const cancelActiveRide = () => {
+    if (!activeRide) return;
+    Alert.alert('Annuler la course ?', 'Le client sera prévenu et pourra faire une nouvelle demande.', [
+      { text: 'Non', style: 'cancel' },
+      {
+        text: 'Oui, annuler', style: 'destructive',
+        onPress: () => runRideAction(async () => {
+          await apiPost(`/rides/${activeRide.rideId}/driver-cancel`, {});
+          setActiveRide(null);
+          setMeter(null);
+        }, 'Impossible d\'annuler la course.'),
+      },
+    ]);
+  };
+
+  const ridePhaseAction: Record<RidePhase, { label: string; onPress: () => void }> = {
+    ACCEPTED:    { label: 'Je suis arrivé',     onPress: arriveRide },
+    ARRIVED:     { label: 'Démarrer la course', onPress: startRide },
+    IN_PROGRESS: { label: 'Terminer la course', onPress: completeRide },
   };
 
   const openDrawer = () => {
@@ -160,7 +447,20 @@ export default function HomeScreen({ navigation }: Props) {
           showsMyLocationButton={false}
           showsCompass={false}
           mapType="standard"
-        />
+        >
+          {activeRide && activeRide.phase !== 'IN_PROGRESS' && (
+            <MapPin coordinate={activeRide.pickup} color={C.primary} />
+          )}
+          {activeRide?.destination && activeRide.phase === 'IN_PROGRESS' && (
+            <MapPin coordinate={activeRide.destination} color={C.danger} square />
+          )}
+          {rideRequest && (
+            <MapPin
+              coordinate={toCoords(rideRequest.startLatitude, rideRequest.startLongitude)!}
+              color={C.primary}
+            />
+          )}
+        </MapView>
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.mapPlaceholder]}>
           <Text style={styles.mapPlaceholderText}>Localisation…</Text>
@@ -211,7 +511,130 @@ export default function HomeScreen({ navigation }: Props) {
           transform: [{ translateY: cardSlide }],
         }]}
       >
-        {isOnline ? (
+        {rideToRate ? (
+          /* Notation du client après la course */
+          <View style={styles.rideCard}>
+            <View style={styles.rateBody}>
+              <Text style={styles.rateTitle}>Course terminée · {rideToRate.price} MRU</Text>
+              <Avatar photoUrl={rideToRate.user.photoUrl} name={rideToRate.user.name} size={64} color={C.primary} />
+              <Text style={styles.rateQuestion}>Notez {rideToRate.user.name ?? 'le client'}</Text>
+              <StarRating value={clientRating} onChange={setClientRating} size={36} />
+            </View>
+            <View style={styles.rideActions}>
+              {busy ? <ActivityIndicator color={C.primary} /> : (
+                <>
+                  <TouchableOpacity style={[styles.rideBtn, styles.rideBtnGhost]} onPress={() => submitClientRating(true)} activeOpacity={0.8}>
+                    <Text style={styles.rideBtnGhostText}>Plus tard</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.rideBtn, styles.rideBtnMain, clientRating === 0 && { opacity: 0.4 }]}
+                    onPress={() => submitClientRating()}
+                    disabled={clientRating === 0}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.rideBtnMainText}>Envoyer</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        ) : rideRequest || activeRide ? (
+          /* Ride card : nouvelle demande ou course en cours */
+          <View style={styles.rideCard}>
+            <LinearGradient
+              colors={G.dark}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.rideHeader}
+            >
+              <Text style={styles.rideHeaderTitle}>
+                {rideRequest ? '🚕  Nouvelle course' : PHASE_TITLES[activeRide!.phase]}
+              </Text>
+              <Text style={styles.ridePrice}>
+                {(rideRequest ?? activeRide)!.isOpenTrip ? 'Au compteur' : formatPrice((rideRequest ?? activeRide)!.price)}
+              </Text>
+            </LinearGradient>
+
+            {/* Client (après acceptation) */}
+            {activeRide && (
+              <View style={styles.clientRow}>
+                <Avatar photoUrl={activeRide.user.photoUrl} name={activeRide.user.name} size={52} color={C.primary} />
+                <View style={styles.clientInfo}>
+                  <Text style={styles.clientName}>{activeRide.user.name ?? 'Client'}</Text>
+                  <Text style={styles.clientMeta}>
+                    ⭐ {activeRide.user.rating.toFixed(1)} · {activeRide.user.totalRides} course{activeRide.user.totalRides > 1 ? 's' : ''}
+                  </Text>
+                  <Text style={styles.clientMeta}>{activeRide.user.phone}</Text>
+                </View>
+                {(() => {
+                  const target = navigationTarget(activeRide);
+                  return target && (
+                    <TouchableOpacity
+                      style={[styles.roundBtn, styles.navBtn]}
+                      onPress={() => openDirections(target.coords, target.title)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.roundBtnText}>🧭</Text>
+                    </TouchableOpacity>
+                  );
+                })()}
+                <TouchableOpacity style={[styles.roundBtn, styles.callBtn]} onPress={() => callClient(activeRide.user)} activeOpacity={0.8}>
+                  <Text style={styles.roundBtnText}>📞</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.rideBody}>
+              <Text style={styles.rideLabel}>Destination</Text>
+              <Text style={styles.rideDest} numberOfLines={2}>
+                {(rideRequest ?? activeRide)!.isOpenTrip
+                  ? 'Trajet ouvert · le client vous indiquera la destination'
+                  : (rideRequest ?? activeRide)!.destinationName}
+              </Text>
+            </View>
+
+            {/* Compteur en direct (trajet ouvert en cours) */}
+            {activeRide?.isOpenTrip && activeRide.phase === 'IN_PROGRESS' && (
+              <View style={styles.meterRow}>
+                <Text style={styles.meterPrice}>{meter ? `${meter.price} MRU` : '…'}</Text>
+                <Text style={styles.meterStat}>
+                  {meter ? meter.distanceKm.toFixed(1) : '0.0'} km · {meter ? meter.durationMin : 0} min
+                </Text>
+              </View>
+            )}
+
+            {busy ? (
+              <View style={styles.rideActions}>
+                <ActivityIndicator color={C.primary} />
+              </View>
+            ) : rideRequest ? (
+              <View style={styles.rideActions}>
+                <TouchableOpacity style={[styles.rideBtn, styles.rideBtnGhost]} onPress={rejectRide} activeOpacity={0.8}>
+                  <Text style={styles.rideBtnGhostText}>Refuser</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.rideBtn, styles.rideBtnMain]} onPress={acceptRide} activeOpacity={0.85}>
+                  <Text style={styles.rideBtnMainText}>Accepter</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.rideActions}>
+                <TouchableOpacity
+                  style={[styles.rideBtn, styles.rideBtnMain]}
+                  onPress={ridePhaseAction[activeRide!.phase].onPress}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.rideBtnMainText}>{ridePhaseAction[activeRide!.phase].label}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Annulation possible tant que la course n'a pas démarré */}
+            {activeRide && activeRide.phase !== 'IN_PROGRESS' && !busy && (
+              <TouchableOpacity style={styles.cancelRideBtn} onPress={cancelActiveRide} activeOpacity={0.7}>
+                <Text style={styles.cancelRideText}>Annuler la course</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : isOnline ? (
           /* Online card */
           <View style={styles.onlineCard}>
             <LinearGradient
@@ -281,21 +704,19 @@ export default function HomeScreen({ navigation }: Props) {
           {/* Avatar */}
           <View style={styles.avatarWrap}>
             <LinearGradient colors={G.primary} style={styles.avatarRing}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>M</Text>
-              </View>
+              <Avatar photoUrl={profile?.photoUrl} name={profile?.name ?? 'C'} size={65} color={C.darkMid} />
             </LinearGradient>
             <View style={[styles.avatarBadge, { backgroundColor: isOnline ? C.accent : C.danger }]} />
           </View>
-          <Text style={styles.drawerName}>MohamedhenYaya</Text>
-          <Text style={styles.drawerPhone}>+22220122724</Text>
+          <Text style={styles.drawerName}>{profile?.name || 'Complétez votre profil'}</Text>
+          <Text style={styles.drawerPhone}>{profile?.phone ?? ''}</Text>
 
           {/* Rating chip */}
           <View style={styles.ratingChip}>
             <Text style={styles.ratingIcon}>⭐</Text>
-            <Text style={styles.ratingText}>4.9</Text>
+            <Text style={styles.ratingText}>{Number(profile?.rating ?? 5).toFixed(1)}</Text>
             <Text style={styles.ratingDot}>·</Text>
-            <Text style={styles.ratingText}>238 courses</Text>
+            <Text style={styles.ratingText}>{profile?.totalRides ?? 0} courses</Text>
           </View>
         </LinearGradient>
 
@@ -348,6 +769,8 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </ScrollView>
       </Animated.View>
+
+      <CancellationModal notice={cancelNotice} onClose={() => setCancelNotice(null)} />
     </View>
   );
 }
@@ -421,6 +844,56 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: C.border,
   },
   goOfflineBtnText: { fontSize: 14, fontWeight: '700', color: C.sub },
+
+  // Ride card
+  rideCard:        { backgroundColor: C.surface },
+  rideHeader: {
+    padding: 18, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'space-between',
+  },
+  rideHeaderTitle: { fontSize: 15, fontWeight: '700', color: C.white },
+  ridePrice:       { fontSize: 22, fontWeight: '900', color: C.white },
+  rideBody:        { paddingHorizontal: 18, paddingVertical: 14 },
+  rideLabel:       { fontSize: 11, fontWeight: '700', color: C.sub, textTransform: 'uppercase', letterSpacing: 0.6 },
+  rideDest:        { fontSize: 16, fontWeight: '700', color: C.text, marginTop: 4 },
+  rideActions: {
+    flexDirection: 'row', gap: 10, padding: 14, paddingTop: 0,
+    minHeight: 62, alignItems: 'center', justifyContent: 'center',
+  },
+  rideBtn:          { flex: 1, paddingVertical: 14, borderRadius: RADIUS.lg, alignItems: 'center' },
+  rideBtnMain:      { backgroundColor: C.accent },
+  rideBtnMainText:  { fontSize: 15, fontWeight: '800', color: C.white },
+  rideBtnGhost:     { borderWidth: 1.5, borderColor: C.border, backgroundColor: C.white },
+  rideBtnGhostText: { fontSize: 15, fontWeight: '700', color: C.sub },
+
+  clientRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 18, paddingTop: 14,
+  },
+  clientInfo: { flex: 1, gap: 2 },
+  clientName: { fontSize: 16, fontWeight: '800', color: C.text },
+  clientMeta: { fontSize: 12, color: C.sub },
+  roundBtn: {
+    width: 46, height: 46, borderRadius: 23,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  roundBtnText: { fontSize: 20 },
+  navBtn:  { backgroundColor: C.primary },
+  callBtn: { backgroundColor: C.accent },
+  cancelRideBtn:  { alignItems: 'center', paddingBottom: 14, marginTop: -4 },
+  cancelRideText: { fontSize: 14, fontWeight: '700', color: C.danger },
+
+  meterRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 18, marginBottom: 14, padding: 14,
+    borderRadius: RADIUS.lg, backgroundColor: C.surfaceAlt,
+  },
+  meterPrice: { fontSize: 24, fontWeight: '900', color: C.primary, fontVariant: ['tabular-nums'] },
+  meterStat:  { fontSize: 14, fontWeight: '700', color: C.text, fontVariant: ['tabular-nums'] },
+
+  rateBody:     { alignItems: 'center', gap: 10, padding: 18 },
+  rateTitle:    { fontSize: 15, fontWeight: '800', color: C.text },
+  rateQuestion: { fontSize: 14, fontWeight: '600', color: C.sub },
 
   // Offline card
   offlineCard: {

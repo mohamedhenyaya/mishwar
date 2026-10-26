@@ -1,17 +1,52 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet, View, Text, TextInput, TouchableOpacity,
-  Alert, ScrollView, Animated, Platform, Dimensions,
+  Alert, ScrollView, Animated, Platform, ActivityIndicator,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { apiPost } from '../services/api';
-import { RootStackParamList } from '../types';
+import * as Location from 'expo-location';
+import { apiGet, apiPost } from '../services/api';
+import { searchPlaces, PlaceSuggestion } from '../services/places';
+import { RideDetails, RootStackParamList, Tariff } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Booking'>;
+type Mode = 'destination' | 'open';
 
-interface CreateRideResponse { id: string; status: string }
+interface CreateRideResponse { id: string; status: string; price: number | string | null }
+
+// Coordonnées de la destination saisie — null si l'adresse n'est pas reconnue
+async function geocodeDestination(address: string): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    const [match] = await Location.geocodeAsync(address);
+    return match ? { latitude: match.latitude, longitude: match.longitude } : null;
+  } catch {
+    return null;
+  }
+}
+
+// Destinations des dernières courses du client (sans doublon, hors trajets ouverts)
+function recentPlaces(rides: RideDetails[]): PlaceSuggestion[] {
+  const seen = new Set<string>();
+  const places: PlaceSuggestion[] = [];
+  for (const r of rides) {
+    if (r.isOpenTrip || r.endLatitude == null || r.endLongitude == null) continue;
+    const key = r.destinationName.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    places.push({
+      id:        r.id,
+      label:     r.destinationName,
+      sub:       new Date(r.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+      latitude:  Number(r.endLatitude),
+      longitude: Number(r.endLongitude),
+    });
+    if (places.length === 5) break;
+  }
+  return places;
+}
 
 // ── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -24,47 +59,61 @@ const C = {
   blueBg: '#EBF5FF',
 };
 
-// ── Données ───────────────────────────────────────────────────────────────────
-const RECENT = [
-  { id: '1', label: 'Aéroport Houari Boumediene', sub: 'Dar El Beïda',         icon: '✈️' },
-  { id: '2', label: 'Centre Commercial Bab Ezzouar', sub: 'Bab Ezzouar',       icon: '🛍️' },
-  { id: '3', label: 'Université USTHB',              sub: 'Bab Ezzouar',       icon: '🎓' },
-  { id: '4', label: 'Grande Mosquée d\'Alger',       sub: 'Mohammadia',        icon: '🕌' },
-];
-
-const VEHICLE_TYPES = [
-  {
-    id: 'economy', label: 'Économie', icon: '🚗',
-    desc: 'Voiture standard', price: 'Dès 300 DA', eta: '~3 min',
-  },
-  {
-    id: 'comfort', label: 'Confort', icon: '🚙',
-    desc: 'Berline confortable', price: 'Dès 500 DA', eta: '~5 min',
-  },
-  {
-    id: 'premium', label: 'Premium', icon: '⭐',
-    desc: 'Véhicule haut de gamme', price: 'Dès 800 DA', eta: '~7 min',
-  },
-];
-
-const { width } = Dimensions.get('window');
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function BookingScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { destination: initDest = '', startLatitude, startLongitude } = route.params ?? {};
 
-  const [destination,    setDestination]    = useState(initDest);
-  const [vehicleType,    setVehicleType]    = useState('economy');
-  const [loading,        setLoading]        = useState(false);
-  const [inputFocused,   setInputFocused]   = useState(false);
+  const [mode,          setMode]          = useState<Mode>('destination');
+  const [destination,   setDestination]   = useState(initDest);
+  const [loading,       setLoading]       = useState(false);
+  const [suggestions,   setSuggestions]   = useState<PlaceSuggestion[]>([]);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceSuggestion | null>(null);
+  const [recents,       setRecents]       = useState<PlaceSuggestion[]>([]);
+  const [tariff,        setTariff]        = useState<Tariff | null>(null);
 
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
+
+  useEffect(() => {
+    apiGet<RideDetails[]>('/rides/my').then((rides) => setRecents(recentPlaces(rides))).catch(() => {});
+    apiGet<Tariff>('/rides/tariff').then(setTariff).catch(() => {});
+  }, []);
+
+  // ── Autocomplétion (débounce 350 ms) ────────────────────────────────────────
+  useEffect(() => {
+    const query = destination.trim();
+    if (mode !== 'destination' || query.length < 3 || selectedPlace?.label === destination) {
+      setSuggestions([]);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const near = startLatitude != null && startLongitude != null
+        ? { latitude: startLatitude, longitude: startLongitude }
+        : undefined;
+      searchPlaces(query, near, controller.signal)
+        .then(setSuggestions)
+        .catch(() => { /* requête annulée ou réseau indisponible */ });
+    }, 350);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [destination, mode]);
+
+  const handleChangeDestination = (text: string) => {
+    setDestination(text);
+    setSelectedPlace(null);
+  };
+
+  const handleSelectPlace = (place: PlaceSuggestion) => {
+    setSelectedPlace(place);
+    setDestination(place.label);
+    setSuggestions([]);
+    inputRef.current?.blur();
+  };
 
   // Animations
-  const fadeAnim   = useRef(new Animated.Value(0)).current;
-  const slideAnim  = useRef(new Animated.Value(24)).current;
+  const fadeAnim    = useRef(new Animated.Value(0)).current;
+  const slideAnim   = useRef(new Animated.Value(24)).current;
   const focusBorder = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -74,15 +123,8 @@ export default function BookingScreen({ navigation, route }: Props) {
     ]).start();
   }, []);
 
-  const handleFocus = () => {
-    setInputFocused(true);
-    Animated.timing(focusBorder, { toValue: 1, duration: 200, useNativeDriver: false }).start();
-  };
-
-  const handleBlur = () => {
-    setInputFocused(false);
-    Animated.timing(focusBorder, { toValue: 0, duration: 200, useNativeDriver: false }).start();
-  };
+  const animateFocus = (toValue: number) =>
+    Animated.timing(focusBorder, { toValue, duration: 200, useNativeDriver: false }).start();
 
   const borderColor = focusBorder.interpolate({
     inputRange: [0, 1], outputRange: [C.border, C.blue],
@@ -91,16 +133,28 @@ export default function BookingScreen({ navigation, route }: Props) {
   // ── Confirmer ──────────────────────────────────────────────────────────────
 
   const handleConfirm = async () => {
-    if (!destination.trim()) return;
+    if (mode === 'destination' && !destination.trim()) return;
     setLoading(true);
     try {
-      const ride = await apiPost<CreateRideResponse, object>('/rides', {
-        startLatitude:   startLatitude  ?? 0,
-        startLongitude:  startLongitude ?? 0,
-        destinationName: destination.trim(),
-        vehicleType,
+      const start = { startLatitude: startLatitude ?? 0, startLongitude: startLongitude ?? 0 };
+      let body: object;
+      if (mode === 'open') {
+        body = { ...start, isOpenTrip: true };
+      } else {
+        // Destination reconnue → le serveur calcule un prix fixe au kilomètre
+        const end = selectedPlace ?? await geocodeDestination(destination.trim());
+        body = {
+          ...start,
+          destinationName: destination.trim(),
+          endLatitude:     end?.latitude,
+          endLongitude:    end?.longitude,
+        };
+      }
+      const ride = await apiPost<CreateRideResponse, object>('/rides', body);
+      navigation.replace('Match', {
+        rideId: ride.id,
+        price:  ride.price != null ? Number(ride.price) : null,
       });
-      navigation.navigate('Match', { rideId: ride.id });
     } catch (e: any) {
       Alert.alert('Erreur', e?.response?.data?.message ?? 'Impossible de créer la course.');
     } finally {
@@ -108,9 +162,26 @@ export default function BookingScreen({ navigation, route }: Props) {
     }
   };
 
-  const canConfirm = destination.trim().length >= 3 && !loading;
+  const canConfirm = !loading && (mode === 'open' || destination.trim().length >= 3);
+  const showRecents = mode === 'destination' && suggestions.length === 0 && recents.length > 0;
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  const placeRow = (place: PlaceSuggestion, idx: number, list: PlaceSuggestion[], icon: string) => (
+    <TouchableOpacity
+      key={place.id}
+      style={[styles.placeItem, idx === list.length - 1 && styles.placeItemLast]}
+      onPress={() => handleSelectPlace(place)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.placeIconWrap}><Text style={styles.placeIconText}>{icon}</Text></View>
+      <View style={styles.placeContent}>
+        <Text style={styles.placeLabel} numberOfLines={1}>{place.label}</Text>
+        {!!place.sub && <Text style={styles.placeSub} numberOfLines={1}>{place.sub}</Text>}
+      </View>
+      <Text style={styles.placeChevron}>›</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -132,105 +203,101 @@ export default function BookingScreen({ navigation, route }: Props) {
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
+          {/* ── Choix du mode ─────────────────────────────────────────── */}
+          <View style={styles.segment}>
+            {([['destination', '📍  Destination'], ['open', '⏱  Trajet ouvert']] as const).map(([m, label]) => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.segmentItem, mode === m && styles.segmentItemActive]}
+                onPress={() => setMode(m)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.segmentText, mode === m && styles.segmentTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {/* ── Barre trajet ──────────────────────────────────────────── */}
           <View style={styles.routeCard}>
-            {/* Origine */}
             <View style={styles.routeRow}>
               <View style={styles.originDot} />
               <Text style={styles.routeLabel} numberOfLines={1}>
-                {startLatitude ? `Ma position actuelle` : 'Position de départ'}
+                {startLatitude ? 'Ma position actuelle' : 'Position de départ'}
               </Text>
             </View>
-            <View style={styles.routeSeparator}>
-              <View style={styles.routeLine} />
-            </View>
-            {/* Destination input */}
+            <View style={styles.routeSeparator}><View style={styles.routeLine} /></View>
             <View style={styles.routeRow}>
               <View style={styles.destDot} />
-              <Animated.View style={[styles.inputWrap, { borderColor }]}>
-                <TextInput
-                  ref={inputRef}
-                  style={styles.input}
-                  value={destination}
-                  onChangeText={setDestination}
-                  placeholder="Où allez-vous ?"
-                  placeholderTextColor="#AEAEB2"
-                  returnKeyType="search"
-                  onFocus={handleFocus}
-                  onBlur={handleBlur}
-                  onSubmitEditing={handleConfirm}
-                  autoFocus={!initDest}
-                />
-                {destination.length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => setDestination('')}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.clearIcon}>✕</Text>
-                  </TouchableOpacity>
-                )}
-              </Animated.View>
+              {mode === 'destination' ? (
+                <Animated.View style={[styles.inputWrap, { borderColor }]}>
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.input}
+                    value={destination}
+                    onChangeText={handleChangeDestination}
+                    placeholder="Où allez-vous ?"
+                    placeholderTextColor="#AEAEB2"
+                    returnKeyType="search"
+                    onFocus={() => animateFocus(1)}
+                    onBlur={() => animateFocus(0)}
+                    onSubmitEditing={handleConfirm}
+                    autoFocus={!initDest}
+                  />
+                  {destination.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => handleChangeDestination('')}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.clearIcon}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </Animated.View>
+              ) : (
+                <Text style={styles.openTripDest}>Destination libre — à indiquer au chauffeur</Text>
+              )}
             </View>
           </View>
 
-          {/* ── Type de véhicule ──────────────────────────────────────── */}
-          <Text style={styles.sectionTitle}>Type de véhicule</Text>
-          <View style={styles.vehicleGrid}>
-            {VEHICLE_TYPES.map((v) => {
-              const active = vehicleType === v.id;
-              return (
-                <TouchableOpacity
-                  key={v.id}
-                  style={[styles.vehicleCard, active && styles.vehicleCardActive]}
-                  onPress={() => setVehicleType(v.id)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.vehicleIcon}>{v.icon}</Text>
-                  <Text style={[styles.vehicleName, active && styles.vehicleNameActive]}>
-                    {v.label}
-                  </Text>
-                  <Text style={[styles.vehicleDesc, active && styles.vehicleDescActive]}>
-                    {v.desc}
-                  </Text>
-                  <View style={styles.vehicleFooter}>
-                    <Text style={[styles.vehiclePrice, active && styles.vehiclePriceActive]}>
-                      {v.price}
-                    </Text>
-                    <Text style={[styles.vehicleEta, active && styles.vehicleEtaActive]}>
-                      {v.eta}
-                    </Text>
+          {/* ── Trajet ouvert : explication + tarif ───────────────────── */}
+          {mode === 'open' && (
+            <View style={styles.openCard}>
+              <Text style={styles.openTitle}>Prix au compteur, en temps réel</Text>
+              <Text style={styles.openText}>
+                Le montant évolue selon la distance parcourue et la durée du trajet.
+                Vous le suivez en direct pendant la course.
+              </Text>
+              {tariff && (
+                <View style={styles.tariffRow}>
+                  <View style={styles.tariffItem}>
+                    <Text style={styles.tariffValue}>{tariff.baseFare}</Text>
+                    <Text style={styles.tariffLabel}>{tariff.currency} prise en charge</Text>
                   </View>
-                  {active && <View style={styles.vehicleCheck}><Text style={styles.vehicleCheckIcon}>✓</Text></View>}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                  <View style={styles.tariffItem}>
+                    <Text style={styles.tariffValue}>{tariff.perKm}</Text>
+                    <Text style={styles.tariffLabel}>{tariff.currency} / km</Text>
+                  </View>
+                  <View style={styles.tariffItem}>
+                    <Text style={styles.tariffValue}>{tariff.perMinute}</Text>
+                    <Text style={styles.tariffLabel}>{tariff.currency} / min</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
 
-          {/* ── Destinations récentes ─────────────────────────────────── */}
-          {!inputFocused && (
+          {/* ── Suggestions d'adresses ────────────────────────────────── */}
+          {mode === 'destination' && suggestions.length > 0 && (
+            <View style={styles.placeList}>
+              {suggestions.map((p, i) => placeRow(p, i, suggestions, '📍'))}
+            </View>
+          )}
+
+          {/* ── Destinations récentes (historique réel) ───────────────── */}
+          {showRecents && (
             <>
               <Text style={styles.sectionTitle}>Récents</Text>
-              <View style={styles.recentList}>
-                {RECENT.map((place, idx) => (
-                  <TouchableOpacity
-                    key={place.id}
-                    style={[
-                      styles.recentItem,
-                      idx === RECENT.length - 1 && styles.recentItemLast,
-                    ]}
-                    onPress={() => setDestination(place.label)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.recentIconWrap}>
-                      <Text style={styles.recentIconText}>{place.icon}</Text>
-                    </View>
-                    <View style={styles.recentContent}>
-                      <Text style={styles.recentLabel} numberOfLines={1}>{place.label}</Text>
-                      <Text style={styles.recentSub}>{place.sub}</Text>
-                    </View>
-                    <Text style={styles.recentChevron}>›</Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.placeList}>
+                {recents.map((p, i) => placeRow(p, i, recents, '🕘'))}
               </View>
             </>
           )}
@@ -246,10 +313,12 @@ export default function BookingScreen({ navigation, route }: Props) {
           activeOpacity={0.88}
         >
           {loading ? (
-            <Text style={styles.confirmBtnLabel}>Création de la course…</Text>
+            <ActivityIndicator color={C.white} />
           ) : (
             <>
-              <Text style={styles.confirmBtnLabel}>Confirmer la destination</Text>
+              <Text style={styles.confirmBtnLabel}>
+                {mode === 'open' ? 'Commander un trajet ouvert' : 'Confirmer la destination'}
+              </Text>
               <View style={styles.confirmArrow}>
                 <Text style={styles.confirmArrowText}>→</Text>
               </View>
@@ -289,10 +358,20 @@ const styles = StyleSheet.create({
 
   scroll: { paddingHorizontal: 16, paddingTop: 8 },
 
+  // Segment
+  segment: {
+    flexDirection: 'row', backgroundColor: '#E9EBF0', borderRadius: 14,
+    padding: 4, marginBottom: 14,
+  },
+  segmentItem: { flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center' },
+  segmentItemActive: { backgroundColor: C.white, ...CARD_SHADOW },
+  segmentText: { fontSize: 14, fontWeight: '600', color: C.subtle },
+  segmentTextActive: { color: C.text, fontWeight: '700' },
+
   // Route card
   routeCard: {
     backgroundColor: C.white, borderRadius: 20, padding: 16,
-    marginBottom: 24, ...CARD_SHADOW,
+    marginBottom: 20, ...CARD_SHADOW,
   },
   routeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   originDot: {
@@ -302,10 +381,7 @@ const styles = StyleSheet.create({
   routeLabel: { fontSize: 14, color: C.subtle, fontWeight: '500', flex: 1 },
   routeSeparator: { paddingLeft: 5, paddingVertical: 6 },
   routeLine: { width: 2, height: 20, backgroundColor: C.border, borderRadius: 1, marginLeft: 1 },
-  destDot: {
-    width: 12, height: 12, borderRadius: 3,
-    backgroundColor: C.text,
-  },
+  destDot: { width: 12, height: 12, borderRadius: 3, backgroundColor: C.text },
   inputWrap: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
     borderWidth: 1.5, borderRadius: 12,
@@ -317,6 +393,19 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === 'ios' ? 10 : 8,
   },
   clearIcon: { fontSize: 14, color: C.subtle, paddingLeft: 8 },
+  openTripDest: { flex: 1, fontSize: 14, color: C.text, fontWeight: '600', paddingVertical: 12 },
+
+  // Trajet ouvert
+  openCard: {
+    backgroundColor: C.blueBg, borderRadius: 20, padding: 18, gap: 8,
+    borderWidth: 1.5, borderColor: '#CCE4FF', marginBottom: 20,
+  },
+  openTitle: { fontSize: 16, fontWeight: '800', color: C.text },
+  openText:  { fontSize: 13, color: C.subtle, lineHeight: 19 },
+  tariffRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  tariffItem: { flex: 1, backgroundColor: C.white, borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  tariffValue: { fontSize: 18, fontWeight: '800', color: C.blue },
+  tariffLabel: { fontSize: 11, color: C.subtle, marginTop: 2, textAlign: 'center' },
 
   // Section title
   sectionTitle: {
@@ -325,55 +414,26 @@ const styles = StyleSheet.create({
     marginBottom: 12, marginLeft: 2,
   },
 
-  // Vehicle cards
-  vehicleGrid: {
-    flexDirection: 'row', gap: 10, marginBottom: 28,
-  },
-  vehicleCard: {
-    flex: 1, backgroundColor: C.white, borderRadius: 16,
-    padding: 14, borderWidth: 2, borderColor: 'transparent',
-    ...CARD_SHADOW, gap: 4, position: 'relative',
-  },
-  vehicleCardActive: {
-    borderColor: C.blue, backgroundColor: C.blueBg,
-  },
-  vehicleIcon: { fontSize: 24, marginBottom: 4 },
-  vehicleName: { fontSize: 13, fontWeight: '700', color: C.text },
-  vehicleNameActive: { color: C.blue },
-  vehicleDesc: { fontSize: 11, color: C.subtle, lineHeight: 15 },
-  vehicleDescActive: { color: '#4A9FE5' },
-  vehicleFooter: { marginTop: 6, gap: 2 },
-  vehiclePrice: { fontSize: 12, fontWeight: '700', color: C.text },
-  vehiclePriceActive: { color: C.blue },
-  vehicleEta: { fontSize: 11, color: C.subtle },
-  vehicleEtaActive: { color: '#4A9FE5' },
-  vehicleCheck: {
-    position: 'absolute', top: 8, right: 8,
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: C.blue, alignItems: 'center', justifyContent: 'center',
-  },
-  vehicleCheckIcon: { color: C.white, fontSize: 10, fontWeight: '800' },
-
-  // Recent list
-  recentList: {
+  // Listes de lieux (suggestions + récents)
+  placeList: {
     backgroundColor: C.white, borderRadius: 20,
-    overflow: 'hidden', ...CARD_SHADOW,
+    overflow: 'hidden', marginBottom: 20, ...CARD_SHADOW,
   },
-  recentItem: {
+  placeItem: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  recentItemLast: { borderBottomWidth: 0 },
-  recentIconWrap: {
+  placeItemLast: { borderBottomWidth: 0 },
+  placeIconWrap: {
     width: 42, height: 42, borderRadius: 12,
     backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center',
   },
-  recentIconText: { fontSize: 20 },
-  recentContent: { flex: 1 },
-  recentLabel: { fontSize: 14, fontWeight: '600', color: C.text },
-  recentSub: { fontSize: 12, color: C.subtle, marginTop: 2 },
-  recentChevron: { fontSize: 20, color: '#C7C7CC', fontWeight: '300' },
+  placeIconText: { fontSize: 20 },
+  placeContent: { flex: 1 },
+  placeLabel: { fontSize: 14, fontWeight: '600', color: C.text },
+  placeSub: { fontSize: 12, color: C.subtle, marginTop: 2 },
+  placeChevron: { fontSize: 20, color: '#C7C7CC', fontWeight: '300' },
 
   // Footer
   footer: {

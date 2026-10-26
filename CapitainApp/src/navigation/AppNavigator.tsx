@@ -14,8 +14,20 @@ import HomeScreen       from '../screens/HomeScreen';
 import HistoriqueScreen from '../screens/HistoriqueScreen';
 import ParametresScreen from '../screens/ParametresScreen';
 import MonCompteScreen  from '../screens/MonCompteScreen';
+import ProfilScreen     from '../screens/ProfilScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// Lit le rôle dans le payload du JWT (sans vérifier la signature — le serveur s'en charge)
+function isDriverToken(token: string): boolean {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    return JSON.parse(atob(padded)).role === 'driver';
+  } catch {
+    return false;
+  }
+}
 
 export default function AppNavigator() {
   const [isLoading,       setIsLoading]       = useState(true);
@@ -23,7 +35,14 @@ export default function AppNavigator() {
 
   useEffect(() => {
     SecureStore.getItemAsync(SECURE_STORE_KEY)
-      .then((token) => setIsAuthenticated(!!token))
+      .then(async (token) => {
+        if (token && isDriverToken(token)) {
+          setIsAuthenticated(true);
+        } else if (token) {
+          // Jeton d'un compte client : inutilisable dans l'app capitaine
+          await SecureStore.deleteItemAsync(SECURE_STORE_KEY);
+        }
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -52,6 +71,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Historique" component={HistoriqueScreen} options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Parametres" component={ParametresScreen} options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="MonCompte"  component={MonCompteScreen}  options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Profil"     component={ProfilScreen}     options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

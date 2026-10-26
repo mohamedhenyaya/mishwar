@@ -25,6 +25,20 @@ export class User {
   @Column({ nullable: true })
   email: string;
 
+  // Chemin relatif servi en statique, ex. /uploads/xxx.jpg
+  @Column({ nullable: true })
+  photoUrl: string;
+
+  // Note moyenne donnée par les chauffeurs
+  @Column({ type: 'decimal', precision: 3, scale: 2, default: 5.0 })
+  rating: number;
+
+  @Column({ default: 0 })
+  ratingCount: number;
+
+  @Column({ default: 0 })
+  totalRides: number;
+
   @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
   role: UserRole;
 

@@ -14,7 +14,10 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DriversController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
 const swagger_1 = require("@nestjs/swagger");
+const photo_upload_util_1 = require("../../common/utils/photo-upload.util");
+const update_driver_dto_1 = require("./dto/update-driver.dto");
 const drivers_service_1 = require("./drivers.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const roles_guard_1 = require("../auth/guards/roles.guard");
@@ -32,6 +35,14 @@ let DriversController = class DriversController {
     }
     getProfile(user) {
         return this.driversService.findById(user.sub);
+    }
+    updateProfile(user, dto) {
+        return this.driversService.updateProfile(user.sub, dto);
+    }
+    uploadPhoto(user, file) {
+        if (!file)
+            throw new common_1.BadRequestException('Aucune photo reçue');
+        return this.driversService.updateProfile(user.sub, { photoUrl: (0, photo_upload_util_1.photoPath)(file) });
     }
     updateLocation(user, dto) {
         return this.driversService.updateLocation(user.sub, dto);
@@ -60,6 +71,32 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], DriversController.prototype, "getProfile", null);
+__decorate([
+    (0, common_1.Patch)('me'),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('driver'),
+    (0, swagger_1.ApiOperation)({ summary: 'Mettre à jour son profil et son véhicule' }),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, update_driver_dto_1.UpdateDriverDto]),
+    __metadata("design:returntype", void 0)
+], DriversController.prototype, "updateProfile", null);
+__decorate([
+    (0, common_1.Post)('me/photo'),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, swagger_1.ApiConsumes)('multipart/form-data'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('driver'),
+    (0, swagger_1.ApiOperation)({ summary: 'Envoyer sa photo de profil (champ "photo")' }),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('photo', photo_upload_util_1.photoUploadOptions)),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", void 0)
+], DriversController.prototype, "uploadPhoto", null);
 __decorate([
     (0, common_1.Patch)('location'),
     (0, swagger_1.ApiBearerAuth)(),

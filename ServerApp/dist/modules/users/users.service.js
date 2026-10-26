@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("./entities/user.entity");
+const public_profile_util_1 = require("../../common/utils/public-profile.util");
 let UsersService = class UsersService {
     constructor(userRepo) {
         this.userRepo = userRepo;
@@ -30,6 +31,20 @@ let UsersService = class UsersService {
     async update(id, dto) {
         await this.userRepo.update(id, dto);
         return this.findById(id);
+    }
+    async setPhoto(id, photoUrl) {
+        await this.userRepo.update(id, { photoUrl });
+        return this.findById(id);
+    }
+    async incrementTotalRides(id) {
+        await this.userRepo.increment({ id }, 'totalRides', 1);
+    }
+    async addRating(id, rating) {
+        const user = await this.findById(id);
+        await this.userRepo.update(id, {
+            rating: (0, public_profile_util_1.nextAverage)(user.rating, user.ratingCount, rating),
+            ratingCount: user.ratingCount + 1,
+        });
     }
 };
 exports.UsersService = UsersService;

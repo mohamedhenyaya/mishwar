@@ -30,6 +30,10 @@ export class Driver {
   @Column({ nullable: true })
   name: string;
 
+  // Chemin relatif servi en statique, ex. /uploads/xxx.jpg
+  @Column({ nullable: true })
+  photoUrl: string;
+
   @Column({ nullable: true, select: false })
   passwordHash: string;
 
@@ -47,6 +51,9 @@ export class Driver {
 
   @Column({ type: 'decimal', precision: 3, scale: 2, default: 5.0 })
   rating: number;
+
+  @Column({ default: 0 })
+  ratingCount: number;
 
   @Column({ default: 0 })
   totalRides: number;

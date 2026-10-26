@@ -4,18 +4,22 @@ import React, {
 import {
   StyleSheet, View, Text, TouchableOpacity,
   ActivityIndicator, Platform, Dimensions,
-  Animated, ScrollView,
+  Animated, AppState,
 } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { StatusBar } from 'expo-status-bar';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as SecureStore from 'expo-secure-store';
 
 import MapComponent from '../components/MapComponent';
+import Avatar from '../components/Avatar';
 import { socketService } from '../services/socket';
 import { apiGet } from '../services/api';
-import { Coordinates, Driver, RootStackParamList } from '../types';
+import { SECURE_STORE_KEY } from '../config/constants';
+import { Coordinates, Driver, PublicUser, RideDetails, RootStackParamList } from '../types';
 
 const { width } = Dimensions.get('window');
 const DELTA = { latitudeDelta: 0.0122, longitudeDelta: 0.0121 };
@@ -54,36 +58,27 @@ function toDriver(d: any): Driver {
   };
 }
 
-// ── Chips de catégorie ────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: 'economy', label: 'Économie', icon: '🚗', desc: '~3 min' },
-  { id: 'comfort', label: 'Confort',  icon: '🚙', desc: '~5 min' },
-  { id: 'premium', label: 'Premium',  icon: '✨', desc: '~7 min' },
-];
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
+  const isFocused = useIsFocused();
 
   const [userLocation, setUserLocation] = useState<Coordinates | null>(null);
   const [region,       setRegion]       = useState<Region | null>(null);
   const [drivers,      setDrivers]      = useState<Driver[]>([]);
   const [isLoading,    setIsLoading]    = useState(true);
   const [errorMsg,     setErrorMsg]     = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState('economy');
 
   // Animations
   const headerAnim  = useRef(new Animated.Value(0)).current;
   const searchAnim  = useRef(new Animated.Value(0)).current;
   const searchScale = useRef(new Animated.Value(1)).current;
-  const chipsAnim   = useRef(new Animated.Value(0)).current;
 
   const mountAnimations = () => {
     Animated.stagger(80, [
       Animated.spring(headerAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }),
-      Animated.spring(chipsAnim,  { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }),
       Animated.spring(searchAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }),
     ]).start();
   };
@@ -130,25 +125,91 @@ export default function HomeScreen({ navigation }: Props) {
   // ── Socket ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    socketService.connect();
-    socketService.onDriversUpdate((updated) =>
-      setDrivers((updated as unknown as NearbyDriverApi[]).map(toDriver))
-    );
-    socketService.onDriverPositionUpdate((updated) =>
-      setDrivers((prev) =>
-        prev.map((d) =>
-          d.id === updated.id
-            ? { ...d, coordinate: { latitude: (updated as any).latitude ?? updated.coordinate?.latitude, longitude: (updated as any).longitude ?? updated.coordinate?.longitude } }
-            : d
+    let cancelled = false;
+    let unsubscribePosition = () => {};
+
+    (async () => {
+      // Authentifié : le serveur place le socket dans la room user:<id> (événements de course)
+      const token = await SecureStore.getItemAsync(SECURE_STORE_KEY);
+      if (cancelled) return;
+      socketService.connect(token ?? undefined);
+      socketService.onDriversUpdate((updated) =>
+        setDrivers((updated as unknown as NearbyDriverApi[]).map(toDriver))
+      );
+      unsubscribePosition = socketService.subscribe('driver:position', (p) =>
+        setDrivers((prev) =>
+          prev.map((d) =>
+            d.id === p.driverId
+              ? { ...d, coordinate: { latitude: p.latitude, longitude: p.longitude } }
+              : d
+          )
         )
-      )
-    );
+      );
+    })();
+
     return () => {
+      cancelled = true;
       socketService.offDriversUpdate();
-      socketService.offDriverPositionUpdate();
+      unsubscribePosition();
       socketService.disconnect();
     };
   }, []);
+
+  // ── Rafraîchissement automatique des chauffeurs disponibles ────────────────
+
+  const userLocationRef = useRef<Coordinates | null>(null);
+  userLocationRef.current = userLocation;
+
+  useEffect(() => {
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      const loc = userLocationRef.current;
+      if (loc) fetchNearbyDrivers(loc.latitude, loc.longitude);
+    };
+
+    // Un chauffeur se connecte, se déconnecte ou devient occupé → liste rechargée
+    // (regroupé sur 800 ms quand plusieurs changements arrivent ensemble)
+    const unsubscribe = socketService.subscribe('driver:status', () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(refresh, 800);
+    });
+    // Filet de sécurité si un événement est manqué, et au retour au premier plan
+    const interval = setInterval(refresh, 30_000);
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh();
+    });
+
+    return () => {
+      unsubscribe();
+      if (debounce) clearTimeout(debounce);
+      clearInterval(interval);
+      appState.remove();
+    };
+  }, [fetchNearbyDrivers]);
+
+  // Reprise d'une course en cours (app relancée pendant une recherche ou un trajet)
+  useEffect(() => {
+    apiGet<RideDetails | null>('/rides/active')
+      .then((ride) => {
+        if (!ride) return;
+        if (ride.status === 'PENDING') {
+          navigation.navigate('Match', { rideId: ride.id, price: ride.price != null ? Number(ride.price) : null });
+        } else {
+          navigation.navigate('Trip', { rideId: ride.id });
+        }
+      })
+      .catch(() => { /* pas de course active */ });
+  }, []);
+
+  // Profil (photo + prénom) rechargé à chaque retour sur l'accueil
+  const [profile, setProfile] = useState<PublicUser | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      apiGet<PublicUser>('/users/me').then(setProfile).catch(() => {});
+      const loc = userLocationRef.current;
+      if (loc) fetchNearbyDrivers(loc.latitude, loc.longitude);
+    }, [fetchNearbyDrivers]),
+  );
 
   useEffect(() => { initLocation(); }, [initLocation]);
 
@@ -197,20 +258,23 @@ export default function HomeScreen({ navigation }: Props) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const headerTranslate = headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] });
-  const chipsTranslate  = chipsAnim.interpolate({  inputRange: [0, 1], outputRange: [-16, 0] });
   const searchTranslate = searchAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0]  });
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
 
-      <MapComponent
-        ref={mapRef}
-        initialRegion={region}
-        userLocation={userLocation}
-        drivers={drivers}
-        onDriverPress={(d) => console.log('Driver:', d.name)}
-      />
+      {/* Carte démontée quand un autre écran est au premier plan :
+          une seule carte native à la fois (soupçonnée des fermetures d'app sur iOS) */}
+      {isFocused && (
+        <MapComponent
+          ref={mapRef}
+          initialRegion={region}
+          userLocation={userLocation}
+          drivers={drivers}
+          onDriverPress={(d) => console.log('Driver:', d.name)}
+        />
+      )}
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <Animated.View
@@ -221,12 +285,12 @@ export default function HomeScreen({ navigation }: Props) {
         ]}
       >
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>Bonjour 👋</Text>
+          <Text style={styles.greeting}>Bonjour{profile?.name ? ` ${profile.name.split(' ')[0]}` : ''} 👋</Text>
           <Text style={styles.headerTitle}>Où souhaitez-vous aller ?</Text>
         </View>
-        <View style={styles.avatarCircle}>
-          <Text style={styles.avatarText}>U</Text>
-        </View>
+        <TouchableOpacity onPress={() => navigation.navigate('Profile')} activeOpacity={0.8}>
+          <Avatar photoUrl={profile?.photoUrl} name={profile?.name ?? 'U'} size={40} color={C.blue} />
+        </TouchableOpacity>
       </Animated.View>
 
       {/* ── Badge chauffeurs ──────────────────────────────────────────────── */}
@@ -243,43 +307,6 @@ export default function HomeScreen({ navigation }: Props) {
             ? `${drivers.length} chauffeur${drivers.length > 1 ? 's' : ''} disponible${drivers.length > 1 ? 's' : ''}`
             : 'Aucun chauffeur à proximité'}
         </Text>
-      </Animated.View>
-
-      {/* ── Chips catégories ──────────────────────────────────────────────── */}
-      <Animated.View
-        style={[
-          styles.chipsContainer,
-          { bottom: insets.bottom + 150 },
-          { opacity: chipsAnim, transform: [{ translateY: chipsTranslate }] },
-        ]}
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsScroll}
-        >
-          {CATEGORIES.map((cat) => {
-            const active = activeCategory === cat.id;
-            return (
-              <TouchableOpacity
-                key={cat.id}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => setActiveCategory(cat.id)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.chipIcon}>{cat.icon}</Text>
-                <View>
-                  <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
-                    {cat.label}
-                  </Text>
-                  <Text style={[styles.chipDesc, active && styles.chipDescActive]}>
-                    {cat.desc}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
       </Animated.View>
 
       {/* ── Recentrer ─────────────────────────────────────────────────────── */}
@@ -367,29 +394,6 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4 },
   badgeText: { fontSize: 12, fontWeight: '600', color: C.text },
 
-  // Chips
-  chipsContainer: {
-    position: 'absolute', left: 0, right: 0,
-  },
-  chipsScroll: {
-    paddingHorizontal: 16, gap: 10,
-  },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: C.white, borderRadius: 16,
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderWidth: 1.5, borderColor: 'transparent',
-    ...CARD_SHADOW,
-  },
-  chipActive: {
-    borderColor: C.blue,
-    backgroundColor: '#EBF5FF',
-  },
-  chipIcon: { fontSize: 20 },
-  chipLabel: { fontSize: 13, fontWeight: '700', color: C.text },
-  chipLabelActive: { color: C.blue },
-  chipDesc: { fontSize: 11, color: C.subtle, marginTop: 1 },
-  chipDescActive: { color: C.blue, opacity: 0.8 },
 
   // Recentrer
   recenterBtn: {

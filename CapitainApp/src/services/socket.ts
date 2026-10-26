@@ -2,25 +2,35 @@ import { io, Socket } from 'socket.io-client';
 import { Coordinates } from '../types';
 import { SOCKET_URL } from '../config/constants';
 
+// Événements émis / écoutés par le serveur (geolocation.gateway.ts).
+// Statut en ligne et actions sur les courses passent par l'API REST.
 const EVENTS = {
-  CAPTAIN_ONLINE:    'captain:online',
-  CAPTAIN_OFFLINE:   'captain:offline',
-  CAPTAIN_LOCATION:  'captain:location',
-  RIDE_REQUEST:      'ride:request',
-  RIDE_ACCEPTED:     'ride:accepted',
-  RIDE_STARTED:      'ride:started',
-  RIDE_COMPLETED:    'ride:completed',
+  DRIVER_POSITION:   'driver:position',
+  RIDE_NEW:          'ride:new',
+  RIDE_UNAVAILABLE:  'ride:unavailable',
   RIDE_CANCELLED:    'ride:cancelled',
+  RIDE_METER:        'ride:meter',
 } as const;
 
-export interface RideRequestPayload {
+// Relevé du compteur d'un trajet ouvert
+export interface MeterReading {
   rideId:      string;
-  clientName:  string;
-  clientPhone: string;
-  origin:      Coordinates & { label: string };
-  destination: Coordinates & { label: string };
+  distanceKm:  number;
+  durationMin: number;
   price:       number;
-  distance:    number;
+}
+
+export interface RideRequestPayload {
+  rideId:          string;
+  startLatitude:   number;
+  startLongitude:  number;
+  destinationName: string;
+  endLatitude:     number | null;
+  endLongitude:    number | null;
+  price:           number | string | null; // decimal Postgres → peut arriver en string
+  isOpenTrip:      boolean;
+  vehicleType:     string;
+  createdAt:       string;
 }
 
 class CaptainSocketService {
@@ -30,14 +40,15 @@ class CaptainSocketService {
     return this.socket?.connected ?? false;
   }
 
-  connect(authToken?: string): void {
+  // Le JWT est obligatoire : sans lui le serveur ne place pas le socket dans la room driver:<id>
+  connect(authToken: string): void {
     if (this.socket?.connected) return;
     this.socket = io(SOCKET_URL, {
       transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 2_000,
-      auth: authToken ? { token: authToken } : undefined,
+      auth: { token: authToken },
     });
     this.socket.on('connect',       () => console.log('[Socket] Captain connected:', this.socket?.id));
     this.socket.on('disconnect',    (r) => console.log('[Socket] Disconnected:', r));
@@ -49,22 +60,31 @@ class CaptainSocketService {
     this.socket = null;
   }
 
-  goOnline(coords: Coordinates):  void { this.socket?.emit(EVENTS.CAPTAIN_ONLINE,   coords); }
-  goOffline():                    void { this.socket?.emit(EVENTS.CAPTAIN_OFFLINE); }
-  updateLocation(coords: Coordinates): void { this.socket?.emit(EVENTS.CAPTAIN_LOCATION, coords); }
-  acceptRide(rideId: string):     void { this.socket?.emit(EVENTS.RIDE_ACCEPTED, { rideId }); }
-  startRide(rideId: string):      void { this.socket?.emit(EVENTS.RIDE_STARTED,  { rideId }); }
-  completeRide(rideId: string):   void { this.socket?.emit(EVENTS.RIDE_COMPLETED, { rideId }); }
+  updateLocation(coords: Coordinates): void { this.socket?.emit(EVENTS.DRIVER_POSITION, coords); }
 
   onRideRequest(cb: (payload: RideRequestPayload) => void): void {
-    this.socket?.on(EVENTS.RIDE_REQUEST, cb);
+    this.socket?.on(EVENTS.RIDE_NEW, cb);
+  }
+  onRideUnavailable(cb: (payload: { rideId: string }) => void): void {
+    this.socket?.on(EVENTS.RIDE_UNAVAILABLE, cb);
   }
   onRideCancelled(cb: (payload: { rideId: string }) => void): void {
     this.socket?.on(EVENTS.RIDE_CANCELLED, cb);
   }
 
-  offRideRequest():   void { this.socket?.off(EVENTS.RIDE_REQUEST); }
-  offRideCancelled(): void { this.socket?.off(EVENTS.RIDE_CANCELLED); }
+  onMeter(cb: (reading: MeterReading) => void): void {
+    this.socket?.on(EVENTS.RIDE_METER, cb);
+  }
+
+  // Connexion et chaque reconnexion (retour au premier plan, réseau rétabli)
+  onConnect(cb: () => void): void {
+    this.socket?.on('connect', cb);
+  }
+
+  offRideRequest():     void { this.socket?.off(EVENTS.RIDE_NEW); }
+  offMeter():           void { this.socket?.off(EVENTS.RIDE_METER); }
+  offRideUnavailable(): void { this.socket?.off(EVENTS.RIDE_UNAVAILABLE); }
+  offRideCancelled():   void { this.socket?.off(EVENTS.RIDE_CANCELLED); }
 }
 
 export const captainSocketService = new CaptainSocketService();

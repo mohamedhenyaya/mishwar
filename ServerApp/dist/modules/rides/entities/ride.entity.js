@@ -9,16 +9,18 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Ride = exports.RideVehicleClass = exports.RideStatus = void 0;
+exports.Ride = exports.RideVehicleClass = exports.ACTIVE_RIDE_STATUSES = exports.RideStatus = void 0;
 const typeorm_1 = require("typeorm");
 var RideStatus;
 (function (RideStatus) {
     RideStatus["PENDING"] = "PENDING";
     RideStatus["ACCEPTED"] = "ACCEPTED";
+    RideStatus["ARRIVED"] = "ARRIVED";
     RideStatus["IN_PROGRESS"] = "IN_PROGRESS";
     RideStatus["COMPLETED"] = "COMPLETED";
     RideStatus["CANCELLED"] = "CANCELLED";
 })(RideStatus || (exports.RideStatus = RideStatus = {}));
+exports.ACTIVE_RIDE_STATUSES = [RideStatus.ACCEPTED, RideStatus.ARRIVED, RideStatus.IN_PROGRESS];
 var RideVehicleClass;
 (function (RideVehicleClass) {
     RideVehicleClass["ECONOMY"] = "economy";
@@ -88,6 +90,30 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'decimal', precision: 8, scale: 2, nullable: true }),
     __metadata("design:type", Number)
 ], Ride.prototype, "price", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ default: false }),
+    __metadata("design:type", Boolean)
+], Ride.prototype, "isOpenTrip", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    __metadata("design:type", Date)
+], Ride.prototype, "startedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'double precision', default: 0 }),
+    __metadata("design:type", Number)
+], Ride.prototype, "distanceMeters", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 10, nullable: true }),
+    __metadata("design:type", String)
+], Ride.prototype, "cancelledBy", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'smallint', nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "driverRating", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'smallint', nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "userRating", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

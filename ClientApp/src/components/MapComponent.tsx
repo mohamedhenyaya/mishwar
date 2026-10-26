@@ -59,7 +59,7 @@ export default MapComponent;
 
 const styles = StyleSheet.create({
   map: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   userMarker: {
     width: 22,

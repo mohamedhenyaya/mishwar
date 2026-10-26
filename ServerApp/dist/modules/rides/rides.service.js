@@ -23,23 +23,36 @@ const geolocation_gateway_1 = require("../geolocation/geolocation.gateway");
 const drivers_service_1 = require("../drivers/drivers.service");
 const driver_entity_1 = require("../drivers/entities/driver.entity");
 const pricing_util_1 = require("./utils/pricing.util");
+const users_service_1 = require("../users/users.service");
+const public_profile_util_1 = require("../../common/utils/public-profile.util");
 let RidesService = RidesService_1 = class RidesService {
-    constructor(rideRepo, geolocationGateway, driversService, config) {
+    constructor(rideRepo, geolocationGateway, driversService, usersService, config) {
         this.rideRepo = rideRepo;
         this.geolocationGateway = geolocationGateway;
         this.driversService = driversService;
+        this.usersService = usersService;
         this.config = config;
         this.logger = new common_1.Logger(RidesService_1.name);
     }
     async createRide(userId, dto) {
+        const isOpenTrip = dto.isOpenTrip === true;
+        const hasDestination = !isOpenTrip && dto.endLatitude != null && dto.endLongitude != null;
+        if (!isOpenTrip && !dto.destinationName?.trim()) {
+            throw new common_1.BadRequestException('Destination requise (ou choisissez un trajet ouvert)');
+        }
+        const price = hasDestination
+            ? (0, pricing_util_1.computeFare)(dto.startLatitude, dto.startLongitude, dto.endLatitude, dto.endLongitude)
+            : null;
         const ride = this.rideRepo.create({
             userId,
             startLatitude: dto.startLatitude,
             startLongitude: dto.startLongitude,
-            destinationName: dto.destinationName,
-            endLatitude: dto.endLatitude ?? null,
-            endLongitude: dto.endLongitude ?? null,
-            vehicleType: dto.vehicleType,
+            destinationName: isOpenTrip ? 'Trajet ouvert' : dto.destinationName.trim(),
+            endLatitude: hasDestination ? dto.endLatitude : null,
+            endLongitude: hasDestination ? dto.endLongitude : null,
+            vehicleType: dto.vehicleType ?? ride_entity_1.RideVehicleClass.ECONOMY,
+            isOpenTrip,
+            price,
             status: ride_entity_1.RideStatus.PENDING,
         });
         const saved = await this.rideRepo.save(ride);
@@ -68,7 +81,30 @@ let RidesService = RidesService_1 = class RidesService {
         if (!isRider && !isAssignedDriver) {
             throw new common_1.ForbiddenException('Accès refusé à cette course');
         }
-        return ride;
+        return this.withParticipants(ride);
+    }
+    async findActive(jwt) {
+        const ride = jwt.role === 'driver'
+            ? await this.rideRepo.findOne({
+                where: { driverId: jwt.sub, status: (0, typeorm_2.In)(ride_entity_1.ACTIVE_RIDE_STATUSES) },
+                order: { createdAt: 'DESC' },
+            })
+            : await this.rideRepo.findOne({
+                where: { userId: jwt.sub, status: (0, typeorm_2.In)([ride_entity_1.RideStatus.PENDING, ...ride_entity_1.ACTIVE_RIDE_STATUSES]) },
+                order: { createdAt: 'DESC' },
+            });
+        return ride ? this.withParticipants(ride) : null;
+    }
+    async withParticipants(ride) {
+        const [user, driver] = await Promise.all([
+            this.usersService.findById(ride.userId),
+            ride.driverId ? this.driversService.findById(ride.driverId) : null,
+        ]);
+        return {
+            ...ride,
+            user: (0, public_profile_util_1.toPublicUser)(user),
+            driver: driver ? (0, public_profile_util_1.toPublicDriver)(driver) : null,
+        };
     }
     async acceptRide(rideId, driverId) {
         const result = await this.rideRepo
@@ -84,7 +120,7 @@ let RidesService = RidesService_1 = class RidesService {
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
         const driver = await this.driversService.findById(driverId);
         await this.geolocationGateway.notifyRideAccepted(ride, driver);
-        return ride;
+        return this.withParticipants(ride);
     }
     async rejectRide(rideId, driverId) {
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
@@ -101,18 +137,18 @@ let RidesService = RidesService_1 = class RidesService {
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
-            .set({ status: ride_entity_1.RideStatus.CANCELLED })
+            .set({ status: ride_entity_1.RideStatus.CANCELLED, cancelledBy: 'system' })
             .where('id = :id AND status = :status', { id: rideId, status: ride_entity_1.RideStatus.PENDING })
             .execute();
         if (result.affected) {
             this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'no_driver_available');
         }
     }
-    async startRide(rideId, driverId) {
+    async arriveRide(rideId, driverId) {
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
-            .set({ status: ride_entity_1.RideStatus.IN_PROGRESS })
+            .set({ status: ride_entity_1.RideStatus.ARRIVED })
             .where('id = :id AND status = :status AND "driverId" = :driverId', {
             id: rideId,
             status: ride_entity_1.RideStatus.ACCEPTED,
@@ -120,10 +156,28 @@ let RidesService = RidesService_1 = class RidesService {
         })
             .execute();
         if (!result.affected) {
+            throw new common_1.ConflictException('Impossible de signaler l\'arrivée pour cette course');
+        }
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        this.geolocationGateway.notifyRideArrived(ride);
+        return ride;
+    }
+    async startRide(rideId, driverId) {
+        const result = await this.rideRepo
+            .createQueryBuilder()
+            .update(ride_entity_1.Ride)
+            .set({ status: ride_entity_1.RideStatus.IN_PROGRESS, startedAt: new Date() })
+            .where('id = :id AND status IN (:...statuses) AND "driverId" = :driverId', {
+            id: rideId,
+            statuses: [ride_entity_1.RideStatus.ACCEPTED, ride_entity_1.RideStatus.ARRIVED],
+            driverId,
+        })
+            .execute();
+        if (!result.affected) {
             throw new common_1.ConflictException('Impossible de démarrer cette course');
         }
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
-        await this.geolocationGateway.notifyRideStarted(ride);
+        this.geolocationGateway.notifyRideStarted(ride);
         return ride;
     }
     async completeRide(rideId, driverId, dto) {
@@ -134,7 +188,9 @@ let RidesService = RidesService_1 = class RidesService {
             throw new common_1.ForbiddenException('Cette course ne vous est pas assignée');
         const endLatitude = dto.endLatitude ?? existing.endLatitude ?? existing.startLatitude;
         const endLongitude = dto.endLongitude ?? existing.endLongitude ?? existing.startLongitude;
-        const price = (0, pricing_util_1.computeFare)(existing.startLatitude, existing.startLongitude, endLatitude, endLongitude);
+        const price = existing.isOpenTrip && existing.startedAt
+            ? (0, pricing_util_1.computeOpenTripFare)(existing.distanceMeters, existing.startedAt).price
+            : (0, pricing_util_1.computeFare)(existing.startLatitude, existing.startLongitude, endLatitude, endLongitude);
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
@@ -150,8 +206,9 @@ let RidesService = RidesService_1 = class RidesService {
         }
         await this.driversService.updateStatus(driverId, driver_entity_1.DriverStatus.ONLINE);
         await this.driversService.incrementTotalRides(driverId);
+        await this.usersService.incrementTotalRides(existing.userId);
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
-        await this.geolocationGateway.notifyRideCompleted(ride);
+        this.geolocationGateway.notifyRideCompleted(ride);
         return ride;
     }
     async cancelRide(rideId, userId) {
@@ -160,13 +217,14 @@ let RidesService = RidesService_1 = class RidesService {
             throw new common_1.NotFoundException('Course non trouvée');
         if (ride.userId !== userId)
             throw new common_1.ForbiddenException('Cette course ne vous appartient pas');
-        if (ride.status !== ride_entity_1.RideStatus.PENDING && ride.status !== ride_entity_1.RideStatus.ACCEPTED) {
+        const cancellable = [ride_entity_1.RideStatus.PENDING, ride_entity_1.RideStatus.ACCEPTED, ride_entity_1.RideStatus.ARRIVED];
+        if (!cancellable.includes(ride.status)) {
             throw new common_1.ConflictException('Cette course ne peut plus être annulée');
         }
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
-            .set({ status: ride_entity_1.RideStatus.CANCELLED })
+            .set({ status: ride_entity_1.RideStatus.CANCELLED, cancelledBy: 'rider' })
             .where('id = :id AND status = :status', { id: rideId, status: ride.status })
             .execute();
         if (!result.affected) {
@@ -174,12 +232,61 @@ let RidesService = RidesService_1 = class RidesService {
         }
         if (ride.driverId) {
             await this.driversService.updateStatus(ride.driverId, driver_entity_1.DriverStatus.ONLINE);
+            this.geolocationGateway.releaseDriver(ride.driverId);
             this.geolocationGateway.notifyRideCancelled(`driver:${ride.driverId}`, rideId, 'rider_cancelled');
         }
         else {
             for (const driverId of ride.notifiedDriverIds) {
                 this.geolocationGateway.notifyRideUnavailable(driverId, rideId);
             }
+        }
+    }
+    async cancelRideByDriver(rideId, driverId) {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        if (ride.driverId !== driverId)
+            throw new common_1.ForbiddenException('Cette course ne vous est pas assignée');
+        const result = await this.rideRepo
+            .createQueryBuilder()
+            .update(ride_entity_1.Ride)
+            .set({ status: ride_entity_1.RideStatus.CANCELLED, cancelledBy: 'driver' })
+            .where('id = :id AND "driverId" = :driverId AND status IN (:...statuses)', {
+            id: rideId,
+            driverId,
+            statuses: [ride_entity_1.RideStatus.ACCEPTED, ride_entity_1.RideStatus.ARRIVED],
+        })
+            .execute();
+        if (!result.affected) {
+            throw new common_1.ConflictException('Une course démarrée ne peut plus être annulée');
+        }
+        await this.driversService.updateStatus(driverId, driver_entity_1.DriverStatus.ONLINE);
+        this.geolocationGateway.releaseDriver(driverId);
+        this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'driver_cancelled');
+        this.logger.log(`Course ${rideId} annulée par le chauffeur ${driverId}`);
+    }
+    async rateRide(rideId, jwt, rating) {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        if (ride.status !== ride_entity_1.RideStatus.COMPLETED) {
+            throw new common_1.BadRequestException('Seule une course terminée peut être notée');
+        }
+        if (jwt.role === 'driver') {
+            if (ride.driverId !== jwt.sub)
+                throw new common_1.ForbiddenException('Cette course ne vous est pas assignée');
+            if (ride.userRating != null)
+                throw new common_1.ConflictException('Vous avez déjà noté ce client');
+            await this.rideRepo.update(rideId, { userRating: rating });
+            await this.usersService.addRating(ride.userId, rating);
+        }
+        else {
+            if (ride.userId !== jwt.sub)
+                throw new common_1.ForbiddenException('Cette course ne vous appartient pas');
+            if (ride.driverRating != null)
+                throw new common_1.ConflictException('Vous avez déjà noté ce chauffeur');
+            await this.rideRepo.update(rideId, { driverRating: rating });
+            await this.driversService.addRating(ride.driverId, rating);
         }
     }
     scheduleRideTimeout(rideId) {
@@ -191,7 +298,7 @@ let RidesService = RidesService_1 = class RidesService {
             const result = await this.rideRepo
                 .createQueryBuilder()
                 .update(ride_entity_1.Ride)
-                .set({ status: ride_entity_1.RideStatus.CANCELLED })
+                .set({ status: ride_entity_1.RideStatus.CANCELLED, cancelledBy: 'system' })
                 .where('id = :id AND status = :status', { id: rideId, status: ride_entity_1.RideStatus.PENDING })
                 .execute();
             if (!result.affected)
@@ -211,6 +318,7 @@ exports.RidesService = RidesService = RidesService_1 = __decorate([
     __metadata("design:paramtypes", [typeorm_2.Repository,
         geolocation_gateway_1.GeolocationGateway,
         drivers_service_1.DriversService,
+        users_service_1.UsersService,
         config_1.ConfigService])
 ], RidesService);
 //# sourceMappingURL=rides.service.js.map

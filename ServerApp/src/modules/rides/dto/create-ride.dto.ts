@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RideVehicleClass } from '../entities/ride.entity';
 
@@ -15,11 +15,20 @@ export class CreateRideDto {
   @Type(() => Number)
   startLongitude: number;
 
+  // Ignoré pour un trajet ouvert
+  @IsOptional()
   @IsString()
-  destinationName: string;
+  destinationName?: string;
 
+  // Catégorie unique : champ conservé pour compatibilité, plus envoyé par l'app
+  @IsOptional()
   @IsEnum(RideVehicleClass)
-  vehicleType: RideVehicleClass;
+  vehicleType?: RideVehicleClass;
+
+  // Trajet ouvert : pas de destination, prix au compteur
+  @IsOptional()
+  @IsBoolean()
+  isOpenTrip?: boolean;
 
   @IsOptional()
   @IsNumber()

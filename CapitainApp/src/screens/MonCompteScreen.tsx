@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
-  ScrollView, ActivityIndicator, RefreshControl, Alert,
+  ScrollView, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import { RootStackParamList } from '../types';
+import { DriverProfile, RootStackParamList } from '../types';
+import RechargeSheet from '../components/RechargeSheet';
 import { apiGet } from '../services/api';
 import { C, G, SH, RADIUS } from '../theme';
 
@@ -71,6 +72,12 @@ export default function MonCompteScreen({ navigation }: Props) {
   const [txns,       setTxns]       = useState<Transaction[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [rechargeOpen, setRechargeOpen] = useState(false);
+  const [driverPhone,  setDriverPhone]  = useState<string | undefined>();
+
+  useEffect(() => {
+    apiGet<DriverProfile>('/drivers/me').then((d) => setDriverPhone(d.phone)).catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -179,9 +186,7 @@ export default function MonCompteScreen({ navigation }: Props) {
           <View style={styles.tilesRow}>
             <ActionTile
               icon="💳" label="Recharger" color={C.primary} bg={C.surfaceAlt}
-              onPress={() => Alert.alert('Recharger', 'Choisissez un mode', [
-                { text: 'Carte bancaire' }, { text: 'Mobile Money' }, { text: 'Annuler', style: 'cancel' },
-              ])}
+              onPress={() => setRechargeOpen(true)}
             />
             <ActionTile icon="📤" label="Transférer"  color={C.sub}    bg={C.bg} disabled />
             <ActionTile icon="📥" label="Historique"  color={C.accent} bg="#ECFDF5"
@@ -272,6 +277,8 @@ export default function MonCompteScreen({ navigation }: Props) {
           </View>
         </ScrollView>
       )}
+
+      <RechargeSheet visible={rechargeOpen} onClose={() => setRechargeOpen(false)} driverPhone={driverPhone} />
     </View>
   );
 }

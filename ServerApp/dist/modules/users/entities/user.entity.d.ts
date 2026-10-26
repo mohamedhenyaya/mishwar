@@ -7,6 +7,10 @@ export declare class User {
     phone: string;
     name: string;
     email: string;
+    photoUrl: string;
+    rating: number;
+    ratingCount: number;
+    totalRides: number;
     role: UserRole;
     passwordHash: string;
     isActive: boolean;

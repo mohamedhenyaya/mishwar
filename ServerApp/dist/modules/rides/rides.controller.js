@@ -20,7 +20,9 @@ const roles_decorator_1 = require("../auth/decorators/roles.decorator");
 const current_user_decorator_1 = require("../auth/decorators/current-user.decorator");
 const create_ride_dto_1 = require("./dto/create-ride.dto");
 const complete_ride_dto_1 = require("./dto/complete-ride.dto");
+const rate_ride_dto_1 = require("./dto/rate-ride.dto");
 const rides_service_1 = require("./rides.service");
+const pricing_util_1 = require("./utils/pricing.util");
 let RidesController = class RidesController {
     constructor(ridesService) {
         this.ridesService = ridesService;
@@ -31,6 +33,12 @@ let RidesController = class RidesController {
     myRides(user) {
         return this.ridesService.findByUser(user.sub);
     }
+    tariff() {
+        return pricing_util_1.TARIFF;
+    }
+    active(user) {
+        return this.ridesService.findActive(user);
+    }
     findOne(user, id) {
         return this.ridesService.findByIdForParticipant(id, user);
     }
@@ -40,6 +48,12 @@ let RidesController = class RidesController {
     reject(user, id) {
         return this.ridesService.rejectRide(id, user.sub);
     }
+    arrive(user, id) {
+        return this.ridesService.arriveRide(id, user.sub);
+    }
+    rate(user, id, dto) {
+        return this.ridesService.rateRide(id, user, dto.rating);
+    }
     start(user, id) {
         return this.ridesService.startRide(id, user.sub);
     }
@@ -48,6 +62,9 @@ let RidesController = class RidesController {
     }
     cancel(user, id) {
         return this.ridesService.cancelRide(id, user.sub);
+    }
+    driverCancel(user, id) {
+        return this.ridesService.cancelRideByDriver(id, user.sub);
     }
 };
 exports.RidesController = RidesController;
@@ -68,6 +85,19 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "myRides", null);
+__decorate([
+    (0, common_1.Get)('tariff'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "tariff", null);
+__decorate([
+    (0, common_1.Get)('active'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "active", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
@@ -94,6 +124,24 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "reject", null);
+__decorate([
+    (0, common_1.Post)(':id/arrive'),
+    (0, roles_decorator_1.Roles)('driver'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "arrive", null);
+__decorate([
+    (0, common_1.Post)(':id/rate'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, rate_ride_dto_1.RateRideDto]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "rate", null);
 __decorate([
     (0, common_1.Post)(':id/start'),
     (0, roles_decorator_1.Roles)('driver'),
@@ -122,6 +170,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "cancel", null);
+__decorate([
+    (0, common_1.Post)(':id/driver-cancel'),
+    (0, roles_decorator_1.Roles)('driver'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "driverCancel", null);
 exports.RidesController = RidesController = __decorate([
     (0, common_1.Controller)('rides'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

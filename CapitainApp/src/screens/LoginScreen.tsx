@@ -4,6 +4,7 @@ import {
   Platform, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -49,7 +50,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading,  setLoading]  = useState(false);
   const [pwdFocus, setPwdFocus] = useState(false);
 
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
   const mountAnim   = useRef(new Animated.Value(0)).current;
   const canSubmit   = phone.trim().length >= 9 && password.length >= 6;
 
@@ -61,9 +62,9 @@ export default function LoginScreen({ navigation }: Props) {
     if (!canSubmit) return;
     setLoading(true);
     try {
-      const res = await apiPost<LoginResponse, { phone: string; password: string }>(
+      const res = await apiPost<LoginResponse, { phone: string; password: string; role: string }>(
         '/auth/login',
-        { phone: phone.trim(), password },
+        { phone: phone.trim(), password, role: 'driver' },
       );
       await SecureStore.setItemAsync(SECURE_STORE_KEY, res.accessToken);
       navigation.replace('Home');

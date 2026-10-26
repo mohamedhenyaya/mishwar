@@ -6,4 +6,7 @@ export declare class UsersService {
     constructor(userRepo: Repository<User>);
     findById(id: string): Promise<User>;
     update(id: string, dto: UpdateUserDto): Promise<User>;
+    setPhoto(id: string, photoUrl: string): Promise<User>;
+    incrementTotalRides(id: string): Promise<void>;
+    addRating(id: string, rating: number): Promise<void>;
 }

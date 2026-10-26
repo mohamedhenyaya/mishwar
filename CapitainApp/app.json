@@ -45,7 +45,16 @@
         }
       ],
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-status-bar",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Nous accédons à vos photos pour choisir votre photo de profil."
+        }
+      ],
+      "expo-notifications",
+      "expo-audio"
     ]
   }
 }

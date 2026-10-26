@@ -1,5 +1,11 @@
-import { Body, Controller, Get, Patch, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException, Body, Controller, Get, Patch, Post, Query,
+  UploadedFile, UseGuards, UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { photoPath, photoUploadOptions } from '../../common/utils/photo-upload.util';
+import { UpdateDriverDto } from './dto/update-driver.dto';
 import { DriversService } from './drivers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -28,6 +34,27 @@ export class DriversController {
   @ApiOperation({ summary: 'Profil du chauffeur connecté' })
   getProfile(@CurrentUser() user: JwtPayload) {
     return this.driversService.findById(user.sub);
+  }
+
+  @Patch('me')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('driver')
+  @ApiOperation({ summary: 'Mettre à jour son profil et son véhicule' })
+  updateProfile(@CurrentUser() user: JwtPayload, @Body() dto: UpdateDriverDto) {
+    return this.driversService.updateProfile(user.sub, dto);
+  }
+
+  @Post('me/photo')
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('driver')
+  @ApiOperation({ summary: 'Envoyer sa photo de profil (champ "photo")' })
+  @UseInterceptors(FileInterceptor('photo', photoUploadOptions))
+  uploadPhoto(@CurrentUser() user: JwtPayload, @UploadedFile() file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Aucune photo reçue');
+    return this.driversService.updateProfile(user.sub, { photoUrl: photoPath(file) });
   }
 
   @Patch('location')
