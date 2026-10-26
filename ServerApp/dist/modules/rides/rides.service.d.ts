@@ -3,6 +3,11 @@ import { Repository } from 'typeorm';
 import { Ride } from './entities/ride.entity';
 import { CreateRideDto } from './dto/create-ride.dto';
 import { CompleteRideDto } from './dto/complete-ride.dto';
+import { AdminRidesQueryDto } from './dto/admin-rides-query.dto';
+import { CreateScheduledRideDto } from './dto/create-scheduled-ride.dto';
+import { UpdateScheduledRideDto } from './dto/update-scheduled-ride.dto';
+import { EstimateRideDto } from './dto/estimate-ride.dto';
+import { LeaderboardPeriod } from './dto/leaderboard-query.dto';
 import { GeolocationGateway } from '../geolocation/geolocation.gateway';
 import { DriversService } from '../drivers/drivers.service';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -12,15 +17,21 @@ export type RideDetails = Ride & {
     driver: PublicDriver | null;
     user: PublicUser;
 };
-export declare class RidesService {
+export declare class RidesService implements OnModuleInit {
     private readonly rideRepo;
     private readonly geolocationGateway;
     private readonly driversService;
     private readonly usersService;
     private readonly config;
+    private readonly settingsService;
+    private readonly walletService;
+    private readonly promotionsService;
+    private readonly usersService;
     private readonly logger;
-    constructor(rideRepo: Repository<Ride>, geolocationGateway: GeolocationGateway, driversService: DriversService, usersService: UsersService, config: ConfigService);
+    constructor(rideRepo: Repository<Ride>, geolocationGateway: GeolocationGateway, driversService: DriversService, usersService: UsersService, config: ConfigService, settingsService: SettingsService, walletService: WalletService, promotionsService: PromotionsService, usersService: UsersService);
+    onModuleInit(): void;
     createRide(userId: string, dto: CreateRideDto): Promise<Ride>;
+    private activatePendingRide;
     findById(id: string): Promise<Ride | null>;
     findByUser(userId: string): Promise<Ride[]>;
     findByIdForParticipant(id: string, jwt: JwtPayload): Promise<RideDetails>;
@@ -30,9 +41,29 @@ export declare class RidesService {
     rejectRide(rideId: string, driverId: string): Promise<void>;
     arriveRide(rideId: string, driverId: string): Promise<Ride>;
     startRide(rideId: string, driverId: string): Promise<Ride>;
+    recordMeterPing(rideId: string, latitude: number, longitude: number): Promise<{
+        distanceKm: number;
+        stoppedMinutes: number;
+        price: number;
+    } | null>;
     completeRide(rideId: string, driverId: string, dto: CompleteRideDto): Promise<Ride>;
-    cancelRide(rideId: string, userId: string): Promise<void>;
+    cancelRide(rideId: string, userId: string, reason?: string): Promise<void>;
     cancelRideByDriver(rideId: string, driverId: string): Promise<void>;
     rateRide(rideId: string, jwt: JwtPayload, rating: number): Promise<void>;
     private scheduleRideTimeout;
+    estimateRide(dto: EstimateRideDto): Promise<{
+        distanceKm: number;
+        estimatedDurationMinutes: number;
+        estimatedPrice: number;
+    }>;
+    getReceipt(rideId: string, jwt: JwtPayload): Promise<Record<string, unknown>>;
+    createScheduledRide(userId: string, dto: CreateScheduledRideDto): Promise<Ride>;
+    findScheduledByUser(userId: string): Promise<Ride[]>;
+    updateScheduledRide(rideId: string, userId: string, dto: UpdateScheduledRideDto): Promise<Ride>;
+    cancelScheduledRide(rideId: string, userId: string): Promise<void>;
+    findScheduledForAdmin(query: PaginationQueryDto): Promise<PaginatedResult<Ride>>;
+    private activateDueScheduledRides;
+    findAllForAdmin(query: AdminRidesQueryDto): Promise<PaginatedResult<Ride>>;
+    findByIdForAdmin(id: string): Promise<Ride>;
+    getLeaderboard(period: LeaderboardPeriod, currentUserId: string): Promise<LeaderboardResult>;
 }

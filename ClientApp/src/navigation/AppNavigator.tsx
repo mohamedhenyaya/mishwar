@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../services/secureStorage';
 
 import { RootStackParamList } from '../types';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { navigationRef } from './navigationRef';
+<<<<<<< HEAD
 import RideCancellationWatcher from '../components/RideCancellationWatcher';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import LoginScreen   from '../screens/LoginScreen';
@@ -17,6 +18,16 @@ import MatchScreen   from '../screens/MatchScreen';
 import TripScreen    from '../screens/TripScreen';
 import RatingScreen  from '../screens/RatingScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+=======
+import { colors } from '../theme';
+import MainTabs        from './MainTabs';
+import WelcomeScreen    from '../screens/WelcomeScreen';
+import LoginScreen      from '../screens/LoginScreen';
+import AuthScreen       from '../screens/AuthScreen';
+import MatchScreen      from '../screens/MatchScreen';
+import FavoritesScreen  from '../screens/FavoritesScreen';
+import SupportScreen    from '../screens/SupportScreen';
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -32,8 +43,8 @@ export default function AppNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1A1A2E' }}>
-        <ActivityIndicator size="large" color="#FFFFFF" />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary }}>
+        <ActivityIndicator size="large" color={colors.textInverse} />
       </View>
     );
   }
@@ -42,11 +53,11 @@ export default function AppNavigator() {
     <NavigationContainer ref={navigationRef}>
       <RideCancellationWatcher />
       <Stack.Navigator
-        initialRouteName={isAuthenticated ? 'Home' : 'Welcome'}
+        initialRouteName={isAuthenticated ? 'Main' : 'Welcome'}
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
-          contentStyle: { backgroundColor: '#F5F5F7' },
+          contentStyle: { backgroundColor: colors.bg },
         }}
       >
         {/* ── Écrans publics ──────────────────────────────────────────────── */}
@@ -65,17 +76,13 @@ export default function AppNavigator() {
         />
 
         {/* ── Écrans authentifiés ─────────────────────────────────────────── */}
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen
-          name="Booking"
-          component={BookingScreen}
-          options={{ animation: 'slide_from_bottom' }}
-        />
+        <Stack.Screen name="Main" component={MainTabs} options={{ animation: 'fade' }} />
         <Stack.Screen
           name="Match"
           component={MatchScreen}
           options={{ animation: 'fade' }}
         />
+<<<<<<< HEAD
         <Stack.Screen
           name="Trip"
           component={TripScreen}
@@ -91,6 +98,10 @@ export default function AppNavigator() {
           component={ProfileScreen}
           options={{ animation: 'slide_from_right' }}
         />
+=======
+        <Stack.Screen name="Favorites" component={FavoritesScreen} />
+        <Stack.Screen name="Support" component={SupportScreen} />
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
       </Stack.Navigator>
     </NavigationContainer>
   );

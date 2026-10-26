@@ -46,6 +46,7 @@
       ],
       "expo-asset",
       "expo-secure-store",
+<<<<<<< HEAD
       "expo-status-bar",
       [
         "expo-image-picker",
@@ -55,6 +56,17 @@
       ],
       "expo-notifications",
       "expo-audio"
+=======
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F8F5FF",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain"
+        }
+      ]
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     ]
   }
 }

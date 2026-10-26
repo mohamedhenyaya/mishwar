@@ -14,6 +14,11 @@ export declare class User {
     role: UserRole;
     passwordHash: string;
     isActive: boolean;
+    blockedReason: string | null;
+    blockedAt: Date | null;
+    balance: number;
+    rating: number;
+    ratingCount: number;
     createdAt: Date;
     updatedAt: Date;
 }

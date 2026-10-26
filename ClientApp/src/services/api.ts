@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './secureStorage';
 import { API_BASE_URL, SECURE_STORE_KEY } from '../config/constants';
 import { resetToWelcome } from '../navigation/navigationRef';
 
@@ -55,5 +55,10 @@ export async function apiPost<T, B = unknown>(path: string, body: B): Promise<T>
 
 export async function apiPatch<T, B = unknown>(path: string, body: B): Promise<T> {
   const res = await apiClient.patch<T>(path, body);
+  return res.data;
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const res = await apiClient.delete<T>(path);
   return res.data;
 }

@@ -48,6 +48,22 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ nullable: true })
+  blockedReason: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  blockedAt: Date | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  balance: number;
+
+  @Column({ type: 'decimal', precision: 3, scale: 2, default: 5.0 })
+  rating: number;
+
+  // Nombre de notes reçues — nécessaire pour calculer une vraie moyenne glissante
+  @Column({ default: 0 })
+  ratingCount: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const ride_entity_1 = require("./entities/ride.entity");
 const rides_controller_1 = require("./rides.controller");
+const admin_rides_controller_1 = require("./admin-rides.controller");
 const rides_service_1 = require("./rides.service");
 const geolocation_module_1 = require("../geolocation/geolocation.module");
 const drivers_module_1 = require("../drivers/drivers.module");
@@ -26,8 +27,9 @@ exports.RidesModule = RidesModule = __decorate([
             drivers_module_1.DriversModule,
             users_module_1.UsersModule,
         ],
-        controllers: [rides_controller_1.RidesController],
+        controllers: [rides_controller_1.RidesController, admin_rides_controller_1.AdminRidesController],
         providers: [rides_service_1.RidesService],
+        exports: [rides_service_1.RidesService],
     })
 ], RidesModule);
 //# sourceMappingURL=rides.module.js.map

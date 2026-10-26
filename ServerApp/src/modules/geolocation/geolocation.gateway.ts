@@ -8,10 +8,11 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { forwardRef, Inject, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { DriversService } from '../drivers/drivers.service';
+<<<<<<< HEAD
 import { Driver, DriverStatus } from '../drivers/entities/driver.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -39,6 +40,16 @@ const OFFLINE_GRACE_MS = 60_000;
 // Filtre GPS : on ignore le bruit (< 8 m) et les sauts aberrants (> 2 km entre deux points)
 const MIN_STEP_METERS = 8;
 const MAX_STEP_METERS = 2_000;
+=======
+import { Driver } from '../drivers/entities/driver.entity';
+import { Ride } from '../rides/entities/ride.entity';
+import { RidesService } from '../rides/rides.service';
+import { VEHICLE_CLASS_TO_DRIVER_TYPES } from '../rides/utils/vehicle-class.util';
+import { estimateEtaMinutes } from '../rides/utils/pricing.util';
+import { JwtPayload } from '../auth/strategies/jwt.strategy';
+
+type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled' | 'driver_cancelled';
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class GeolocationGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
@@ -53,7 +64,10 @@ export class GeolocationGateway implements OnGatewayInit, OnGatewayConnection, O
   private readonly meters = new Map<string, OpenTripMeter>();
 
   constructor(
+    @Inject(forwardRef(() => DriversService))
     private readonly driversService: DriversService,
+    @Inject(forwardRef(() => RidesService))
+    private readonly ridesService: RidesService,
     private readonly jwtService: JwtService,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
@@ -214,12 +228,23 @@ export class GeolocationGateway implements OnGatewayInit, OnGatewayConnection, O
       timestamp: new Date().toISOString(),
     };
 
+<<<<<<< HEAD
     await this.addMeterDistance(driverId, data.latitude, data.longitude);
 
     // Course en cours : position envoyée en direct au client uniquement
     const riderId = this.driverActiveRide.get(driverId);
     if (riderId) {
       this.server.to(`user:${riderId}`).emit('driver:position', payload);
+=======
+    const activeRideId = this.driverActiveRide.get(driverId);
+    if (activeRideId) {
+      this.server.to(`ride:${activeRideId}`).emit('driver:position', payload);
+
+      const meterSnapshot = await this.ridesService.recordMeterPing(activeRideId, data.latitude, data.longitude);
+      if (meterSnapshot) {
+        this.server.to(`ride:${activeRideId}`).emit('ride:meter', { rideId: activeRideId, ...meterSnapshot });
+      }
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     } else {
       // Aucune course active : diffusion globale conservée pour l'aperçu carte (HomeScreen)
       this.server.emit('driver:position', payload);
@@ -332,9 +357,16 @@ export class GeolocationGateway implements OnGatewayInit, OnGatewayConnection, O
     this.server.to(`driver:${driverId}`).emit('ride:unavailable', { rideId });
   }
 
+<<<<<<< HEAD
   // Course annulée après acceptation : le chauffeur ne diffuse plus vers ce client
   releaseDriver(driverId: string): void {
     this.driverActiveRide.delete(driverId);
     this.stopMeter(driverId);
+=======
+  // ── Émission générique ciblée — réutilisée par NotificationsModule, blocage admin, etc. ──
+
+  notifyCustom(room: string, event: string, payload: unknown): void {
+    this.server.to(room).emit(event, payload);
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   }
 }

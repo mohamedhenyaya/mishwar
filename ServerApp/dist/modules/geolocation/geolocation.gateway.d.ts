@@ -8,6 +8,7 @@ import { Ride } from '../rides/entities/ride.entity';
 type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled' | 'driver_cancelled';
 export declare class GeolocationGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     private readonly driversService;
+    private readonly ridesService;
     private readonly jwtService;
     private readonly rideRepo;
     server: Server;
@@ -15,7 +16,7 @@ export declare class GeolocationGateway implements OnGatewayInit, OnGatewayConne
     private readonly connectedDrivers;
     private readonly driverActiveRide;
     private readonly meters;
-    constructor(driversService: DriversService, jwtService: JwtService, rideRepo: Repository<Ride>);
+    constructor(driversService: DriversService, ridesService: RidesService, jwtService: JwtService, rideRepo: Repository<Ride>);
     handleConnection(client: Socket): Promise<void>;
     afterInit(): void;
     handleDisconnect(client: Socket): void;

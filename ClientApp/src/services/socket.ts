@@ -16,6 +16,7 @@ const EVENTS = {
   RIDE_COMPLETED: 'ride:completed',
   RIDE_UNAVAILABLE: 'ride:unavailable',
   RIDE_CANCELLED: 'ride:cancelled',
+  RIDE_METER: 'ride:meter',
 } as const;
 
 // ─── Payload types ────────────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ export interface RideAcceptedPayload {
   driver: RideAcceptedDriver;
 }
 
+<<<<<<< HEAD
 export interface DriverPositionPayload {
   driverId: string;
   latitude: number;
@@ -46,6 +48,13 @@ export interface RideEvents {
   'driver:position': DriverPositionPayload;
   'ride:meter':      MeterReading;
   'driver:status':   { driverId: string; status: 'ONLINE' | 'OFFLINE' | 'BUSY' };
+=======
+export interface RideMeterPayload {
+  rideId: string;
+  distanceKm: number;
+  stoppedMinutes: number;
+  price: number;
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 }
 
 // ─── Singleton service ────────────────────────────────────────────────────────
@@ -146,6 +155,10 @@ class SocketService {
     this.socket?.on(EVENTS.RIDE_CANCELLED, cb);
   }
 
+  onRideMeter(cb: (payload: RideMeterPayload) => void): void {
+    this.socket?.on(EVENTS.RIDE_METER, cb);
+  }
+
   // ── Cleanup helpers ───────────────────────────────────────────────────────
 
   offDriversUpdate(): void {
@@ -174,6 +187,10 @@ class SocketService {
 
   offRideCancelled(): void {
     this.socket?.off(EVENTS.RIDE_CANCELLED);
+  }
+
+  offRideMeter(): void {
+    this.socket?.off(EVENTS.RIDE_METER);
   }
 }
 

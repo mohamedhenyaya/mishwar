@@ -52,11 +52,19 @@ export class Driver {
   @Column({ type: 'decimal', precision: 3, scale: 2, default: 5.0 })
   rating: number;
 
+  // Nombre de notes reçues — nécessaire pour calculer une vraie moyenne glissante
+  @Column({ default: 0 })
+  ratingCount: number;
+
   @Column({ default: 0 })
   ratingCount: number;
 
   @Column({ default: 0 })
   totalRides: number;
+
+  // Token push (FCM/APNs) — stocké en préparation d'une future intégration, rien ne l'envoie encore
+  @Column({ nullable: true })
+  deviceToken: string | null;
 
   // Coordonnées GPS stockées en colonnes séparées (compatible PostgreSQL standard)
   @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
@@ -70,6 +78,16 @@ export class Driver {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ nullable: true })
+  blockedReason: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  blockedAt: Date | null;
+
+  // Solde de crédit prépayé — la commission de chaque course terminée y est automatiquement déduite
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  balance: number;
 
   @CreateDateColumn()
   createdAt: Date;

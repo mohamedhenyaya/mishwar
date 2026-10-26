@@ -17,7 +17,8 @@ export interface NearbyDriverResult {
 }
 export declare class DriversService {
     private readonly driverRepo;
-    constructor(driverRepo: Repository<Driver>);
+    private readonly geolocationGateway;
+    constructor(driverRepo: Repository<Driver>, geolocationGateway: GeolocationGateway);
     findNearby(dto: NearbyDriversDto, vehicleTypes?: VehicleType[]): Promise<NearbyDriverResult[]>;
     updateLocation(id: string, dto: UpdateLocationDto): Promise<void>;
     readonly statusChanges: Subject<{

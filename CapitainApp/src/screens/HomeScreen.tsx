@@ -3,15 +3,19 @@ import React, {
 } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
+<<<<<<< HEAD
   Animated, Dimensions, ScrollView, Alert, ActivityIndicator, Linking, AppState,
+=======
+  Animated, Dimensions,
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as SecureStore from 'expo-secure-store';
+import { Ionicons } from '@expo/vector-icons';
 
+<<<<<<< HEAD
 import { captainSocketService, MeterReading, RideRequestPayload } from '../services/socket';
 import { apiGet, apiPatch, apiPost } from '../services/api';
 import { ensureNotificationPermission, notify } from '../services/notifications';
@@ -25,14 +29,16 @@ import { SECURE_STORE_KEY, APP_VERSION } from '../config/constants';
 import {
   Coordinates, DriverProfile, PublicUser, RideDetails, RootStackParamList,
 } from '../types';
+=======
+import { useDriverStatus } from '../context/DriverStatusContext';
+import { Coordinates, HomeScreenProps } from '../types';
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 import { C, G, SH, RADIUS } from '../theme';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
-
 const { width: SW } = Dimensions.get('window');
-const DRAWER_WIDTH  = SW * 0.80;
-const DELTA         = { latitudeDelta: 0.012, longitudeDelta: 0.012 };
+const DELTA = { latitudeDelta: 0.012, longitudeDelta: 0.012 };
 
+<<<<<<< HEAD
 const MENU_ITEMS = [
   { key: 'Mon profil',      icon: '👤', color: '#EDE9FF', route: 'Profil'     as const },
   { key: 'Notifications',   icon: '🔔', color: '#FFF3E0', route: null           },
@@ -89,19 +95,25 @@ const apiErrorMessage = (e: any, fallback: string): string =>
   e?.response?.data?.message ?? fallback;
 
 export default function HomeScreen({ navigation }: Props) {
+=======
+export default function HomeScreen({ navigation }: HomeScreenProps) {
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
+  const { isOnline, goOnline, goOffline } = useDriverStatus();
   const [location,   setLocation]   = useState<Coordinates | null>(null);
   const locationRef = useRef<Coordinates | null>(null);
   locationRef.current = location;
   const [region,     setRegion]     = useState<Region | null>(null);
+<<<<<<< HEAD
   const [isOnline,   setIsOnline]   = useState(false);
   // Lus par les listeners socket (enregistrés une seule fois)
   const isOnlineRef = useRef(false);
   isOnlineRef.current = isOnline;
+=======
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   const [now,        setNow]        = useState(new Date());
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [todayRides,    setTodayRides]    = useState(0);
   const [rideRequest,   setRideRequest]   = useState<RideRequestPayload | null>(null);
@@ -159,8 +171,6 @@ export default function HomeScreen({ navigation }: Props) {
     return () => sub.remove();
   }, []);
 
-  const drawerAnim  = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const overlayAnim = useRef(new Animated.Value(0)).current;
   const pillScale   = useRef(new Animated.Value(1)).current;
   const pulseAnim   = useRef(new Animated.Value(1)).current;
   const cardSlide   = useRef(new Animated.Value(120)).current;
@@ -225,6 +235,7 @@ export default function HomeScreen({ navigation }: Props) {
 
   useEffect(() => {
     initLocation();
+<<<<<<< HEAD
     let cancelled = false;
 
     (async () => {
@@ -296,10 +307,16 @@ export default function HomeScreen({ navigation }: Props) {
 
   const toggleOnline = async () => {
     if (activeRide || rideToRate) return; // pas de changement de statut pendant une course
+=======
+  }, [initLocation]);
+
+  const toggleOnline = async () => {
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     Animated.sequence([
       Animated.timing(pillScale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
       Animated.spring(pillScale, { toValue: 1,   tension: 80, useNativeDriver: true }),
     ]).start();
+<<<<<<< HEAD
 
     const goingOnline = !isOnline;
     try {
@@ -428,6 +445,13 @@ export default function HomeScreen({ navigation }: Props) {
     closeDrawer();
     await SecureStore.deleteItemAsync(SECURE_STORE_KEY);
     setTimeout(() => navigation.replace('Welcome'), 290);
+=======
+    if (isOnline) {
+      await goOffline();
+    } else {
+      await goOnline();
+    }
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   };
 
   const centerMap = () => {
@@ -471,8 +495,8 @@ export default function HomeScreen({ navigation }: Props) {
       <View style={[styles.topBar, { top: insets.top + 10 }]}>
 
         {/* Burger */}
-        <TouchableOpacity style={styles.topBtn} onPress={openDrawer} activeOpacity={0.8}>
-          <Text style={styles.topBtnIcon}>☰</Text>
+        <TouchableOpacity style={styles.topBtn} onPress={() => navigation.openDrawer()} activeOpacity={0.8}>
+          <Ionicons name="menu" size={20} color={C.dark} />
         </TouchableOpacity>
 
         {/* Status pill */}
@@ -499,7 +523,7 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.timeText}>{formatTime(now)}</Text>
           </View>
           <TouchableOpacity style={styles.topBtn} onPress={centerMap} activeOpacity={0.8}>
-            <Text style={styles.topBtnIcon}>◎</Text>
+            <Ionicons name="locate" size={19} color={C.dark} />
           </TouchableOpacity>
         </View>
       </View>
@@ -642,7 +666,10 @@ export default function HomeScreen({ navigation }: Props) {
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={styles.onlineHeader}
             >
-              <Text style={styles.onlineTitle}>🟢  En attente de courses…</Text>
+              <View style={styles.onlineTitleRow}>
+                <Ionicons name="radio" size={14} color={C.white} />
+                <Text style={styles.onlineTitle}>En attente de courses…</Text>
+              </View>
               <View style={styles.onlineStats}>
                 <View style={styles.onlineStat}>
                   <Text style={styles.onlineStatVal}>{todayRides}</Text>
@@ -663,7 +690,9 @@ export default function HomeScreen({ navigation }: Props) {
           /* Offline card */
           <View style={styles.offlineCard}>
             <View style={styles.offlineLeft}>
-              <Text style={styles.offlineIcon}>🔴</Text>
+              <View style={styles.offlineIconWrap}>
+                <Ionicons name="power" size={20} color={C.danger} />
+              </View>
               <View>
                 <Text style={styles.offlineTitle}>Vous êtes hors ligne</Text>
                 <Text style={styles.offlineSub}>Activez pour recevoir des courses</Text>
@@ -681,6 +710,7 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         )}
       </Animated.View>
+<<<<<<< HEAD
 
       {/* ── Overlay ── */}
       {drawerOpen && (
@@ -771,6 +801,8 @@ export default function HomeScreen({ navigation }: Props) {
       </Animated.View>
 
       <CancellationModal notice={cancelNotice} onClose={() => setCancelNotice(null)} />
+=======
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     </View>
   );
 }
@@ -794,7 +826,6 @@ const styles = StyleSheet.create({
     backgroundColor: C.white, alignItems: 'center', justifyContent: 'center',
     ...SH.sm,
   },
-  topBtnIcon: { fontSize: 18, color: C.dark },
 
   // Status pill
   statusPill: {
@@ -833,7 +864,8 @@ const styles = StyleSheet.create({
   // Online card
   onlineCard: { backgroundColor: C.surface },
   onlineHeader: { padding: 18 },
-  onlineTitle:  { fontSize: 14, fontWeight: '700', color: C.white, marginBottom: 12 },
+  onlineTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  onlineTitle:  { fontSize: 14, fontWeight: '700', color: C.white },
   onlineStats:  { flexDirection: 'row', alignItems: 'center' },
   onlineStat:   { flex: 1, alignItems: 'center' },
   onlineStatVal:{ fontSize: 22, fontWeight: '900', color: C.white },
@@ -901,97 +933,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12,
   },
   offlineLeft:  { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  offlineIcon:  { fontSize: 24 },
+  offlineIconWrap: {
+    width: 40, height: 40, borderRadius: RADIUS.md,
+    backgroundColor: '#FFF1F5', alignItems: 'center', justifyContent: 'center',
+  },
   offlineTitle: { fontSize: 15, fontWeight: '700', color: C.text },
   offlineSub:   { fontSize: 12, color: C.sub, marginTop: 2 },
   goOnlineBtnWrap: { borderRadius: RADIUS.lg, overflow: 'hidden', ...SH.green },
   goOnlineBtn: { paddingHorizontal: 20, paddingVertical: 12 },
   goOnlineBtnText: { fontSize: 14, fontWeight: '800', color: C.white },
-
-  // ── Overlay
-  overlay: { backgroundColor: '#000', zIndex: 20 },
-
-  // ── Drawer
-  drawer: {
-    position: 'absolute', top: 0, bottom: 0, left: 0,
-    width: DRAWER_WIDTH, backgroundColor: C.surface, zIndex: 30,
-    ...SH.dark,
-  },
-  drawerHeader: {
-    paddingHorizontal: 24, paddingBottom: 24, overflow: 'hidden',
-  },
-  drawerBlob: {
-    position: 'absolute', top: -60, right: -80,
-    width: 220, height: 220, borderRadius: 110,
-    backgroundColor: C.primaryLt, opacity: 0.1,
-  },
-
-  // Avatar
-  avatarWrap: { position: 'relative', alignSelf: 'flex-start', marginBottom: 14 },
-  avatarRing: {
-    width: 70, height: 70, borderRadius: 35,
-    padding: 2.5, alignItems: 'center', justifyContent: 'center',
-  },
-  avatar: {
-    width: 65, height: 65, borderRadius: 32.5,
-    backgroundColor: C.darkMid,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontSize: 28, fontWeight: '800', color: C.white },
-  avatarBadge: {
-    position: 'absolute', bottom: 2, right: 2,
-    width: 16, height: 16, borderRadius: 8,
-    borderWidth: 2.5, borderColor: C.white,
-  },
-
-  drawerName:  { fontSize: 20, fontWeight: '800', color: C.white, marginBottom: 4 },
-  drawerPhone: { fontSize: 13, color: 'rgba(255,255,255,0.55)', marginBottom: 12 },
-
-  ratingChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 6,
-    alignSelf: 'flex-start',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
-  },
-  ratingIcon: { fontSize: 12 },
-  ratingText: { fontSize: 13, color: C.white, fontWeight: '700' },
-  ratingDot:  { fontSize: 13, color: 'rgba(255,255,255,0.4)' },
-
-  // Menu
-  drawerMenu:   { flex: 1 },
-  menuItem: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 13, gap: 14,
-  },
-  menuIconBadge: {
-    width: 40, height: 40, borderRadius: RADIUS.md,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  menuEmoji: { fontSize: 18 },
-  menuLabel: { flex: 1, fontSize: 15, color: C.text, fontWeight: '600' },
-  menuChev:  { fontSize: 22, color: C.muted, fontWeight: '300' },
-  menuDivider: { height: 1, backgroundColor: C.border, marginHorizontal: 20, marginVertical: 4 },
-
-  // Passenger
-  passengerRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14,
-  },
-  passengerContent: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  passengerIcon:    { fontSize: 22, width: 40, textAlign: 'center' },
-  passengerTitle:   { fontSize: 15, fontWeight: '600', color: C.text },
-  passengerSub:     { fontSize: 12, color: C.sub, marginTop: 2 },
-  passengerBadge:   { backgroundColor: C.surfaceAlt, borderRadius: RADIUS.pill, paddingHorizontal: 8, paddingVertical: 3 },
-  passengerBadgeText: { fontSize: 11, color: C.primary, fontWeight: '700' },
-
-  // Logout
-  logoutRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 13, gap: 14,
-  },
-
-  drawerFooter: { padding: 20, gap: 4 },
-  footerLang:    { fontSize: 13, color: C.sub },
-  footerVersion: { fontSize: 11, color: C.muted },
 });

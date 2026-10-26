@@ -1,39 +1,40 @@
 import React, { useState } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
-  ScrollView, TextInput, Alert, Switch,
+  ScrollView, TextInput, Alert, Switch, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { RootStackParamList } from '../types';
-import { SECURE_STORE_KEY } from '../config/constants';
+import { SECURE_STORE_KEY, SUPPORT_PHONE, SUPPORT_WHATSAPP } from '../config/constants';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Parametres'>;
+type IoniconName = keyof typeof Ionicons.glyphMap;
 
 // ─── Section header ───────────────────────────────────────────────────────────
-function Section({ label, icon }: { label: string; icon: string }) {
+function Section({ label, icon }: { label: string; icon: IoniconName }) {
   return (
     <View style={sec.row}>
-      <Text style={sec.icon}>{icon}</Text>
+      <Ionicons name={icon} size={15} color={C.primary} />
       <Text style={sec.label}>{label}</Text>
     </View>
   );
 }
 const sec = StyleSheet.create({
   row:   { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, marginBottom: 8, marginTop: 20 },
-  icon:  { fontSize: 15 },
   label: { fontSize: 13, fontWeight: '800', color: C.primary, textTransform: 'uppercase', letterSpacing: 0.8 },
 });
 
 // ─── Settings row ─────────────────────────────────────────────────────────────
 function SettingRow({
-  badgeIcon, badgeBg, label, value, onPress, last = false,
+  badgeIcon, badgeBg, badgeColor = C.primary, label, sub, value, onPress, last = false, external = false,
 }: {
-  badgeIcon: string; badgeBg: string; label: string;
-  value?: string; onPress?: () => void; last?: boolean;
+  badgeIcon: IoniconName; badgeBg: string; badgeColor?: string; label: string; sub?: string;
+  value?: string; onPress?: () => void; last?: boolean; external?: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -43,43 +44,47 @@ function SettingRow({
       disabled={!onPress}
     >
       <View style={[row.badge, { backgroundColor: badgeBg }]}>
-        <Text style={row.badgeIcon}>{badgeIcon}</Text>
+        <Ionicons name={badgeIcon} size={18} color={badgeColor} />
       </View>
-      <Text style={row.label}>{label}</Text>
-      {value && (
+      <View style={{ flex: 1 }}>
+        <Text style={row.label}>{label}</Text>
+        {sub && <Text style={row.sub}>{sub}</Text>}
+      </View>
+      {value !== undefined && (
         <View style={row.right}>
           <Text style={row.value}>{value}</Text>
-          {onPress && <Text style={row.chev}>›</Text>}
+          {onPress && <Ionicons name="chevron-forward" size={19} color={C.muted} />}
         </View>
       )}
+      {external && <Ionicons name="open-outline" size={18} color={C.sub} />}
     </TouchableOpacity>
   );
 }
 
 function DropdownRow({ badgeIcon, badgeBg, label, value, last = false }: {
-  badgeIcon: string; badgeBg: string; label: string; value: string; last?: boolean;
+  badgeIcon: IoniconName; badgeBg: string; label: string; value: string; last?: boolean;
 }) {
   return (
     <View style={[row.wrap, last && row.last]}>
       <View style={[row.badge, { backgroundColor: badgeBg }]}>
-        <Text style={row.badgeIcon}>{badgeIcon}</Text>
+        <Ionicons name={badgeIcon} size={18} color={C.primary} />
       </View>
       <Text style={row.label}>{label}</Text>
       <View style={row.dropdownRight}>
         <Text style={row.dropValue}>{value}</Text>
-        <View style={row.dropArrow}><Text style={row.dropArrowText}>▼</Text></View>
+        <View style={row.dropArrow}><Ionicons name="chevron-down" size={10} color={C.primary} /></View>
       </View>
     </View>
   );
 }
 
 function SwitchRow({ badgeIcon, badgeBg, label, value, onChange, last = false }: {
-  badgeIcon: string; badgeBg: string; label: string; value: boolean; onChange: (v: boolean) => void; last?: boolean;
+  badgeIcon: IoniconName; badgeBg: string; label: string; value: boolean; onChange: (v: boolean) => void; last?: boolean;
 }) {
   return (
     <View style={[row.wrap, last && row.last]}>
       <View style={[row.badge, { backgroundColor: badgeBg }]}>
-        <Text style={row.badgeIcon}>{badgeIcon}</Text>
+        <Ionicons name={badgeIcon} size={18} color={C.primary} />
       </View>
       <Text style={row.label}>{label}</Text>
       <Switch
@@ -100,15 +105,13 @@ const row = StyleSheet.create({
   },
   last:      { borderBottomWidth: 0 },
   badge:     { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  badgeIcon: { fontSize: 17 },
-  label:     { flex: 1, fontSize: 15, color: C.text, fontWeight: '500' },
+  label:     { fontSize: 15, color: C.text, fontWeight: '500' },
+  sub:       { fontSize: 12, color: C.sub, marginTop: 1 },
   right:     { flexDirection: 'row', alignItems: 'center', gap: 4 },
   value:     { fontSize: 14, color: C.sub },
-  chev:      { fontSize: 20, color: C.muted, fontWeight: '300' },
   dropdownRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dropValue:     { fontSize: 14, color: C.primary, fontWeight: '600' },
   dropArrow:     { width: 22, height: 22, borderRadius: 6, backgroundColor: C.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  dropArrowText: { fontSize: 9, color: C.primary, fontWeight: '700' },
 });
 
 // ─── Volume slider ────────────────────────────────────────────────────────────
@@ -118,7 +121,7 @@ function VolumeRow({ value, onChange }: { value: number; onChange: (v: number) =
     <View style={vol.wrap}>
       <View style={vol.header}>
         <View style={[row.badge, { backgroundColor: '#FFF3E0' }]}>
-          <Text style={row.badgeIcon}>🔔</Text>
+          <Ionicons name="notifications" size={17} color={C.primary} />
         </View>
         <Text style={vol.label}>Volume de sonnerie</Text>
         <View style={vol.valuePill}>
@@ -207,12 +210,15 @@ export default function ParametresScreen({ navigation }: Props) {
     );
   };
 
+  const callSupport = () => Linking.openURL(`tel:${SUPPORT_PHONE}`);
+  const chatWhatsapp = () => Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP.replace(/[^0-9]/g, '')}`);
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* ── Header ── */}
       <LinearGradient colors={G.dark} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backIcon}>‹</Text>
+          <Ionicons name="chevron-back" size={22} color={C.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Paramètres</Text>
         <Text style={styles.headerSub}>Personnalisez votre expérience</Text>
@@ -223,42 +229,42 @@ export default function ParametresScreen({ navigation }: Props) {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
       >
         {/* ── Langue ── */}
-        <Section icon="🌐" label="Langue & Région" />
+        <Section icon="globe-outline" label="Langue & Région" />
         <Card>
-          <DropdownRow badgeIcon="🌍" badgeBg="#E8F5E9" label="Application"      value="Français"    />
-          <DropdownRow badgeIcon="📍" badgeBg="#FFF3E0" label="Noms des lieux"   value="العربية" last />
+          <DropdownRow badgeIcon="earth" badgeBg="#E8F5E9" label="Application"      value="Français"    />
+          <DropdownRow badgeIcon="location-outline" badgeBg="#FFF3E0" label="Noms des lieux"   value="العربية" last />
         </Card>
 
         {/* ── Navigation ── */}
-        <Section icon="🗺️" label="Navigation" />
+        <Section icon="map-outline" label="Navigation" />
         <Card>
-          <DropdownRow badgeIcon="▲" badgeBg="#E3F2FD" label="Application GPS par défaut" value="Google Maps" last />
+          <DropdownRow badgeIcon="navigate-outline" badgeBg="#E3F2FD" label="Application GPS par défaut" value="Google Maps" last />
         </Card>
 
         {/* ── Notifications ── */}
-        <Section icon="🔔" label="Notifications" />
+        <Section icon="notifications-outline" label="Notifications" />
         <Card>
-          <SwitchRow badgeIcon="🔊" badgeBg="#FFF3E0" label="Son de notification" value={notifSound}   onChange={setNotifSound}   />
-          <SwitchRow badgeIcon="📳" badgeBg="#F3E5F5" label="Vibration"           value={notifVibrate} onChange={setNotifVibrate} last />
+          <SwitchRow badgeIcon="volume-high-outline" badgeBg="#FFF3E0" label="Son de notification" value={notifSound}   onChange={setNotifSound}   />
+          <SwitchRow badgeIcon="phone-portrait-outline" badgeBg="#F3E5F5" label="Vibration"           value={notifVibrate} onChange={setNotifVibrate} last />
         </Card>
 
         {/* ── Sonnerie ── */}
-        <Section icon="🔔" label="Sonnerie de course" />
+        <Section icon="musical-notes-outline" label="Sonnerie de course" />
         <Card>
           <VolumeRow value={volume} onChange={setVolume} />
         </Card>
 
         {/* ── Informations ── */}
-        <Section icon="👤" label="Informations personnelles" />
+        <Section icon="person-outline" label="Informations personnelles" />
         <Card>
-          <SettingRow badgeIcon="📞" badgeBg="#E8F5E9" label="Téléphone" value="20122724"       />
-          <SettingRow badgeIcon="👤" badgeBg="#EDE9FF" label="Nom"       value="MohamedhenYaya" />
+          <SettingRow badgeIcon="call-outline" badgeBg="#E8F5E9" label="Téléphone" value="20122724"       />
+          <SettingRow badgeIcon="person" badgeBg="#EDE9FF" label="Nom"       value="MohamedhenYaya" />
 
           {/* Email */}
           {editEmail ? (
             <View style={[styles.editRow]}>
               <View style={[row.badge, { backgroundColor: '#E3F2FD' }]}>
-                <Text style={row.badgeIcon}>✉️</Text>
+                <Ionicons name="mail-outline" size={17} color={C.primary} />
               </View>
               <TextInput
                 style={styles.editInput}
@@ -271,18 +277,18 @@ export default function ParametresScreen({ navigation }: Props) {
                 autoFocus
               />
               <TouchableOpacity onPress={() => setEditEmail(false)} style={styles.confirmBtn}>
-                <Text style={styles.confirmIcon}>✓</Text>
+                <Ionicons name="checkmark" size={16} color={C.white} />
               </TouchableOpacity>
             </View>
           ) : (
-            <SettingRow badgeIcon="✉️" badgeBg="#E3F2FD" label="Email" value={email || 'Non renseigné'} onPress={() => setEditEmail(true)} />
+            <SettingRow badgeIcon="mail-outline" badgeBg="#E3F2FD" label="Email" value={email || 'Non renseigné'} onPress={() => setEditEmail(true)} />
           )}
 
           {/* Password */}
           {editPwd ? (
             <View style={[styles.editRow, styles.editRowLast]}>
               <View style={[row.badge, { backgroundColor: '#F3E5F5' }]}>
-                <Text style={row.badgeIcon}>🔐</Text>
+                <Ionicons name="lock-closed-outline" size={17} color={C.primary} />
               </View>
               <TextInput
                 style={styles.editInput}
@@ -294,11 +300,11 @@ export default function ParametresScreen({ navigation }: Props) {
                 autoFocus
               />
               <TouchableOpacity onPress={() => setEditPwd(false)} style={styles.confirmBtn}>
-                <Text style={styles.confirmIcon}>✓</Text>
+                <Ionicons name="checkmark" size={16} color={C.white} />
               </TouchableOpacity>
             </View>
           ) : (
-            <SettingRow badgeIcon="🔐" badgeBg="#F3E5F5" label="Mot de passe" value="Modifier" onPress={() => setEditPwd(true)} last />
+            <SettingRow badgeIcon="lock-closed-outline" badgeBg="#F3E5F5" label="Mot de passe" value="Modifier" onPress={() => setEditPwd(true)} last />
           )}
         </Card>
 
@@ -307,8 +313,9 @@ export default function ParametresScreen({ navigation }: Props) {
           <View style={styles.emailVerifTop}>
             <Text style={styles.emailVerifLabel}>Email vérifié</Text>
             <View style={[styles.emailVerifBadge, { backgroundColor: emailVerified ? '#ECFDF5' : '#FFF1F5', borderColor: emailVerified ? C.accentDk : C.dangerDk }]}>
+              <Ionicons name={emailVerified ? 'checkmark-circle' : 'close-circle'} size={13} color={emailVerified ? C.accentDk : C.danger} />
               <Text style={[styles.emailVerifStatus, { color: emailVerified ? C.accentDk : C.danger }]}>
-                {emailVerified ? '✓ Vérifié' : '✕ Non vérifié'}
+                {emailVerified ? 'Vérifié' : 'Non vérifié'}
               </Text>
             </View>
           </View>
@@ -325,16 +332,37 @@ export default function ParametresScreen({ navigation }: Props) {
           )}
         </View>
 
-        {/* ── Actions compte ── */}
-        <Section icon="⚙️" label="Compte" />
+        {/* ── Soutien ── */}
+        <Section icon="headset-outline" label="Soutien" />
         <Card>
-          <SettingRow badgeIcon="🌐" badgeBg="#E3F2FD" label="Politique de confidentialité" value="" onPress={() => {}}          />
-          <SettingRow badgeIcon="⎋"  badgeBg="#FEE2E2" label="Se déconnecter"               value="" onPress={handleLogout} last />
+          <SettingRow
+            badgeIcon="call" badgeBg="#E3F2FD"
+            label="Centre d'assistance" sub={SUPPORT_PHONE}
+            onPress={callSupport}
+          />
+          <SettingRow
+            badgeIcon="logo-whatsapp" badgeBg={C.accentDk + '22'} badgeColor={C.accentDk}
+            label="WhatsApp" sub={SUPPORT_WHATSAPP}
+            onPress={chatWhatsapp}
+          />
+          <SettingRow
+            badgeIcon="wallet-outline" badgeBg="#FFF3E0"
+            label="Recharger mon portefeuille"
+            onPress={() => navigation.navigate('Recharge')}
+            last
+          />
+        </Card>
+
+        {/* ── Actions compte ── */}
+        <Section icon="settings-outline" label="Compte" />
+        <Card>
+          <SettingRow badgeIcon="document-text-outline" badgeBg="#E3F2FD" label="Politique de confidentialité" onPress={() => {}} />
+          <SettingRow badgeIcon="log-out-outline" badgeBg="#FEE2E2" badgeColor={C.danger} label="Se déconnecter" onPress={handleLogout} last />
         </Card>
 
         {/* ── Danger zone ── */}
         <TouchableOpacity style={styles.deleteZone} onPress={handleDelete} activeOpacity={0.7}>
-          <Text style={styles.deleteIcon}>🗑️</Text>
+          <Ionicons name="trash-outline" size={22} color={C.danger} />
           <View>
             <Text style={styles.deleteTitle}>Supprimer mon compte</Text>
             <Text style={styles.deleteSub}>Action irréversible — toutes vos données seront perdues</Text>
@@ -357,7 +385,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
-  backIcon:    { fontSize: 24, color: C.white, fontWeight: '300' },
   headerTitle: { fontSize: 26, fontWeight: '900', color: C.white },
   headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 },
 
@@ -382,7 +409,6 @@ const styles = StyleSheet.create({
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center',
   },
-  confirmIcon: { color: C.white, fontSize: 15, fontWeight: '800' },
 
   // Email verif card
   emailVerifCard: {
@@ -391,7 +417,7 @@ const styles = StyleSheet.create({
   },
   emailVerifTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   emailVerifLabel: { fontSize: 15, fontWeight: '600', color: C.text },
-  emailVerifBadge: { borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
+  emailVerifBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
   emailVerifStatus: { fontSize: 13, fontWeight: '700' },
   verifyBtn:      { borderRadius: RADIUS.lg, overflow: 'hidden', ...SH.md },
   verifyBtnGrad:  { paddingVertical: 14, alignItems: 'center' },
@@ -404,7 +430,6 @@ const styles = StyleSheet.create({
     padding: 16, marginTop: 24, marginBottom: 8,
     borderWidth: 1, borderColor: '#FFD6E4',
   },
-  deleteIcon:  { fontSize: 22 },
   deleteTitle: { fontSize: 14, fontWeight: '700', color: C.danger },
   deleteSub:   { fontSize: 11, color: C.danger, opacity: 0.7, marginTop: 2 },
 });

@@ -7,6 +7,7 @@ import {
 } from 'typeorm';
 
 export enum RideStatus {
+  SCHEDULED   = 'SCHEDULED',
   PENDING     = 'PENDING',
   ACCEPTED    = 'ACCEPTED',
   ARRIVED     = 'ARRIVED',     // chauffeur au point de prise en charge
@@ -78,13 +79,18 @@ export class Ride {
   @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
   price: number | null;
 
+<<<<<<< HEAD
   // Trajet ouvert : pas de destination, prix au compteur (temps + distance réellement parcourue)
+=======
+  // Trajet ouvert : destination inconnue à la création, tarif calculé en temps réel via le compteur
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   @Column({ default: false })
   isOpenTrip: boolean;
 
   @Column({ type: 'timestamp', nullable: true })
   startedAt: Date | null;
 
+<<<<<<< HEAD
   // Distance cumulée depuis le démarrage, à partir des positions GPS du chauffeur
   @Column({ type: 'double precision', default: 0 })
   distanceMeters: number;
@@ -100,6 +106,55 @@ export class Ride {
   // Note (1-5) donnée par le chauffeur au client
   @Column({ type: 'smallint', nullable: true })
   userRating: number | null;
+=======
+  // Tarif indicatif figé à la création pour une course classique (destination connue) — jamais recalculé
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  estimatedPrice: number | null;
+
+  // ── Compteur temps réel (trajet ouvert uniquement) ────────────────────────
+  @Column({ type: 'decimal', precision: 8, scale: 3, default: 0 })
+  traveledDistanceKm: number;
+
+  @Column({ type: 'int', default: 0 })
+  stoppedSeconds: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  lastMeterLatitude: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
+  lastMeterLongitude: number | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastMeterAt: Date | null;
+
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  livePrice: number | null;
+
+  // Note donnée par le rider au driver après la course
+  @Column({ type: 'decimal', precision: 2, scale: 1, nullable: true })
+  ratingForDriver: number | null;
+
+  // Note donnée par le driver au rider après la course
+  @Column({ type: 'decimal', precision: 2, scale: 1, nullable: true })
+  ratingForRider: number | null;
+
+  // Course programmée pour plus tard — activée automatiquement (statut PENDING) par le sondeur de RidesService
+  @Column({ type: 'timestamp', nullable: true })
+  scheduledAt: Date | null;
+
+  @Column({ nullable: true })
+  couponCode: string | null;
+
+  @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
+  discountAmount: number | null;
+
+  // 'user' | 'driver' | 'system' — qui est à l'origine de l'annulation
+  @Column({ nullable: true })
+  cancelledBy: string | null;
+
+  @Column({ nullable: true })
+  cancelReason: string | null;
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
   @CreateDateColumn()
   createdAt: Date;

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var _a, _b, _c, _d, _e;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RidesController = void 0;
 const common_1 = require("@nestjs/common");
@@ -30,6 +31,21 @@ let RidesController = class RidesController {
     create(user, dto) {
         return this.ridesService.createRide(user.sub, dto);
     }
+    estimate(dto) {
+        return this.ridesService.estimateRide(dto);
+    }
+    createScheduled(user, dto) {
+        return this.ridesService.createScheduledRide(user.sub, dto);
+    }
+    myScheduledRides(user) {
+        return this.ridesService.findScheduledByUser(user.sub);
+    }
+    updateScheduled(user, id, dto) {
+        return this.ridesService.updateScheduledRide(id, user.sub, dto);
+    }
+    cancelScheduled(user, id) {
+        return this.ridesService.cancelScheduledRide(id, user.sub);
+    }
     myRides(user) {
         return this.ridesService.findByUser(user.sub);
     }
@@ -41,6 +57,9 @@ let RidesController = class RidesController {
     }
     findOne(user, id) {
         return this.ridesService.findByIdForParticipant(id, user);
+    }
+    receipt(user, id) {
+        return this.ridesService.getReceipt(id, user);
     }
     accept(user, id) {
         return this.ridesService.acceptRide(id, user.sub);
@@ -60,8 +79,11 @@ let RidesController = class RidesController {
     complete(user, id, dto) {
         return this.ridesService.completeRide(id, user.sub, dto);
     }
-    cancel(user, id) {
-        return this.ridesService.cancelRide(id, user.sub);
+    cancel(user, id, dto) {
+        return this.ridesService.cancelRide(id, user.sub, dto.reason);
+    }
+    driverCancel(user, id, dto) {
+        return this.ridesService.driverCancelRide(id, user.sub, dto);
     }
     driverCancel(user, id) {
         return this.ridesService.cancelRideByDriver(id, user.sub);
@@ -77,6 +99,50 @@ __decorate([
     __metadata("design:paramtypes", [Object, create_ride_dto_1.CreateRideDto]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)('estimate'),
+    (0, roles_decorator_1.Roles)('user'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [typeof (_a = typeof EstimateRideDto !== "undefined" && EstimateRideDto) === "function" ? _a : Object]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "estimate", null);
+__decorate([
+    (0, common_1.Post)('scheduled'),
+    (0, roles_decorator_1.Roles)('user'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, typeof (_b = typeof CreateScheduledRideDto !== "undefined" && CreateScheduledRideDto) === "function" ? _b : Object]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "createScheduled", null);
+__decorate([
+    (0, common_1.Get)('scheduled/my'),
+    (0, roles_decorator_1.Roles)('user'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "myScheduledRides", null);
+__decorate([
+    (0, common_1.Patch)('scheduled/:id'),
+    (0, roles_decorator_1.Roles)('user'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, typeof (_c = typeof UpdateScheduledRideDto !== "undefined" && UpdateScheduledRideDto) === "function" ? _c : Object]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "updateScheduled", null);
+__decorate([
+    (0, common_1.Delete)('scheduled/:id'),
+    (0, roles_decorator_1.Roles)('user'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "cancelScheduled", null);
 __decorate([
     (0, common_1.Get)('my'),
     (0, roles_decorator_1.Roles)('user'),
@@ -106,6 +172,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Get)(':id/receipt'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "receipt", null);
 __decorate([
     (0, common_1.Post)(':id/accept'),
     (0, roles_decorator_1.Roles)('driver'),
@@ -166,10 +240,21 @@ __decorate([
     (0, roles_decorator_1.Roles)('user'),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:paramtypes", [Object, String, typeof (_d = typeof CancelRideDto !== "undefined" && CancelRideDto) === "function" ? _d : Object]),
     __metadata("design:returntype", void 0)
 ], RidesController.prototype, "cancel", null);
+__decorate([
+    (0, common_1.Post)(':id/driver-cancel'),
+    (0, roles_decorator_1.Roles)('driver'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)('id')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, typeof (_e = typeof DriverCancelRideDto !== "undefined" && DriverCancelRideDto) === "function" ? _e : Object]),
+    __metadata("design:returntype", void 0)
+], RidesController.prototype, "driverCancel", null);
 __decorate([
     (0, common_1.Post)(':id/driver-cancel'),
     (0, roles_decorator_1.Roles)('driver'),

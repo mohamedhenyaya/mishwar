@@ -6,11 +6,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, RideHistoryItem } from '../types';
 import { apiGet } from '../services/api';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Historique'>;
+type IoniconName = keyof typeof Ionicons.glyphMap;
 
 const MOCK: RideHistoryItem[] = [
   { id:'1', status:'completed',           date:'26/06  17:39', originLabel:'ويسترين يونيون & مونيغرام، لاسبالماس', destLabel:'Trajet ouvert',                          clientName:'',        price:210, currency:'MRU' },
@@ -21,11 +23,11 @@ const MOCK: RideHistoryItem[] = [
   { id:'6', status:'completed',           date:'25/06  15:05', originLabel:'Carrefour Ould Mey, Ksar',              destLabel:'Aéroport International Nouakchott',      clientName:'Fatima',  price:650, currency:'MRU' },
 ];
 
-const STATUS_META = {
-  completed:           { label: 'Course finie',       icon: '✓', bg: '#ECFDF5', color: C.accent,  borderColor: C.accentDk },
-  cancelled_by_client: { label: 'Client a annulé',   icon: '✕', bg: '#FFF1F5', color: C.danger,  borderColor: C.dangerDk },
-  cancelled_by_driver: { label: 'Vous avez annulé',  icon: '✕', bg: '#FFF8EC', color: C.warning, borderColor: C.warningDk },
-  ongoing:             { label: 'En cours',            icon: '→', bg: '#F5F0FF', color: C.primary, borderColor: C.primaryDk },
+const STATUS_META: Record<string, { label: string; icon: IoniconName; bg: string; color: string; borderColor: string }> = {
+  completed:           { label: 'Course finie',      icon: 'checkmark',   bg: '#ECFDF5', color: C.accent,  borderColor: C.accentDk },
+  cancelled_by_client: { label: 'Client a annulé',   icon: 'close',       bg: '#FFF1F5', color: C.danger,  borderColor: C.dangerDk },
+  cancelled_by_driver: { label: 'Vous avez annulé',  icon: 'close',       bg: '#FFF8EC', color: C.warning, borderColor: C.warningDk },
+  ongoing:             { label: 'En cours',           icon: 'arrow-forward', bg: '#F5F0FF', color: C.primary, borderColor: C.primaryDk },
 };
 
 // ─── Ride card with entrance animation ───────────────────────────────────────
@@ -52,7 +54,7 @@ function RideCard({ item, index }: { item: RideHistoryItem; index: number }) {
         {/* Header row */}
         <View style={styles.cardHeader}>
           <View style={[styles.statusBadge, { backgroundColor: meta.bg, borderColor: meta.borderColor }]}>
-            <Text style={[styles.statusIcon, { color: meta.color }]}>{meta.icon}</Text>
+            <Ionicons name={meta.icon} size={11} color={meta.color} />
             <Text style={[styles.statusLabel, { color: meta.color }]}>{meta.label}</Text>
           </View>
           <Text style={styles.cardDate}>{item.date}</Text>
@@ -75,7 +77,7 @@ function RideCard({ item, index }: { item: RideHistoryItem; index: number }) {
         {/* Footer */}
         <View style={styles.cardFooter}>
           <View style={styles.clientChip}>
-            <Text style={styles.clientIcon}>👤</Text>
+            <Ionicons name="person" size={12} color={C.sub} />
             <Text style={styles.clientName}>{item.clientName || 'Inconnu'}</Text>
           </View>
           <View style={[styles.priceChip, { backgroundColor: meta.bg }]}>
@@ -92,11 +94,11 @@ function RideCard({ item, index }: { item: RideHistoryItem; index: number }) {
 // ─── Summary chip ─────────────────────────────────────────────────────────────
 
 function SummaryChip({ icon, value, label, color }: {
-  icon: string; value: string | number; label: string; color: string;
+  icon: IoniconName; value: string | number; label: string; color: string;
 }) {
   return (
     <View style={[sum.chip, { borderColor: color + '40' }]}>
-      <Text style={sum.icon}>{icon}</Text>
+      <Ionicons name={icon} size={20} color={color} />
       <Text style={[sum.value, { color }]}>{value}</Text>
       <Text style={sum.label}>{label}</Text>
     </View>
@@ -104,7 +106,6 @@ function SummaryChip({ icon, value, label, color }: {
 }
 const sum = StyleSheet.create({
   chip:  { flex: 1, backgroundColor: C.surface, borderRadius: RADIUS.lg, padding: 14, alignItems: 'center', gap: 3, borderWidth: 1.5, ...SH.sm },
-  icon:  { fontSize: 20 },
   value: { fontSize: 18, fontWeight: '800' },
   label: { fontSize: 10, color: C.sub, fontWeight: '600', textAlign: 'center' },
 });
@@ -140,16 +141,16 @@ export default function HistoriqueScreen({ navigation }: Props) {
       {/* ── Gradient header ── */}
       <LinearGradient colors={G.dark} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backIcon}>‹</Text>
+          <Ionicons name="chevron-back" size={22} color={C.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Historique</Text>
         <Text style={styles.headerSub}>30 derniers jours</Text>
 
         {/* Summary chips */}
         <View style={styles.summaryRow}>
-          <SummaryChip icon="✅" value={completed.length} label="Terminées"   color={C.accent}  />
-          <SummaryChip icon="💰" value={`${total}`}       label="MRU gagnés"  color={C.primary} />
-          <SummaryChip icon="❌" value={cancelled.length} label="Annulations" color={C.danger}  />
+          <SummaryChip icon="checkmark-circle" value={completed.length} label="Terminées"   color={C.accent}  />
+          <SummaryChip icon="cash"             value={`${total}`}       label="MRU gagnés"  color={C.primary} />
+          <SummaryChip icon="close-circle"     value={cancelled.length} label="Annulations" color={C.danger}  />
         </View>
       </LinearGradient>
 
@@ -176,7 +177,7 @@ export default function HistoriqueScreen({ navigation }: Props) {
           }
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
-              <Text style={styles.emptyEmoji}>📋</Text>
+              <Ionicons name="reader-outline" size={48} color={C.muted} />
               <Text style={styles.emptyTitle}>Aucune course</Text>
               <Text style={styles.emptySub}>Vos courses des 30 derniers jours apparaîtront ici.</Text>
             </View>
@@ -197,7 +198,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
-  backIcon:    { fontSize: 24, color: C.white, fontWeight: '300' },
   headerTitle: { fontSize: 28, fontWeight: '900', color: C.white },
   headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 20, marginTop: 2 },
 
@@ -223,7 +223,6 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 4,
     borderWidth: 1,
   },
-  statusIcon:  { fontSize: 11, fontWeight: '900' },
   statusLabel: { fontSize: 12, fontWeight: '700' },
 
   // Route
@@ -242,14 +241,12 @@ const styles = StyleSheet.create({
   // Footer
   cardFooter:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: C.borderLt },
   clientChip:  { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  clientIcon:  { fontSize: 13 },
   clientName:  { fontSize: 13, color: C.sub, fontWeight: '500' },
   priceChip:   { borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 5 },
   priceText:   { fontSize: 14, fontWeight: '800' },
 
   // Empty
   emptyWrap:  { alignItems: 'center', paddingTop: 80, gap: 10 },
-  emptyEmoji: { fontSize: 54 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: C.text },
   emptySub:   { fontSize: 14, color: C.sub, textAlign: 'center', lineHeight: 21 },
 });

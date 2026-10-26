@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DriversService = void 0;
 const common_1 = require("@nestjs/common");
@@ -20,13 +21,15 @@ const rxjs_1 = require("rxjs");
 const driver_entity_1 = require("./entities/driver.entity");
 const public_profile_util_1 = require("../../common/utils/public-profile.util");
 let DriversService = class DriversService {
-    constructor(driverRepo) {
+    constructor(driverRepo, geolocationGateway) {
         this.driverRepo = driverRepo;
+        this.geolocationGateway = geolocationGateway;
         this.statusChanges = new rxjs_1.Subject();
     }
     async findNearby(dto, vehicleTypes) {
         const radius = dto.radius ?? 5_000;
         const rows = await this.driverRepo.query(`
+<<<<<<< HEAD
       SELECT * FROM (
         SELECT
           id,
@@ -51,6 +54,34 @@ let DriversService = class DriversService {
           AND ($4::text[] IS NULL OR "vehicleType"::text = ANY($4))
       ) AS nearby
       WHERE "distanceMeters" <= $3
+=======
+      SELECT
+        id,
+        name,
+        phone,
+        status,
+        "vehicleType",
+        rating,
+        latitude,
+        longitude,
+        6371000 * 2 * ASIN(SQRT(
+          POWER(SIN((RADIANS($1) - RADIANS(latitude))  / 2), 2) +
+          COS(RADIANS($1)) * COS(RADIANS(latitude)) *
+          POWER(SIN((RADIANS($2) - RADIANS(longitude)) / 2), 2)
+        )) AS "distanceMeters"
+      FROM drivers
+      WHERE
+        status     = 'ONLINE'
+        AND latitude  IS NOT NULL
+        AND longitude IS NOT NULL
+        AND "isActive" = true
+        AND ($4::text[] IS NULL OR "vehicleType"::text = ANY($4))
+        AND 6371000 * 2 * ASIN(SQRT(
+          POWER(SIN((RADIANS($1) - RADIANS(latitude))  / 2), 2) +
+          COS(RADIANS($1)) * COS(RADIANS(latitude)) *
+          POWER(SIN((RADIANS($2) - RADIANS(longitude)) / 2), 2)
+        )) <= $3
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
       ORDER BY "distanceMeters" ASC
       LIMIT 20
       `, [dto.lat, dto.lng, radius, vehicleTypes ?? null]);
@@ -99,6 +130,7 @@ exports.DriversService = DriversService;
 exports.DriversService = DriversService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(driver_entity_1.Driver)),
-    __metadata("design:paramtypes", [typeorm_2.Repository])
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => GeolocationGateway))),
+    __metadata("design:paramtypes", [typeorm_2.Repository, typeof (_a = typeof GeolocationGateway !== "undefined" && GeolocationGateway) === "function" ? _a : Object])
 ], DriversService);
 //# sourceMappingURL=drivers.service.js.map

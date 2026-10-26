@@ -13,6 +13,7 @@ exports.Ride = exports.RideVehicleClass = exports.ACTIVE_RIDE_STATUSES = exports
 const typeorm_1 = require("typeorm");
 var RideStatus;
 (function (RideStatus) {
+    RideStatus["SCHEDULED"] = "SCHEDULED";
     RideStatus["PENDING"] = "PENDING";
     RideStatus["ACCEPTED"] = "ACCEPTED";
     RideStatus["ARRIVED"] = "ARRIVED";

@@ -12,6 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var RidesService_1;
+var _a, _b, _c;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RidesService = void 0;
 const common_1 = require("@nestjs/common");
@@ -26,13 +27,23 @@ const pricing_util_1 = require("./utils/pricing.util");
 const users_service_1 = require("../users/users.service");
 const public_profile_util_1 = require("../../common/utils/public-profile.util");
 let RidesService = RidesService_1 = class RidesService {
-    constructor(rideRepo, geolocationGateway, driversService, usersService, config) {
+    constructor(rideRepo, geolocationGateway, driversService, usersService, config, settingsService, walletService, promotionsService, usersService) {
         this.rideRepo = rideRepo;
         this.geolocationGateway = geolocationGateway;
         this.driversService = driversService;
         this.usersService = usersService;
         this.config = config;
+        this.settingsService = settingsService;
+        this.walletService = walletService;
+        this.promotionsService = promotionsService;
+        this.usersService = usersService;
         this.logger = new common_1.Logger(RidesService_1.name);
+    }
+    onModuleInit() {
+        const timer = setInterval(() => {
+            this.activateDueScheduledRides().catch((err) => this.logger.error(`Échec de l'activation des courses programmées: ${err.message}`));
+        }, SCHEDULED_POLL_INTERVAL_MS);
+        timer.unref();
     }
     async createRide(userId, dto) {
         const isOpenTrip = dto.isOpenTrip === true;
@@ -57,11 +68,14 @@ let RidesService = RidesService_1 = class RidesService {
         });
         const saved = await this.rideRepo.save(ride);
         this.logger.log(`Course créée: ${saved.id} par user ${userId}`);
-        const notifiedDriverIds = await this.geolocationGateway.notifyNearbyDrivers(saved);
-        saved.notifiedDriverIds = notifiedDriverIds;
-        await this.rideRepo.update(saved.id, { notifiedDriverIds });
-        this.scheduleRideTimeout(saved.id);
+        await this.activatePendingRide(saved);
         return saved;
+    }
+    async activatePendingRide(ride) {
+        const notifiedDriverIds = await this.geolocationGateway.notifyNearbyDrivers(ride);
+        ride.notifiedDriverIds = notifiedDriverIds;
+        await this.rideRepo.update(ride.id, { notifiedDriverIds });
+        this.scheduleRideTimeout(ride.id);
     }
     async findById(id) {
         return this.rideRepo.findOne({ where: { id } });
@@ -118,7 +132,6 @@ let RidesService = RidesService_1 = class RidesService {
         }
         await this.driversService.updateStatus(driverId, driver_entity_1.DriverStatus.BUSY);
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
-        const driver = await this.driversService.findById(driverId);
         await this.geolocationGateway.notifyRideAccepted(ride, driver);
         return this.withParticipants(ride);
     }
@@ -180,6 +193,40 @@ let RidesService = RidesService_1 = class RidesService {
         this.geolocationGateway.notifyRideStarted(ride);
         return ride;
     }
+    async recordMeterPing(rideId, latitude, longitude) {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (!ride || !ride.isOpenTrip || ride.status !== ride_entity_1.RideStatus.IN_PROGRESS)
+            return null;
+        if (ride.lastMeterLatitude == null || ride.lastMeterLongitude == null || !ride.lastMeterAt)
+            return null;
+        const now = new Date();
+        const elapsedSeconds = Math.min(METER_MAX_PING_GAP_SECONDS, Math.max(0, (now.getTime() - ride.lastMeterAt.getTime()) / 1000));
+        const movedMeters = haversineMeters(Number(ride.lastMeterLatitude), Number(ride.lastMeterLongitude), latitude, longitude);
+        let traveledDistanceKm = Number(ride.traveledDistanceKm);
+        let stoppedSeconds = ride.stoppedSeconds;
+        if (movedMeters < METER_STOP_THRESHOLD_METERS) {
+            stoppedSeconds += Math.round(elapsedSeconds);
+        }
+        else {
+            traveledDistanceKm += movedMeters / 1000;
+        }
+        const settings = await this.settingsService.getSettings();
+        const livePrice = Math.max(Math.round((traveledDistanceKm * Number(settings.pricePerKm) +
+            (stoppedSeconds / 60) * Number(settings.perStopMinuteRate)) * 100) / 100, Number(settings.minimumFare));
+        await this.rideRepo.update(rideId, {
+            traveledDistanceKm,
+            stoppedSeconds,
+            livePrice,
+            lastMeterLatitude: latitude,
+            lastMeterLongitude: longitude,
+            lastMeterAt: now,
+        });
+        return {
+            distanceKm: Math.round(traveledDistanceKm * 100) / 100,
+            stoppedMinutes: Math.round((stoppedSeconds / 60) * 10) / 10,
+            price: livePrice,
+        };
+    }
     async completeRide(rideId, driverId, dto) {
         const existing = await this.rideRepo.findOne({ where: { id: rideId } });
         if (!existing)
@@ -194,7 +241,7 @@ let RidesService = RidesService_1 = class RidesService {
         const result = await this.rideRepo
             .createQueryBuilder()
             .update(ride_entity_1.Ride)
-            .set({ status: ride_entity_1.RideStatus.COMPLETED, price, endLatitude, endLongitude })
+            .set({ status: ride_entity_1.RideStatus.COMPLETED, price, discountAmount, endLatitude, endLongitude })
             .where('id = :id AND status = :status AND "driverId" = :driverId', {
             id: rideId,
             status: ride_entity_1.RideStatus.IN_PROGRESS,
@@ -211,7 +258,7 @@ let RidesService = RidesService_1 = class RidesService {
         this.geolocationGateway.notifyRideCompleted(ride);
         return ride;
     }
-    async cancelRide(rideId, userId) {
+    async cancelRide(rideId, userId, reason) {
         const ride = await this.rideRepo.findOne({ where: { id: rideId } });
         if (!ride)
             throw new common_1.NotFoundException('Course non trouvée');
@@ -310,15 +357,202 @@ let RidesService = RidesService_1 = class RidesService {
         }, timeoutMs);
         timer.unref();
     }
+    async estimateRide(dto) {
+        const settings = await this.settingsService.getSettings();
+        const distanceKm = haversineMeters(dto.startLatitude, dto.startLongitude, dto.endLatitude, dto.endLongitude) / 1000;
+        const estimatedPrice = (0, pricing_util_1.computeFare)(dto.startLatitude, dto.startLongitude, dto.endLatitude, dto.endLongitude, Number(settings.pricePerKm), Number(settings.minimumFare));
+        return {
+            distanceKm: Math.round(distanceKm * 100) / 100,
+            estimatedDurationMinutes: Math.max(1, Math.round((distanceKm / AVG_TRIP_SPEED_KMH) * 60)),
+            estimatedPrice,
+        };
+    }
+    async getReceipt(rideId, jwt) {
+        const ride = await this.findByIdForParticipant(rideId, jwt);
+        if (ride.status !== ride_entity_1.RideStatus.COMPLETED) {
+            throw new common_1.BadRequestException('Le reçu n\'est disponible qu\'une fois la course terminée');
+        }
+        const settings = await this.settingsService.getSettings();
+        const distanceKm = haversineMeters(ride.startLatitude, ride.startLongitude, ride.endLatitude ?? ride.startLatitude, ride.endLongitude ?? ride.startLongitude) / 1000;
+        const discountAmount = Number(ride.discountAmount ?? 0);
+        const finalPrice = Number(ride.price ?? 0);
+        return {
+            rideId: ride.id,
+            distanceKm: Math.round(distanceKm * 100) / 100,
+            pricePerKm: Number(settings.pricePerKm),
+            minimumFare: Number(settings.minimumFare),
+            grossFare: Math.round((finalPrice + discountAmount) * 100) / 100,
+            couponCode: ride.couponCode,
+            discountAmount,
+            finalPrice,
+            completedAt: ride.updatedAt,
+        };
+    }
+    async createScheduledRide(userId, dto) {
+        const scheduledAt = new Date(dto.scheduledAt);
+        if (scheduledAt.getTime() < Date.now() + SCHEDULED_ACTIVATION_WINDOW_MS) {
+            throw new common_1.BadRequestException('La date programmée doit être au moins 5 minutes dans le futur');
+        }
+        const ride = this.rideRepo.create({
+            userId,
+            startLatitude: dto.startLatitude,
+            startLongitude: dto.startLongitude,
+            destinationName: dto.destinationName,
+            endLatitude: dto.endLatitude ?? null,
+            endLongitude: dto.endLongitude ?? null,
+            vehicleType: dto.vehicleType,
+            couponCode: dto.couponCode ?? null,
+            scheduledAt,
+            status: ride_entity_1.RideStatus.SCHEDULED,
+        });
+        const saved = await this.rideRepo.save(ride);
+        this.logger.log(`Course programmée créée: ${saved.id} par user ${userId} pour ${scheduledAt.toISOString()}`);
+        return saved;
+    }
+    async findScheduledByUser(userId) {
+        return this.rideRepo.find({
+            where: { userId, status: ride_entity_1.RideStatus.SCHEDULED },
+            order: { scheduledAt: 'ASC' },
+        });
+    }
+    async updateScheduledRide(rideId, userId, dto) {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        if (ride.userId !== userId)
+            throw new common_1.ForbiddenException('Cette course ne vous appartient pas');
+        if (ride.status !== ride_entity_1.RideStatus.SCHEDULED) {
+            throw new common_1.ConflictException('Cette course ne peut plus être modifiée');
+        }
+        let scheduledAt = ride.scheduledAt;
+        if (dto.scheduledAt) {
+            scheduledAt = new Date(dto.scheduledAt);
+            if (scheduledAt.getTime() < Date.now() + SCHEDULED_ACTIVATION_WINDOW_MS) {
+                throw new common_1.BadRequestException('La date programmée doit être au moins 5 minutes dans le futur');
+            }
+        }
+        await this.rideRepo.update(rideId, {
+            scheduledAt,
+            startLatitude: dto.startLatitude ?? ride.startLatitude,
+            startLongitude: dto.startLongitude ?? ride.startLongitude,
+            destinationName: dto.destinationName ?? ride.destinationName,
+            vehicleType: dto.vehicleType ?? ride.vehicleType,
+            endLatitude: dto.endLatitude ?? ride.endLatitude,
+            endLongitude: dto.endLongitude ?? ride.endLongitude,
+        });
+        return this.rideRepo.findOne({ where: { id: rideId } });
+    }
+    async cancelScheduledRide(rideId, userId) {
+        const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        if (ride.userId !== userId)
+            throw new common_1.ForbiddenException('Cette course ne vous appartient pas');
+        const result = await this.rideRepo
+            .createQueryBuilder()
+            .update(ride_entity_1.Ride)
+            .set({ status: ride_entity_1.RideStatus.CANCELLED, cancelledBy: 'user' })
+            .where('id = :id AND status = :status', { id: rideId, status: ride_entity_1.RideStatus.SCHEDULED })
+            .execute();
+        if (!result.affected) {
+            throw new common_1.ConflictException('Cette course ne peut plus être annulée');
+        }
+    }
+    async findScheduledForAdmin(query) {
+        const page = query.page ?? 1;
+        const limit = query.limit ?? 20;
+        const qb = this.rideRepo
+            .createQueryBuilder('ride')
+            .where('ride.status = :status', { status: ride_entity_1.RideStatus.SCHEDULED })
+            .orderBy('ride.scheduledAt', 'ASC');
+        const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+        return { data, total, page, limit };
+    }
+    async activateDueScheduledRides() {
+        const dueRides = await this.rideRepo.find({
+            where: {
+                status: ride_entity_1.RideStatus.SCHEDULED,
+                scheduledAt: LessThanOrEqual(new Date(Date.now() + SCHEDULED_ACTIVATION_WINDOW_MS)),
+            },
+        });
+        for (const ride of dueRides) {
+            const result = await this.rideRepo
+                .createQueryBuilder()
+                .update(ride_entity_1.Ride)
+                .set({ status: ride_entity_1.RideStatus.PENDING })
+                .where('id = :id AND status = :status', { id: ride.id, status: ride_entity_1.RideStatus.SCHEDULED })
+                .execute();
+            if (!result.affected)
+                continue;
+            ride.status = ride_entity_1.RideStatus.PENDING;
+            this.logger.log(`Course programmée activée: ${ride.id}`);
+            await this.activatePendingRide(ride);
+        }
+    }
+    async findAllForAdmin(query) {
+        const page = query.page ?? 1;
+        const limit = query.limit ?? 20;
+        const qb = this.rideRepo.createQueryBuilder('ride').orderBy('ride.createdAt', 'DESC');
+        if (query.status)
+            qb.andWhere('ride.status = :status', { status: query.status });
+        if (query.driverId)
+            qb.andWhere('ride."driverId" = :driverId', { driverId: query.driverId });
+        if (query.userId)
+            qb.andWhere('ride."userId" = :userId', { userId: query.userId });
+        if (query.from)
+            qb.andWhere('ride.createdAt >= :from', { from: query.from });
+        if (query.to)
+            qb.andWhere('ride.createdAt <= :to', { to: query.to });
+        const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+        return { data, total, page, limit };
+    }
+    async findByIdForAdmin(id) {
+        const ride = await this.rideRepo.findOne({ where: { id } });
+        if (!ride)
+            throw new common_1.NotFoundException('Course non trouvée');
+        return ride;
+    }
+    async getLeaderboard(period, currentUserId) {
+        const from = getLeaderboardPeriodStart(period);
+        const completedRides = await this.rideRepo.find({
+            where: { status: ride_entity_1.RideStatus.COMPLETED, createdAt: MoreThanOrEqual(from) },
+            select: ['userId'],
+        });
+        const pointsByUser = new Map();
+        for (const ride of completedRides) {
+            pointsByUser.set(ride.userId, (pointsByUser.get(ride.userId) ?? 0) + 1);
+        }
+        const ranked = [...pointsByUser.entries()]
+            .map(([userId, points]) => ({ userId, points }))
+            .sort((a, b) => b.points - a.points)
+            .map((r, idx) => ({ ...r, rank: idx + 1 }));
+        const top = ranked.slice(0, LEADERBOARD_LIMIT);
+        const users = await this.usersService.findByIds(top.map((r) => r.userId));
+        const nameById = new Map(users.map((u) => [u.id, u.name || 'Utilisateur']));
+        const entries = top.map((r) => ({
+            rank: r.rank,
+            userId: r.userId,
+            name: nameById.get(r.userId) ?? 'Utilisateur',
+            points: r.points,
+            isCurrentUser: r.userId === currentUserId,
+        }));
+        const currentUserRanked = ranked.find((r) => r.userId === currentUserId);
+        const currentUser = currentUserRanked
+            ? { rank: currentUserRanked.rank, points: currentUserRanked.points }
+            : null;
+        return { period, entries, currentUser };
+    }
 };
 exports.RidesService = RidesService;
 exports.RidesService = RidesService = RidesService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(ride_entity_1.Ride)),
+    __param(1, Inject(forwardRef(() => geolocation_gateway_1.GeolocationGateway))),
+    __param(2, Inject(forwardRef(() => drivers_service_1.DriversService))),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         geolocation_gateway_1.GeolocationGateway,
         drivers_service_1.DriversService,
         users_service_1.UsersService,
-        config_1.ConfigService])
+        config_1.ConfigService, typeof (_a = typeof SettingsService !== "undefined" && SettingsService) === "function" ? _a : Object, typeof (_b = typeof WalletService !== "undefined" && WalletService) === "function" ? _b : Object, typeof (_c = typeof PromotionsService !== "undefined" && PromotionsService) === "function" ? _c : Object, users_service_1.UsersService])
 ], RidesService);
 //# sourceMappingURL=rides.service.js.map

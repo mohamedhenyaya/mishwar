@@ -12,6 +12,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
 var GeolocationGateway_1;
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GeolocationGateway = void 0;
 const websockets_1 = require("@nestjs/websockets");
@@ -31,8 +32,9 @@ const OFFLINE_GRACE_MS = 60_000;
 const MIN_STEP_METERS = 8;
 const MAX_STEP_METERS = 2_000;
 let GeolocationGateway = GeolocationGateway_1 = class GeolocationGateway {
-    constructor(driversService, jwtService, rideRepo) {
+    constructor(driversService, ridesService, jwtService, rideRepo) {
         this.driversService = driversService;
+        this.ridesService = ridesService;
         this.jwtService = jwtService;
         this.rideRepo = rideRepo;
         this.logger = new common_1.Logger(GeolocationGateway_1.name);
@@ -288,9 +290,10 @@ __decorate([
 ], GeolocationGateway.prototype, "handleUserLocation", null);
 exports.GeolocationGateway = GeolocationGateway = GeolocationGateway_1 = __decorate([
     (0, websockets_1.WebSocketGateway)({ cors: { origin: '*' } }),
-    __param(2, (0, typeorm_1.InjectRepository)(ride_entity_1.Ride)),
-    __metadata("design:paramtypes", [drivers_service_1.DriversService,
-        jwt_1.JwtService,
+    __param(0, (0, common_1.Inject)((0, common_1.forwardRef)(() => drivers_service_1.DriversService))),
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => RidesService))),
+    __param(3, (0, typeorm_1.InjectRepository)(ride_entity_1.Ride)),
+    __metadata("design:paramtypes", [drivers_service_1.DriversService, typeof (_a = typeof RidesService !== "undefined" && RidesService) === "function" ? _a : Object, jwt_1.JwtService,
         typeorm_2.Repository])
 ], GeolocationGateway);
 //# sourceMappingURL=geolocation.gateway.js.map

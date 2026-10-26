@@ -1,4 +1,5 @@
 export declare enum RideStatus {
+    SCHEDULED = "SCHEDULED",
     PENDING = "PENDING",
     ACCEPTED = "ACCEPTED",
     ARRIVED = "ARRIVED",

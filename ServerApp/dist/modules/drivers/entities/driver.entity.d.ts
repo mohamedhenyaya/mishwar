@@ -22,10 +22,14 @@ export declare class Driver {
     rating: number;
     ratingCount: number;
     totalRides: number;
+    deviceToken: string | null;
     latitude: number | null;
     longitude: number | null;
     lastLocationUpdate: Date | null;
     isActive: boolean;
+    blockedReason: string | null;
+    blockedAt: Date | null;
+    balance: number;
     createdAt: Date;
     updatedAt: Date;
 }

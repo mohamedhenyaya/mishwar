@@ -15,6 +15,16 @@ const users_module_1 = require("./modules/users/users.module");
 const drivers_module_1 = require("./modules/drivers/drivers.module");
 const geolocation_module_1 = require("./modules/geolocation/geolocation.module");
 const rides_module_1 = require("./modules/rides/rides.module");
+const places_module_1 = require("./modules/places/places.module");
+const settings_module_1 = require("./modules/settings/settings.module");
+const wallet_module_1 = require("./modules/wallet/wallet.module");
+const notifications_module_1 = require("./modules/notifications/notifications.module");
+const dashboard_module_1 = require("./modules/dashboard/dashboard.module");
+const ratings_module_1 = require("./modules/ratings/ratings.module");
+const promotions_module_1 = require("./modules/promotions/promotions.module");
+const support_module_1 = require("./modules/support/support.module");
+const vehicles_module_1 = require("./modules/vehicles/vehicles.module");
+const audit_log_module_1 = require("./modules/audit-log/audit-log.module");
 const database_config_1 = require("./config/database.config");
 let AppModule = class AppModule {
 };
@@ -32,6 +42,16 @@ exports.AppModule = AppModule = __decorate([
             drivers_module_1.DriversModule,
             geolocation_module_1.GeolocationModule,
             rides_module_1.RidesModule,
+            places_module_1.PlacesModule,
+            settings_module_1.SettingsModule,
+            wallet_module_1.WalletModule,
+            notifications_module_1.NotificationsModule,
+            dashboard_module_1.DashboardModule,
+            ratings_module_1.RatingsModule,
+            promotions_module_1.PromotionsModule,
+            support_module_1.SupportModule,
+            vehicles_module_1.VehiclesModule,
+            audit_log_module_1.AuditLogModule,
         ],
     })
 ], AppModule);

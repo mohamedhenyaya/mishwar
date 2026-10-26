@@ -31,7 +31,9 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
     },
     "plugins": [
       [
@@ -43,6 +45,7 @@
       "expo-asset",
       "expo-secure-store",
       [
+<<<<<<< HEAD
         "expo-image-picker",
         {
           "photosPermission": "Nous accédons à vos photos pour choisir votre photo de profil."
@@ -50,6 +53,17 @@
       ],
       "expo-notifications",
       "expo-audio"
+=======
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F7F7FA",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain"
+        }
+      ],
+      "@react-native-community/datetimepicker"
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     ]
   }
 }

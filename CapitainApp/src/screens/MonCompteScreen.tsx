@@ -6,34 +6,46 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
+<<<<<<< HEAD
 import { DriverProfile, RootStackParamList } from '../types';
 import RechargeSheet from '../components/RechargeSheet';
+=======
+import { Ionicons } from '@expo/vector-icons';
+import { RootStackParamList } from '../types';
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 import { apiGet } from '../services/api';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MonCompte'>;
 type Tab   = 'compte' | 'statistiques';
 
-interface AccountData { balance: number; currency: string; totalEarned: number; totalRides: number; rating: number; }
-interface Transaction  { id: string; type: 'credit' | 'debit'; label: string; amount: number; date: string; }
-
-const MOCK_ACCOUNT: AccountData = { balance: 0.75, currency: 'MRU', totalEarned: 12450, totalRides: 238, rating: 4.8 };
-const MOCK_TXN: Transaction[] = [
-  { id:'1', type:'credit', label:'Course #3281',    amount: 400,  date:'26/06' },
-  { id:'2', type:'credit', label:'Course #3280',    amount: 210,  date:'26/06' },
-  { id:'3', type:'debit',  label:'Commission app.', amount: -63,  date:'26/06' },
-  { id:'4', type:'credit', label:'Course #3279',    amount: 175,  date:'25/06' },
-  { id:'5', type:'debit',  label:'Retrait',         amount: -500, date:'24/06' },
-  { id:'6', type:'credit', label:'Bonus fidélité',  amount: 50,   date:'23/06' },
-];
+interface DriverProfile { rating: number; totalRides: number; }
+interface WalletTransaction {
+  id: string;
+  type: 'admin_credit' | 'admin_debit' | 'commission_deduction';
+  amount: number;      // signé : positif = crédit, négatif = débit
+  note: string | null;
+  createdAt: string;
+}
 
 const BAR_DATA = [6, 9, 4, 11, 8, 14, 3];
 const BAR_DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
+function txnLabel(t: WalletTransaction): string {
+  if (t.note) return t.note;
+  if (t.type === 'commission_deduction') return 'Commission course';
+  if (t.type === 'admin_credit') return 'Recharge validée';
+  return 'Retrait validé';
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+}
+
 // ─── Action tile ──────────────────────────────────────────────────────────────
-function ActionTile({ icon, label, color, bg, onPress, disabled = false }: {
-  icon: string; label: string; color: string; bg: string;
-  onPress?: () => void; disabled?: boolean;
+function ActionTile({ icon, label, color, bg, onPress, disabled = false, badge }: {
+  icon: keyof typeof Ionicons.glyphMap; label: string; color: string; bg: string;
+  onPress?: () => void; disabled?: boolean; badge?: string;
 }) {
   return (
     <TouchableOpacity
@@ -41,21 +53,24 @@ function ActionTile({ icon, label, color, bg, onPress, disabled = false }: {
       onPress={onPress} disabled={disabled} activeOpacity={0.7}
     >
       <View style={[styles.tileIconWrap, { backgroundColor: bg }]}>
-        <Text style={styles.tileIcon}>{icon}</Text>
+        <Ionicons name={icon} size={22} color={color} />
       </View>
       <Text style={[styles.tileLabel, disabled && { color: C.muted }]}>{label}</Text>
+      {badge && (
+        <View style={styles.tileBadge}><Text style={styles.tileBadgeText}>{badge}</Text></View>
+      )}
     </TouchableOpacity>
   );
 }
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 function StatCard({ icon, value, label, color, bg }: {
-  icon: string; value: string; label: string; color: string; bg: string;
+  icon: keyof typeof Ionicons.glyphMap; value: string; label: string; color: string; bg: string;
 }) {
   return (
     <View style={[styles.statCard, { borderColor: color + '30' }]}>
       <View style={[styles.statIconWrap, { backgroundColor: bg }]}>
-        <Text style={styles.statIconText}>{icon}</Text>
+        <Ionicons name={icon} size={20} color={color} />
       </View>
       <Text style={[styles.statValue, { color }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
@@ -68,8 +83,9 @@ function StatCard({ icon, value, label, color, bg }: {
 export default function MonCompteScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [activeTab,  setActiveTab]  = useState<Tab>('compte');
-  const [account,    setAccount]    = useState<AccountData | null>(null);
-  const [txns,       setTxns]       = useState<Transaction[]>([]);
+  const [balance,    setBalance]    = useState(0);
+  const [profile,    setProfile]    = useState<DriverProfile>({ rating: 5, totalRides: 0 });
+  const [txns,       setTxns]       = useState<WalletTransaction[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rechargeOpen, setRechargeOpen] = useState(false);
@@ -81,13 +97,16 @@ export default function MonCompteScreen({ navigation }: Props) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [acc, t] = await Promise.all([
-        apiGet<AccountData>('/drivers/account'),
-        apiGet<Transaction[]>('/drivers/transactions'),
+      const [wallet, tx, me] = await Promise.all([
+        apiGet<{ balance: number }>('/wallet/me'),
+        apiGet<{ data: WalletTransaction[] }>('/wallet/me/transactions?limit=20'),
+        apiGet<DriverProfile>('/drivers/me'),
       ]);
-      setAccount(acc); setTxns(t);
+      setBalance(Number(wallet.balance));
+      setTxns(tx.data);
+      setProfile({ rating: Number(me.rating), totalRides: Number(me.totalRides) });
     } catch {
-      setAccount(MOCK_ACCOUNT); setTxns(MOCK_TXN);
+      // Backend injoignable — l'écran reste vide plutôt que d'afficher des montants fictifs
     } finally {
       setLoading(false); setRefreshing(false);
     }
@@ -96,7 +115,6 @@ export default function MonCompteScreen({ navigation }: Props) {
   useEffect(() => { fetchData(); }, [fetchData]);
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
-  const acc = account ?? MOCK_ACCOUNT;
   const maxBar = Math.max(...BAR_DATA);
 
   if (loading) {
@@ -112,7 +130,7 @@ export default function MonCompteScreen({ navigation }: Props) {
       {/* ── Header ── */}
       <LinearGradient colors={G.dark} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backIcon}>‹</Text>
+          <Ionicons name="chevron-back" size={22} color={C.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Mon espace financier</Text>
         <Text style={styles.headerSub}>Gérez vos revenus et statistiques</Text>
@@ -127,8 +145,13 @@ export default function MonCompteScreen({ navigation }: Props) {
             onPress={() => setActiveTab(t)}
             activeOpacity={0.7}
           >
+            <Ionicons
+              name={t === 'compte' ? 'card' : 'bar-chart'}
+              size={15}
+              color={activeTab === t ? C.white : C.sub}
+            />
             <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>
-              {t === 'compte' ? '💳  Mon compte' : '📊  Statistiques'}
+              {t === 'compte' ? 'Mon compte' : 'Statistiques'}
             </Text>
           </TouchableOpacity>
         ))}
@@ -148,7 +171,6 @@ export default function MonCompteScreen({ navigation }: Props) {
               end={{ x: 1, y: 1 }}
               style={styles.balanceCard}
             >
-              {/* Decorative circles */}
               <View style={styles.balanceBlob1} />
               <View style={styles.balanceBlob2} />
 
@@ -160,23 +182,18 @@ export default function MonCompteScreen({ navigation }: Props) {
               </View>
 
               <Text style={styles.balanceAmount}>
-                {acc.balance.toFixed(2).replace('.', ',')}
+                {balance.toFixed(2).replace('.', ',')}
               </Text>
 
               <View style={styles.balanceBottom}>
                 <View style={styles.balanceStat}>
-                  <Text style={styles.balanceStatLabel}>Total gagné</Text>
-                  <Text style={styles.balanceStatValue}>{acc.totalEarned.toLocaleString()} MRU</Text>
-                </View>
-                <View style={styles.balanceStatDiv} />
-                <View style={styles.balanceStat}>
                   <Text style={styles.balanceStatLabel}>Courses</Text>
-                  <Text style={styles.balanceStatValue}>{acc.totalRides}</Text>
+                  <Text style={styles.balanceStatValue}>{profile.totalRides}</Text>
                 </View>
                 <View style={styles.balanceStatDiv} />
                 <View style={styles.balanceStat}>
                   <Text style={styles.balanceStatLabel}>Note</Text>
-                  <Text style={styles.balanceStatValue}>⭐ {acc.rating}</Text>
+                  <Text style={styles.balanceStatValue}>★ {profile.rating.toFixed(1)}</Text>
                 </View>
               </View>
             </LinearGradient>
@@ -185,11 +202,16 @@ export default function MonCompteScreen({ navigation }: Props) {
           {/* ── Action tiles ── */}
           <View style={styles.tilesRow}>
             <ActionTile
+<<<<<<< HEAD
               icon="💳" label="Recharger" color={C.primary} bg={C.surfaceAlt}
               onPress={() => setRechargeOpen(true)}
+=======
+              icon="add-circle" label="Recharger" color={C.primary} bg={C.surfaceAlt}
+              onPress={() => navigation.navigate('Recharge')}
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
             />
-            <ActionTile icon="📤" label="Transférer"  color={C.sub}    bg={C.bg} disabled />
-            <ActionTile icon="📥" label="Historique"  color={C.accent} bg="#ECFDF5"
+            <ActionTile icon="paper-plane-outline" label="Transférer" color={C.sub} bg={C.bg} disabled badge="Bientôt" />
+            <ActionTile icon="time-outline" label="Historique" color={C.accent} bg="#ECFDF5"
               onPress={() => navigation.navigate('Historique')}
             />
           </View>
@@ -197,22 +219,32 @@ export default function MonCompteScreen({ navigation }: Props) {
           {/* ── Transactions ── */}
           <View style={styles.txnSection}>
             <Text style={styles.sectionTitle}>Dernières opérations</Text>
-            <View style={styles.txnCard}>
-              {txns.map((t, idx) => (
-                <View key={t.id} style={[styles.txnRow, idx === txns.length - 1 && styles.txnRowLast]}>
-                  <View style={[styles.txnIconWrap, { backgroundColor: t.type === 'credit' ? '#ECFDF5' : '#FFF1F5' }]}>
-                    <Text style={styles.txnIcon}>{t.type === 'credit' ? '↑' : '↓'}</Text>
-                  </View>
-                  <View style={styles.txnInfo}>
-                    <Text style={styles.txnLabel}>{t.label}</Text>
-                    <Text style={styles.txnDate}>{t.date}</Text>
-                  </View>
-                  <Text style={[styles.txnAmount, { color: t.type === 'credit' ? C.accentDk : C.danger }]}>
-                    {t.type === 'credit' ? '+' : ''}{t.amount} MRU
-                  </Text>
-                </View>
-              ))}
-            </View>
+            {txns.length === 0 ? (
+              <View style={styles.emptyTxn}>
+                <Ionicons name="receipt-outline" size={32} color={C.muted} />
+                <Text style={styles.emptyTxnText}>Aucune opération pour le moment</Text>
+              </View>
+            ) : (
+              <View style={styles.txnCard}>
+                {txns.map((t, idx) => {
+                  const isCredit = Number(t.amount) >= 0;
+                  return (
+                    <View key={t.id} style={[styles.txnRow, idx === txns.length - 1 && styles.txnRowLast]}>
+                      <View style={[styles.txnIconWrap, { backgroundColor: isCredit ? '#ECFDF5' : '#FFF1F5' }]}>
+                        <Ionicons name={isCredit ? 'arrow-up' : 'arrow-down'} size={16} color={isCredit ? C.accentDk : C.danger} />
+                      </View>
+                      <View style={styles.txnInfo}>
+                        <Text style={styles.txnLabel}>{txnLabel(t)}</Text>
+                        <Text style={styles.txnDate}>{formatDate(t.createdAt)}</Text>
+                      </View>
+                      <Text style={[styles.txnAmount, { color: isCredit ? C.accentDk : C.danger }]}>
+                        {isCredit ? '+' : ''}{Number(t.amount).toFixed(0)} MRU
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         </ScrollView>
       ) : (
@@ -224,15 +256,16 @@ export default function MonCompteScreen({ navigation }: Props) {
         >
           {/* Stat cards */}
           <View style={styles.statsGrid}>
-            <StatCard icon="⭐" value={acc.rating.toFixed(1)} label="Note moyenne" color={C.warning} bg="#FFF8E1" />
-            <StatCard icon="🚗" value={`${acc.totalRides}`}  label="Total courses" color={C.primary} bg={C.surfaceAlt} />
-            <StatCard icon="💰" value={`${acc.totalEarned.toLocaleString()}`} label="MRU gagnés" color={C.accentDk} bg="#ECFDF5" />
-            <StatCard icon="📈" value={`${Math.round(acc.totalEarned / 30)}`} label="MRU / mois moy." color={C.primaryLt} bg={C.surfaceAlt} />
+            <StatCard icon="star" value={profile.rating.toFixed(1)} label="Note moyenne" color={C.warning} bg="#FFF8E1" />
+            <StatCard icon="car-sport" value={`${profile.totalRides}`} label="Total courses" color={C.primary} bg={C.surfaceAlt} />
           </View>
 
           {/* Bar chart */}
           <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Courses — 7 derniers jours</Text>
+            <View style={styles.chartTitleRow}>
+              <Text style={styles.chartTitle}>Courses — 7 derniers jours</Text>
+              <View style={styles.previewBadge}><Text style={styles.previewBadgeText}>Aperçu</Text></View>
+            </View>
             <View style={styles.barChart}>
               {BAR_DATA.map((val, i) => (
                 <View key={i} style={styles.barColumn}>
@@ -247,26 +280,14 @@ export default function MonCompteScreen({ navigation }: Props) {
                 </View>
               ))}
             </View>
-
-            {/* Earnings summary */}
-            <View style={styles.chartSummary}>
-              <View style={styles.chartSumItem}>
-                <Text style={styles.chartSumValue}>{BAR_DATA.reduce((a, b) => a + b, 0)}</Text>
-                <Text style={styles.chartSumLabel}>courses cette semaine</Text>
-              </View>
-              <View style={styles.chartSumDiv} />
-              <View style={styles.chartSumItem}>
-                <Text style={[styles.chartSumValue, { color: C.accentDk }]}>
-                  {BAR_DATA.reduce((a, b) => a + b, 0) * 180} MRU
-                </Text>
-                <Text style={styles.chartSumLabel}>revenus estimés</Text>
-              </View>
-            </View>
           </View>
 
           {/* Performance strip */}
           <View style={styles.perfCard}>
-            <Text style={styles.sectionTitle}>Taux d'acceptation</Text>
+            <View style={styles.chartTitleRow}>
+              <Text style={styles.sectionTitle}>Taux d'acceptation</Text>
+              <View style={styles.previewBadge}><Text style={styles.previewBadgeText}>Aperçu</Text></View>
+            </View>
             <View style={styles.perfBar}>
               <View style={[styles.perfFill, { width: '86%' }]} />
             </View>
@@ -296,7 +317,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
-  backIcon:    { fontSize: 24, color: C.white, fontWeight: '300' },
   headerTitle: { fontSize: 22, fontWeight: '900', color: C.white },
   headerSub:   { fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 4 },
 
@@ -307,8 +327,8 @@ const styles = StyleSheet.create({
     padding: 4, ...SH.sm,
   },
   tab: {
-    flex: 1, paddingVertical: 11, borderRadius: RADIUS.lg + 2,
-    alignItems: 'center',
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 11, borderRadius: RADIUS.lg + 2,
   },
   tabActive:     { backgroundColor: C.primary },
   tabText:       { fontSize: 13, color: C.sub, fontWeight: '600' },
@@ -347,12 +367,17 @@ const styles = StyleSheet.create({
   tilesRow: { flexDirection: 'row', gap: 12 },
   tile: {
     flex: 1, backgroundColor: C.surface, borderRadius: RADIUS.xl,
-    padding: 16, alignItems: 'center', gap: 10, ...SH.sm,
+    padding: 16, alignItems: 'center', gap: 10, ...SH.sm, position: 'relative',
   },
-  tileDisabled:  { opacity: 0.4 },
+  tileDisabled:  { opacity: 0.55 },
   tileIconWrap:  { width: 48, height: 48, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center' },
-  tileIcon:      { fontSize: 24 },
   tileLabel:     { fontSize: 12, fontWeight: '700', color: C.text, textAlign: 'center' },
+  tileBadge: {
+    position: 'absolute', top: 8, right: 8,
+    backgroundColor: C.surfaceAlt, borderRadius: RADIUS.pill,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  tileBadgeText: { fontSize: 9, fontWeight: '800', color: C.primary },
 
   // Transactions
   txnSection: { gap: 10 },
@@ -365,38 +390,36 @@ const styles = StyleSheet.create({
   },
   txnRowLast:  { borderBottomWidth: 0 },
   txnIconWrap: { width: 36, height: 36, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
-  txnIcon:     { fontSize: 16, fontWeight: '800' },
   txnInfo:     { flex: 1 },
   txnLabel:    { fontSize: 14, color: C.text, fontWeight: '600' },
   txnDate:     { fontSize: 11, color: C.muted, marginTop: 2 },
   txnAmount:   { fontSize: 14, fontWeight: '800' },
+  emptyTxn: { backgroundColor: C.surface, borderRadius: RADIUS.xl, padding: 32, alignItems: 'center', gap: 10, ...SH.sm },
+  emptyTxnText: { fontSize: 13, color: C.sub, fontWeight: '600' },
 
   // Stats
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  statsGrid: { flexDirection: 'row', gap: 12 },
   statCard: {
-    width: '47%', backgroundColor: C.surface, borderRadius: RADIUS.xl,
+    flex: 1, backgroundColor: C.surface, borderRadius: RADIUS.xl,
     padding: 16, alignItems: 'center', gap: 6,
     borderWidth: 1.5, ...SH.sm,
   },
   statIconWrap: { width: 44, height: 44, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center' },
-  statIconText: { fontSize: 22 },
   statValue:    { fontSize: 24, fontWeight: '900' },
   statLabel:    { fontSize: 11, color: C.sub, textAlign: 'center', fontWeight: '600' },
 
   // Chart
   chartCard: { backgroundColor: C.surface, borderRadius: RADIUS.xl, padding: 18, gap: 16, ...SH.sm },
+  chartTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   chartTitle: { fontSize: 15, fontWeight: '800', color: C.text },
+  previewBadge: { backgroundColor: C.surfaceAlt, borderRadius: RADIUS.pill, paddingHorizontal: 8, paddingVertical: 3 },
+  previewBadgeText: { fontSize: 10, fontWeight: '800', color: C.primary },
   barChart: { flexDirection: 'row', alignItems: 'flex-end', height: 100, gap: 8 },
   barColumn: { flex: 1, alignItems: 'center', gap: 4 },
   barValue:  { fontSize: 10, fontWeight: '700', color: C.sub },
   barTrack:  { flex: 1, width: '100%', justifyContent: 'flex-end', borderRadius: RADIUS.sm, overflow: 'hidden', backgroundColor: C.borderLt },
   bar:       { width: '100%', borderRadius: RADIUS.sm },
   barDay:    { fontSize: 11, color: C.sub, fontWeight: '700' },
-  chartSummary: { flexDirection: 'row', backgroundColor: C.bg, borderRadius: RADIUS.lg, padding: 12 },
-  chartSumItem: { flex: 1, alignItems: 'center' },
-  chartSumValue:{ fontSize: 18, fontWeight: '900', color: C.text },
-  chartSumLabel:{ fontSize: 11, color: C.sub, marginTop: 2 },
-  chartSumDiv:  { width: 1, backgroundColor: C.border, marginHorizontal: 8 },
 
   // Performance
   perfCard: { backgroundColor: C.surface, borderRadius: RADIUS.xl, padding: 18, gap: 10, ...SH.sm },

@@ -1,6 +1,17 @@
 // ─── Navigation ──────────────────────────────────────────────────────────────
+// "Home" vit dans un vrai Drawer Navigator (voir navigation/MainDrawer.tsx) ;
+// les autres écrans restent des Stack.Screen classiques empilés par-dessus.
+
+import type { CompositeScreenProps } from '@react-navigation/native';
+import type { DrawerScreenProps } from '@react-navigation/drawer';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+
+export type DrawerParamList = {
+  Home: undefined;
+};
 
 export type RootStackParamList = {
+<<<<<<< HEAD
   Welcome:    undefined;
   Auth:       { mode: 'register' };
   Login:      undefined;
@@ -58,7 +69,24 @@ export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
   suv:   'SUV',
   van:   'Van',
   moto:  'Moto',
+=======
+  Welcome:     undefined;
+  Auth:        { mode: 'register' };
+  Login:       undefined;
+  Main:        undefined;
+  Historique:  undefined;
+  Parametres:  undefined;
+  MonCompte:   undefined;
+  Performance: undefined;
+  Recharge:    undefined;
+  ActiveTrip:  { rideId: string };
+>>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 };
+
+export type HomeScreenProps = CompositeScreenProps<
+  DrawerScreenProps<DrawerParamList, 'Home'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 // ─── Domain ───────────────────────────────────────────────────────────────────
 
