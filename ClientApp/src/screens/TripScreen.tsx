@@ -291,7 +291,7 @@ export default function TripScreen({ navigation, route }: Props) {
             </View>
             <View style={styles.meterStats}>
               <Text style={styles.meterStat}>{meter ? meter.distanceKm.toFixed(1) : '0.0'} km</Text>
-              <Text style={styles.meterStat}>{meter ? meter.durationMin : 0} min</Text>
+              <Text style={styles.meterStat}>{meter ? meter.stoppedMinutes : 0} min d'arrêt</Text>
             </View>
           </View>
         )}

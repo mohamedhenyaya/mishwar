@@ -29,13 +29,6 @@ export class User {
   @Column({ nullable: true })
   photoUrl: string;
 
-  // Note moyenne donnée par les chauffeurs
-  @Column({ type: 'decimal', precision: 3, scale: 2, default: 5.0 })
-  rating: number;
-
-  @Column({ default: 0 })
-  ratingCount: number;
-
   @Column({ default: 0 })
   totalRides: number;
 

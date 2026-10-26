@@ -7,27 +7,17 @@ import * as SecureStore from '../services/secureStorage';
 import { RootStackParamList } from '../types';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { navigationRef } from './navigationRef';
-<<<<<<< HEAD
-import RideCancellationWatcher from '../components/RideCancellationWatcher';
-import WelcomeScreen from '../screens/WelcomeScreen';
-import LoginScreen   from '../screens/LoginScreen';
-import AuthScreen    from '../screens/AuthScreen';
-import HomeScreen    from '../screens/HomeScreen';
-import BookingScreen from '../screens/BookingScreen';
-import MatchScreen   from '../screens/MatchScreen';
-import TripScreen    from '../screens/TripScreen';
-import RatingScreen  from '../screens/RatingScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-=======
 import { colors } from '../theme';
 import MainTabs        from './MainTabs';
+import RideCancellationWatcher from '../components/RideCancellationWatcher';
 import WelcomeScreen    from '../screens/WelcomeScreen';
 import LoginScreen      from '../screens/LoginScreen';
 import AuthScreen       from '../screens/AuthScreen';
 import MatchScreen      from '../screens/MatchScreen';
 import FavoritesScreen  from '../screens/FavoritesScreen';
 import SupportScreen    from '../screens/SupportScreen';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+import TripScreen       from '../screens/TripScreen';
+import RatingScreen     from '../screens/RatingScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -82,7 +72,6 @@ export default function AppNavigator() {
           component={MatchScreen}
           options={{ animation: 'fade' }}
         />
-<<<<<<< HEAD
         <Stack.Screen
           name="Trip"
           component={TripScreen}
@@ -93,15 +82,8 @@ export default function AppNavigator() {
           component={RatingScreen}
           options={{ animation: 'fade', gestureEnabled: false }}
         />
-        <Stack.Screen
-          name="Profile"
-          component={ProfileScreen}
-          options={{ animation: 'slide_from_right' }}
-        />
-=======
         <Stack.Screen name="Favorites" component={FavoritesScreen} />
         <Stack.Screen name="Support" component={SupportScreen} />
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
       </Stack.Navigator>
     </NavigationContainer>
   );

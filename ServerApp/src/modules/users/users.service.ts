@@ -4,14 +4,10 @@ import { In, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { User, UserRole } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
-<<<<<<< HEAD
-import { nextAverage } from '../../common/utils/public-profile.util';
-=======
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { AdminUsersQueryDto } from './dto/admin-users-query.dto';
 import { Ride } from '../rides/entities/ride.entity';
 import { PaginatedResult } from '../../common/dto/pagination-query.dto';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
 @Injectable()
 export class UsersService {
@@ -31,7 +27,6 @@ export class UsersService {
     return this.findById(id);
   }
 
-<<<<<<< HEAD
   async setPhoto(id: string, photoUrl: string): Promise<User> {
     await this.userRepo.update(id, { photoUrl });
     return this.findById(id);
@@ -41,15 +36,6 @@ export class UsersService {
     await this.userRepo.increment({ id }, 'totalRides', 1);
   }
 
-  async addRating(id: string, rating: number): Promise<void> {
-    const user = await this.findById(id);
-    await this.userRepo.update(id, {
-      rating:      nextAverage(user.rating, user.ratingCount, rating),
-      ratingCount: user.ratingCount + 1,
-    });
-  }
-}
-=======
   async findByIds(ids: string[]): Promise<User[]> {
     if (ids.length === 0) return [];
     return this.userRepo.find({ where: { id: In(ids) } });
@@ -126,4 +112,3 @@ export class UsersService {
     return this.userRepo.save(admin);
   }
 }
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba

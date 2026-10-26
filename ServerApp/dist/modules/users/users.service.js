@@ -16,8 +16,9 @@ exports.UsersService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
+const bcrypt = require("bcryptjs");
 const user_entity_1 = require("./entities/user.entity");
-const public_profile_util_1 = require("../../common/utils/public-profile.util");
+const ride_entity_1 = require("../rides/entities/ride.entity");
 let UsersService = class UsersService {
     constructor(userRepo) {
         this.userRepo = userRepo;
@@ -39,12 +40,69 @@ let UsersService = class UsersService {
     async incrementTotalRides(id) {
         await this.userRepo.increment({ id }, 'totalRides', 1);
     }
-    async addRating(id, rating) {
+    async findByIds(ids) {
+        if (ids.length === 0)
+            return [];
+        return this.userRepo.find({ where: { id: (0, typeorm_2.In)(ids) } });
+    }
+    async findAllPaginated(query) {
+        const page = query.page ?? 1;
+        const limit = query.limit ?? 20;
+        const qb = this.userRepo.createQueryBuilder('user').orderBy('user.createdAt', 'DESC');
+        if (query.isActive !== undefined) {
+            qb.andWhere('user.isActive = :isActive', { isActive: query.isActive === 'true' });
+        }
+        if (query.search) {
+            qb.andWhere('(user.name ILIKE :s OR user.phone ILIKE :s)', { s: `%${query.search}%` });
+        }
+        const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+        return { data, total, page, limit };
+    }
+    async getStats(id) {
         const user = await this.findById(id);
+        const rideRepo = this.userRepo.manager.getRepository(ride_entity_1.Ride);
+        const statusCounts = await rideRepo
+            .createQueryBuilder('ride')
+            .select('ride.status', 'status')
+            .addSelect('COUNT(*)', 'count')
+            .where('ride.userId = :id', { id })
+            .groupBy('ride.status')
+            .getRawMany();
+        const ridesByStatus = {};
+        let totalRides = 0;
+        for (const row of statusCounts) {
+            const count = parseInt(row.count, 10);
+            ridesByStatus[row.status] = count;
+            totalRides += count;
+        }
+        return { user, totalRides, ridesByStatus, balance: Number(user.balance) };
+    }
+    async block(id, reason) {
+        await this.findById(id);
         await this.userRepo.update(id, {
-            rating: (0, public_profile_util_1.nextAverage)(user.rating, user.ratingCount, rating),
-            ratingCount: user.ratingCount + 1,
+            isActive: false,
+            blockedReason: reason ?? null,
+            blockedAt: new Date(),
         });
+        return this.findById(id);
+    }
+    async unblock(id) {
+        await this.findById(id);
+        await this.userRepo.update(id, { isActive: true, blockedReason: null, blockedAt: null });
+        return this.findById(id);
+    }
+    async createAdmin(dto) {
+        const existing = await this.userRepo.findOne({ where: { phone: dto.phone } });
+        if (existing)
+            throw new common_1.ConflictException('Un compte avec ce numéro existe déjà');
+        const passwordHash = await bcrypt.hash(dto.password, 10);
+        const admin = this.userRepo.create({
+            phone: dto.phone,
+            name: dto.name,
+            passwordHash,
+            role: user_entity_1.UserRole.ADMIN,
+        });
+        return this.userRepo.save(admin);
     }
 };
 exports.UsersService = UsersService;

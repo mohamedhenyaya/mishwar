@@ -3,19 +3,15 @@ import React, {
 } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity,
-<<<<<<< HEAD
-  Animated, Dimensions, ScrollView, Alert, ActivityIndicator, Linking, AppState,
-=======
-  Animated, Dimensions,
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+  Animated, Alert, ActivityIndicator, Linking, AppState,
 } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 
-<<<<<<< HEAD
 import { captainSocketService, MeterReading, RideRequestPayload } from '../services/socket';
 import { apiGet, apiPatch, apiPost } from '../services/api';
 import { ensureNotificationPermission, notify } from '../services/notifications';
@@ -25,28 +21,13 @@ import CancellationModal, { CancellationNotice } from '../components/Cancellatio
 import { openDirections } from '../services/directions';
 import MapPin from '../components/MapPin';
 import StarRating from '../components/StarRating';
-import { SECURE_STORE_KEY, APP_VERSION } from '../config/constants';
+import { SECURE_STORE_KEY } from '../config/constants';
 import {
-  Coordinates, DriverProfile, PublicUser, RideDetails, RootStackParamList,
+  Coordinates, DriverProfile, HomeScreenProps, PublicUser, RideDetails,
 } from '../types';
-=======
-import { useDriverStatus } from '../context/DriverStatusContext';
-import { Coordinates, HomeScreenProps } from '../types';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 import { C, G, SH, RADIUS } from '../theme';
 
-const { width: SW } = Dimensions.get('window');
 const DELTA = { latitudeDelta: 0.012, longitudeDelta: 0.012 };
-
-<<<<<<< HEAD
-const MENU_ITEMS = [
-  { key: 'Mon profil',      icon: '👤', color: '#EDE9FF', route: 'Profil'     as const },
-  { key: 'Notifications',   icon: '🔔', color: '#FFF3E0', route: null           },
-  { key: 'Historique',      icon: '📋', color: '#E8F5E9', route: 'Historique' as const },
-  { key: 'Mon compte',      icon: '💰', color: '#E3F2FD', route: 'MonCompte'  as const },
-  { key: 'Paramètres',      icon: '⚙️', color: '#F3E5F5', route: 'Parametres' as const },
-  { key: 'Nous contacter',  icon: '💬', color: '#E0F7FA', route: null           },
-];
 
 type RidePhase = 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS';
 
@@ -94,25 +75,18 @@ const formatPrice = (price: RideRequestPayload['price']) =>
 const apiErrorMessage = (e: any, fallback: string): string =>
   e?.response?.data?.message ?? fallback;
 
-export default function HomeScreen({ navigation }: Props) {
-=======
 export default function HomeScreen({ navigation }: HomeScreenProps) {
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
 
-  const { isOnline, goOnline, goOffline } = useDriverStatus();
   const [location,   setLocation]   = useState<Coordinates | null>(null);
   const locationRef = useRef<Coordinates | null>(null);
   locationRef.current = location;
   const [region,     setRegion]     = useState<Region | null>(null);
-<<<<<<< HEAD
   const [isOnline,   setIsOnline]   = useState(false);
   // Lus par les listeners socket (enregistrés une seule fois)
   const isOnlineRef = useRef(false);
   isOnlineRef.current = isOnline;
-=======
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   const [now,        setNow]        = useState(new Date());
   const [todayEarnings, setTodayEarnings] = useState(0);
   const [todayRides,    setTodayRides]    = useState(0);
@@ -164,7 +138,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       if (state !== 'active' || !ride) return;
       apiGet<RideDetails>(`/rides/${ride.rideId}`)
         .then((d) => {
-          if (d.status === 'CANCELLED' && d.cancelledBy === 'rider') announceClientCancellation(ride);
+          if (d.status === 'CANCELLED' && d.cancelledBy === 'user') announceClientCancellation(ride);
         })
         .catch(() => {});
     });
@@ -235,7 +209,6 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
   useEffect(() => {
     initLocation();
-<<<<<<< HEAD
     let cancelled = false;
 
     (async () => {
@@ -307,16 +280,10 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
 
   const toggleOnline = async () => {
     if (activeRide || rideToRate) return; // pas de changement de statut pendant une course
-=======
-  }, [initLocation]);
-
-  const toggleOnline = async () => {
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     Animated.sequence([
       Animated.timing(pillScale, { toValue: 0.9, duration: 80, useNativeDriver: true }),
       Animated.spring(pillScale, { toValue: 1,   tension: 80, useNativeDriver: true }),
     ]).start();
-<<<<<<< HEAD
 
     const goingOnline = !isOnline;
     try {
@@ -385,7 +352,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   }, 'Impossible de terminer la course.');
 
   const submitClientRating = (skip = false) => rideToRate && runRideAction(async () => {
-    if (!skip) await apiPost(`/rides/${rideToRate.rideId}/rate`, { rating: clientRating });
+    if (!skip) await apiPost(`/rides/${rideToRate.rideId}/rate-rider`, { stars: clientRating });
     setRideToRate(null);
     loadProfile(); // nombre de courses à jour
   }, 'Impossible d\'envoyer la note.');
@@ -419,39 +386,6 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     ACCEPTED:    { label: 'Je suis arrivé',     onPress: arriveRide },
     ARRIVED:     { label: 'Démarrer la course', onPress: startRide },
     IN_PROGRESS: { label: 'Terminer la course', onPress: completeRide },
-  };
-
-  const openDrawer = () => {
-    setDrawerOpen(true);
-    Animated.parallel([
-      Animated.spring(drawerAnim,  { toValue: 0,    useNativeDriver: true, tension: 70, friction: 10 }),
-      Animated.timing(overlayAnim, { toValue: 0.55, duration: 260, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const closeDrawer = () => {
-    Animated.parallel([
-      Animated.spring(drawerAnim,  { toValue: -DRAWER_WIDTH, useNativeDriver: true, tension: 80, friction: 12 }),
-      Animated.timing(overlayAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]).start(() => setDrawerOpen(false));
-  };
-
-  const handleMenu = (route: string | null) => {
-    closeDrawer();
-    if (route) setTimeout(() => navigation.navigate(route as any), 290);
-  };
-
-  const handleLogout = async () => {
-    closeDrawer();
-    await SecureStore.deleteItemAsync(SECURE_STORE_KEY);
-    setTimeout(() => navigation.replace('Welcome'), 290);
-=======
-    if (isOnline) {
-      await goOffline();
-    } else {
-      await goOnline();
-    }
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   };
 
   const centerMap = () => {
@@ -621,7 +555,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               <View style={styles.meterRow}>
                 <Text style={styles.meterPrice}>{meter ? `${meter.price} MRU` : '…'}</Text>
                 <Text style={styles.meterStat}>
-                  {meter ? meter.distanceKm.toFixed(1) : '0.0'} km · {meter ? meter.durationMin : 0} min
+                  {meter ? meter.distanceKm.toFixed(1) : '0.0'} km · {meter ? meter.stoppedMinutes : 0} min d'arrêt
                 </Text>
               </View>
             )}
@@ -710,99 +644,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           </View>
         )}
       </Animated.View>
-<<<<<<< HEAD
-
-      {/* ── Overlay ── */}
-      {drawerOpen && (
-        <Animated.View style={[StyleSheet.absoluteFill, styles.overlay, { opacity: overlayAnim }]}
-          pointerEvents="auto"
-        >
-          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeDrawer} activeOpacity={1} />
-        </Animated.View>
-      )}
-
-      {/* ── Drawer ── */}
-      <Animated.View style={[styles.drawer, { transform: [{ translateX: drawerAnim }] }]}>
-        {/* Dark header */}
-        <LinearGradient
-          colors={G.dark}
-          style={[styles.drawerHeader, { paddingTop: insets.top + 24 }]}
-        >
-          {/* Decorative blob */}
-          <View style={styles.drawerBlob} />
-
-          {/* Avatar */}
-          <View style={styles.avatarWrap}>
-            <LinearGradient colors={G.primary} style={styles.avatarRing}>
-              <Avatar photoUrl={profile?.photoUrl} name={profile?.name ?? 'C'} size={65} color={C.darkMid} />
-            </LinearGradient>
-            <View style={[styles.avatarBadge, { backgroundColor: isOnline ? C.accent : C.danger }]} />
-          </View>
-          <Text style={styles.drawerName}>{profile?.name || 'Complétez votre profil'}</Text>
-          <Text style={styles.drawerPhone}>{profile?.phone ?? ''}</Text>
-
-          {/* Rating chip */}
-          <View style={styles.ratingChip}>
-            <Text style={styles.ratingIcon}>⭐</Text>
-            <Text style={styles.ratingText}>{Number(profile?.rating ?? 5).toFixed(1)}</Text>
-            <Text style={styles.ratingDot}>·</Text>
-            <Text style={styles.ratingText}>{profile?.totalRides ?? 0} courses</Text>
-          </View>
-        </LinearGradient>
-
-        {/* Menu */}
-        <ScrollView style={styles.drawerMenu} showsVerticalScrollIndicator={false}>
-          {MENU_ITEMS.map((item, i) => (
-            <TouchableOpacity
-              key={item.key}
-              style={styles.menuItem}
-              onPress={() => handleMenu(item.route)}
-              activeOpacity={0.65}
-            >
-              <View style={[styles.menuIconBadge, { backgroundColor: item.color }]}>
-                <Text style={styles.menuEmoji}>{item.icon}</Text>
-              </View>
-              <Text style={styles.menuLabel}>{item.key}</Text>
-              <Text style={styles.menuChev}>›</Text>
-            </TouchableOpacity>
-          ))}
-
-          <View style={styles.menuDivider} />
-
-          {/* Passenger mode */}
-          <TouchableOpacity style={styles.passengerRow} activeOpacity={0.8}>
-            <View style={styles.passengerContent}>
-              <Text style={styles.passengerIcon}>👤</Text>
-              <View>
-                <Text style={styles.passengerTitle}>Mode Passager</Text>
-                <Text style={styles.passengerSub}>Passer en mode client</Text>
-              </View>
-            </View>
-            <View style={styles.passengerBadge}>
-              <Text style={styles.passengerBadgeText}>Bêta</Text>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.menuDivider} />
-
-          {/* Logout */}
-          <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.7}>
-            <View style={[styles.menuIconBadge, { backgroundColor: '#FEE2E2' }]}>
-              <Text style={styles.menuEmoji}>⎋</Text>
-            </View>
-            <Text style={[styles.menuLabel, { color: C.danger }]}>Se déconnecter</Text>
-          </TouchableOpacity>
-
-          <View style={styles.drawerFooter}>
-            <Text style={styles.footerLang}>🌐  Français</Text>
-            <Text style={styles.footerVersion}>Volta Capitaine v{APP_VERSION}</Text>
-          </View>
-        </ScrollView>
-      </Animated.View>
 
       <CancellationModal notice={cancelNotice} onClose={() => setCancelNotice(null)} />
-=======
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     </View>
   );
 }

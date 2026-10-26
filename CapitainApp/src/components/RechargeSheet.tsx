@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert, Linking, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Alert, Linking, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import PaymentLogo from './PaymentLogo';
+import { apiPost } from '../services/api';
 import {
   PAYMENT_METHODS, PaymentMethod, RECHARGE_WHATSAPP, formatAccountNumber, formatWhatsapp,
 } from '../config/payments';
@@ -23,11 +24,31 @@ export default function RechargeSheet({ visible, onClose, driverPhone }: Props) 
   const insets = useSafeAreaInsets();
   const [method, setMethod] = useState<PaymentMethod | null>(null);
   const [copied, setCopied] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [sending, setSending] = useState(false);
 
   // Toujours rouvrir sur la liste des moyens de paiement
   useEffect(() => {
-    if (!visible) { setMethod(null); setCopied(false); }
+    if (!visible) { setMethod(null); setCopied(false); setAmount(''); }
   }, [visible]);
+
+  // Demande de recharge enregistrée dans le portefeuille : créditée après validation par un admin
+  const declareTopup = async () => {
+    if (!method) return;
+    setSending(true);
+    try {
+      await apiPost('/wallet/requests', { type: 'TOPUP', amount: Number(amount), method: method.name });
+      Alert.alert(
+        'Demande envoyée',
+        `Votre recharge de ${amount} MRU via ${method.name} sera créditée après vérification de la capture.`,
+        [{ text: 'OK', onPress: onClose }],
+      );
+    } catch (e: any) {
+      Alert.alert('Erreur', e?.response?.data?.message ?? 'Impossible d\'envoyer la demande de recharge.');
+    } finally {
+      setSending(false);
+    }
+  };
 
   const copyAccount = async () => {
     if (!method?.accountNumber) return;
@@ -105,6 +126,26 @@ export default function RechargeSheet({ visible, onClose, driverPhone }: Props) 
               </Text>
             )}
 
+            {/* Montant envoyé → demande de recharge (validée par un admin) */}
+            <View style={styles.amountRow}>
+              <TextInput
+                style={styles.amountInput}
+                value={amount}
+                onChangeText={(v) => setAmount(v.replace(/[^\d]/g, ''))}
+                placeholder="Montant envoyé (MRU)"
+                placeholderTextColor={C.muted}
+                keyboardType="number-pad"
+              />
+              <TouchableOpacity
+                style={[styles.declareBtn, (!Number(amount) || sending) && { opacity: 0.5 }]}
+                onPress={declareTopup}
+                disabled={!Number(amount) || sending}
+                activeOpacity={0.85}
+              >
+                {sending ? <ActivityIndicator color={C.white} /> : <Text style={styles.declareText}>Déclarer</Text>}
+              </TouchableOpacity>
+            </View>
+
             {/* WhatsApp */}
             <View style={styles.whatsappCard}>
               <View style={{ flex: 1 }}>
@@ -157,6 +198,14 @@ const styles = StyleSheet.create({
   stepNum: { fontWeight: '900', color: C.primary },
 
   otherText: { fontSize: 14, color: C.sub, lineHeight: 21 },
+
+  amountRow:   { flexDirection: 'row', gap: 10 },
+  amountInput: {
+    flex: 1, height: 50, borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: C.border,
+    paddingHorizontal: 14, fontSize: 16, fontWeight: '700', color: C.text, backgroundColor: C.surface,
+  },
+  declareBtn:  { paddingHorizontal: 18, borderRadius: RADIUS.md, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
+  declareText: { fontSize: 15, fontWeight: '800', color: C.white },
 
   whatsappCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,

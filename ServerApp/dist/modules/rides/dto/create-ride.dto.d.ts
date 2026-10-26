@@ -8,5 +8,4 @@ export declare class CreateRideDto {
     endLatitude?: number;
     endLongitude?: number;
     couponCode?: string;
-    isOpenTrip?: boolean;
 }

@@ -11,15 +11,17 @@ export type DrawerParamList = {
 };
 
 export type RootStackParamList = {
-<<<<<<< HEAD
-  Welcome:    undefined;
-  Auth:       { mode: 'register' };
-  Login:      undefined;
-  Home:       undefined;
-  Historique: undefined;
-  Parametres: undefined;
-  MonCompte:  undefined;
-  Profil:     undefined;
+  Welcome:     undefined;
+  Auth:        { mode: 'register' };
+  Login:       undefined;
+  Main:        undefined;
+  Historique:  undefined;
+  Parametres:  undefined;
+  MonCompte:   undefined;
+  Performance: undefined;
+  Recharge:    undefined;
+  ActiveTrip:  { rideId: string };
+  Profil:      undefined;
 };
 
 // ─── Course en temps réel (réponses de l'API /rides) ─────────────────────────
@@ -60,7 +62,7 @@ export interface RideDetails {
   endLongitude:    number | string | null;
   price:           number | string | null;
   isOpenTrip:      boolean;
-  cancelledBy:     'rider' | 'driver' | 'system' | null;
+  cancelledBy:     'user' | 'driver' | 'system' | null;
   user:            PublicUser;
 }
 
@@ -69,18 +71,6 @@ export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
   suv:   'SUV',
   van:   'Van',
   moto:  'Moto',
-=======
-  Welcome:     undefined;
-  Auth:        { mode: 'register' };
-  Login:       undefined;
-  Main:        undefined;
-  Historique:  undefined;
-  Parametres:  undefined;
-  MonCompte:   undefined;
-  Performance: undefined;
-  Recharge:    undefined;
-  ActiveTrip:  { rideId: string };
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 };
 
 export type HomeScreenProps = CompositeScreenProps<

@@ -100,21 +100,61 @@ __decorate([
     __metadata("design:type", Date)
 ], Ride.prototype, "startedAt", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'double precision', default: 0 }),
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 8, scale: 2, nullable: true }),
     __metadata("design:type", Number)
-], Ride.prototype, "distanceMeters", void 0);
+], Ride.prototype, "estimatedPrice", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 10, nullable: true }),
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 8, scale: 3, default: 0 }),
+    __metadata("design:type", Number)
+], Ride.prototype, "traveledDistanceKm", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', default: 0 }),
+    __metadata("design:type", Number)
+], Ride.prototype, "stoppedSeconds", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 10, scale: 7, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "lastMeterLatitude", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 10, scale: 7, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "lastMeterLongitude", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    __metadata("design:type", Date)
+], Ride.prototype, "lastMeterAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 8, scale: 2, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "livePrice", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 2, scale: 1, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "ratingForDriver", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 2, scale: 1, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "ratingForRider", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    __metadata("design:type", Date)
+], Ride.prototype, "scheduledAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Ride.prototype, "couponCode", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'decimal', precision: 8, scale: 2, nullable: true }),
+    __metadata("design:type", Number)
+], Ride.prototype, "discountAmount", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Ride.prototype, "cancelledBy", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'smallint', nullable: true }),
-    __metadata("design:type", Number)
-], Ride.prototype, "driverRating", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ type: 'smallint', nullable: true }),
-    __metadata("design:type", Number)
-], Ride.prototype, "userRating", void 0);
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], Ride.prototype, "cancelReason", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)

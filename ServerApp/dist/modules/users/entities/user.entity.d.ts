@@ -8,8 +8,6 @@ export declare class User {
     name: string;
     email: string;
     photoUrl: string;
-    rating: number;
-    ratingCount: number;
     totalRides: number;
     role: UserRole;
     passwordHash: string;

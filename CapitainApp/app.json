@@ -46,7 +46,6 @@
       ],
       "expo-asset",
       "expo-secure-store",
-<<<<<<< HEAD
       "expo-status-bar",
       [
         "expo-image-picker",
@@ -55,8 +54,7 @@
         }
       ],
       "expo-notifications",
-      "expo-audio"
-=======
+      "expo-audio",
       [
         "expo-splash-screen",
         {
@@ -66,7 +64,6 @@
           "resizeMode": "contain"
         }
       ]
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     ]
   }
 }

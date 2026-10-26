@@ -30,7 +30,6 @@ export interface RideAcceptedPayload {
   driver: RideAcceptedDriver;
 }
 
-<<<<<<< HEAD
 export interface DriverPositionPayload {
   driverId: string;
   latitude: number;
@@ -48,14 +47,10 @@ export interface RideEvents {
   'driver:position': DriverPositionPayload;
   'ride:meter':      MeterReading;
   'driver:status':   { driverId: string; status: 'ONLINE' | 'OFFLINE' | 'BUSY' };
-=======
-export interface RideMeterPayload {
-  rideId: string;
-  distanceKm: number;
-  stoppedMinutes: number;
-  price: number;
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 }
+
+// Relevé du compteur d'un trajet ouvert (ride:meter)
+export type RideMeterPayload = MeterReading;
 
 // ─── Singleton service ────────────────────────────────────────────────────────
 

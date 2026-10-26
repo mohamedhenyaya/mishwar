@@ -18,18 +18,15 @@ export type RootStackParamList = {
   Welcome: undefined;
   Auth: { mode: 'register' };
   Login: undefined;
-<<<<<<< HEAD
-  Home: undefined;
-  Booking: { destination?: string; startLatitude?: number; startLongitude?: number };
-  Match: { rideId: string; price?: number | null };
+  Main: undefined;
+  Match: { rideId: string; price?: number | null; isOpenTrip?: boolean; estimatedPrice?: number };
   Trip: { rideId: string };
   Rating: { rideId: string; driver: PublicDriver | null; price: number | null };
-  Profile: undefined;
+  Favorites: undefined;
+  Support: undefined;
 };
 
 // ─── Course en temps réel (réponses de l'API /rides) ─────────────────────────
-
-export type RideStatus = 'PENDING' | 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
 export interface PublicDriver {
   id: string;
@@ -64,10 +61,11 @@ export interface RideDetails {
   endLatitude: number | string | null;
   endLongitude: number | string | null;
   price: number | string | null;
+  estimatedPrice: number | string | null;
+  livePrice: number | string | null;
   isOpenTrip: boolean;
-  cancelledBy: 'rider' | 'driver' | 'system' | null;
+  cancelledBy: 'user' | 'driver' | 'system' | null;
   startedAt: string | null;
-  distanceMeters: number;
   createdAt: string;
   driver: PublicDriver | null;
   user: PublicUser;
@@ -77,16 +75,16 @@ export interface RideDetails {
 export interface MeterReading {
   rideId: string;
   distanceKm: number;
-  durationMin: number;
+  stoppedMinutes: number;
   price: number;
 }
 
-// GET /rides/tariff
+// GET /rides/tariff — réglages admin (PlatformSettings)
 export interface Tariff {
   currency: string;
-  baseFare: number;
+  minimumFare: number;
   perKm: number;
-  perMinute: number;
+  perStopMinute: number;
 }
 
 export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
@@ -94,12 +92,6 @@ export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
   suv:   'SUV',
   van:   'Van',
   moto:  'Moto',
-=======
-  Main: undefined;
-  Match: { rideId: string; isOpenTrip?: boolean; estimatedPrice?: number };
-  Favorites: undefined;
-  Support: undefined;
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 };
 
 export type TabScreenProps<T extends keyof TabParamList> = CompositeScreenProps<
@@ -140,9 +132,11 @@ export interface UserProfile {
   email: string | null;
   rating: number;
   ratingCount: number;
+  photoUrl: string | null;
+  totalRides: number;
 }
 
-export type RideStatus = 'SCHEDULED' | 'PENDING' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type RideStatus = 'SCHEDULED' | 'PENDING' | 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
 export interface Ride {
   id: string;

@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Alert, Animated, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,10 +14,14 @@ import OpenTripOriginModal from '../components/OpenTripOriginModal';
 import LanguagePickerButton from '../components/LanguagePickerButton';
 import { useLanguage } from '../i18n/LanguageContext';
 import { Button } from '../components/ui';
-import { apiPost } from '../services/api';
+import { apiGet, apiPost } from '../services/api';
+import { socketService } from '../services/socket';
+import * as SecureStore from '../services/secureStorage';
+import { SECURE_STORE_KEY } from '../config/constants';
+import AvailableDriversBadge from '../components/AvailableDriversBadge';
 import { searchPlaces, getPlaceDetails, PlaceSuggestion } from '../services/places';
 import { getPlaceHistory, addPlaceToHistory, PlaceHistoryEntry } from '../services/placeHistory';
-import { TabScreenProps } from '../types';
+import { RideDetails, TabScreenProps } from '../types';
 import { colors, radius, shadows, spacing, typography, motion } from '../theme';
 
 type Props = TabScreenProps<'Home'>;
@@ -33,8 +38,8 @@ const DELTA = { latitudeDelta: 0.0122, longitudeDelta: 0.0121 };
 export default function ItineraryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
-  const originInputRef = useRef<TextInput>(null);
-  const destInputRef = useRef<TextInput>(null);
+  const originInputRef = useRef<TextInputInstance>(null);
+  const destInputRef = useRef<TextInputInstance>(null);
 
   const [currentLocation, setCurrentLocation] = useState<Coords | null>(null);
 
@@ -69,6 +74,22 @@ export default function ItineraryScreen({ navigation }: Props) {
       Animated.spring(slideAnim, { toValue: 0, ...motion.spring, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideAnim]);
+
+  // ── Socket authentifié (événements de course, statut des chauffeurs) + reprise
+  // d'une course en cours si l'app a été relancée pendant une recherche ou un trajet
+  useEffect(() => {
+    SecureStore.getItemAsync(SECURE_STORE_KEY).then((token) => socketService.connect(token ?? undefined));
+    apiGet<RideDetails | null>('/rides/active')
+      .then((ride) => {
+        if (!ride) return;
+        if (ride.status === 'PENDING') {
+          navigation.navigate('Match', { rideId: ride.id, isOpenTrip: ride.isOpenTrip });
+        } else {
+          navigation.navigate('Trip', { rideId: ride.id });
+        }
+      })
+      .catch(() => { /* pas de course active */ });
+  }, []);
 
   // ── Géolocalisation silencieuse (sert de repli pour l'origine) ────────────
   useEffect(() => {
@@ -321,6 +342,7 @@ export default function ItineraryScreen({ navigation }: Props) {
 
           {/* ── Barre supérieure — sélecteur de langue ───────────────────── */}
           <View style={styles.topBar}>
+            <AvailableDriversBadge location={currentLocation} />
             <LanguagePickerButton />
           </View>
 
@@ -542,7 +564,7 @@ const styles = StyleSheet.create({
 
   body: { paddingHorizontal: spacing.lg },
 
-  topBar: { flexDirection: 'row', justifyContent: 'flex-end' },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 
   routeCard: {
     backgroundColor: colors.surface, borderRadius: radius.xxl,

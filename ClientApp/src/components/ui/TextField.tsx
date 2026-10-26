@@ -8,6 +8,7 @@ import {
   TextInputProps,
   View,
 } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadows, spacing, typography, motion } from '../../theme';
 
@@ -18,7 +19,7 @@ interface Props extends Omit<TextInputProps, 'placeholderTextColor'> {
   isPassword?: boolean;
 }
 
-const TextField = forwardRef<TextInput, Props>(
+const TextField = forwardRef<TextInputInstance, Props>(
   ({ label, error, icon, isPassword, style, onFocus, onBlur, ...rest }, ref) => {
     const [focused, setFocused] = useState(false);
     const [secure, setSecure] = useState(!!isPassword);

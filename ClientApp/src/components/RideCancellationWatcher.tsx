@@ -17,15 +17,9 @@ export function watchRide(rideId: string | null): void {
   watchedRideId = rideId;
 }
 
-function backToHome(ride: RideDetails | null, newRequest: boolean): void {
-  const routes: { name: string; params?: object }[] = [{ name: 'Home' }];
-  if (newRequest && ride) {
-    routes.push({
-      name: 'Booking',
-      params: { startLatitude: Number(ride.startLatitude), startLongitude: Number(ride.startLongitude) },
-    });
-  }
-  navigationRef.current?.dispatch(CommonActions.reset({ index: routes.length - 1, routes }));
+// Retour à l'onglet Accueil (écran d'itinéraire), d'où le client peut refaire une demande
+function backToHome(): void {
+  navigationRef.current?.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Main' }] }));
 }
 
 // Popup affiché au client quand le chauffeur annule, quel que soit l'écran ouvert
@@ -41,11 +35,8 @@ export async function announceDriverCancellation(rideId: string): Promise<void> 
   notify('Course annulée par le chauffeur', `${name} a annulé la course.`);
   Alert.alert(
     'Course annulée',
-    `${name} a annulé votre course. Voulez-vous rechercher un autre chauffeur ?`,
-    [
-      { text: 'Accueil', style: 'cancel', onPress: () => backToHome(ride, false) },
-      { text: 'Nouvelle demande', onPress: () => backToHome(ride, true) },
-    ],
+    `${name} a annulé votre course. Vous pouvez faire une nouvelle demande depuis l'accueil.`,
+    [{ text: 'Nouvelle demande', onPress: backToHome }],
     { cancelable: false },
   );
 }

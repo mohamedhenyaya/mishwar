@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import Constants from 'expo-constants';
 
 // IP du PC lue automatiquement depuis le serveur Expo (hostUri, ex. "192.168.1.17:8082"),
@@ -12,9 +11,6 @@ function devHost(): string {
 }
 
 const DEV_HOST = devHost();
-=======
-const DEV_HOST = '172.20.10.2';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
 export const API_BASE_URL    = `http://${DEV_HOST}:3000/api/v1`;
 export const SOCKET_URL      = `http://${DEV_HOST}:3000`;

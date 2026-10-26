@@ -10,7 +10,6 @@ import Constants from 'expo-constants';
  * FALLBACK_HOST ne sert que si hostUri est absent ou passe par un tunnel Expo
  * (le tunnel ne donne pas accès à NestJS) : Windows → ipconfig → « Adresse IPv4 ».
  */
-<<<<<<< HEAD
 const FALLBACK_HOST = '192.168.1.17';
 
 function devHost(): string {
@@ -20,19 +19,13 @@ function devHost(): string {
 }
 
 const DEV_HOST = devHost();
-=======
-const DEV_HOST = '172.20.10.2'; // ← IP locale du PC (Wi-Fi) pour test sur appareil réel
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
 export const API_BASE_URL = `http://${DEV_HOST}:3000/api/v1`;
 export const SOCKET_URL   = `http://${DEV_HOST}:3000`;
 
 export const SECURE_STORE_KEY = 'mishwar_auth_token';
-<<<<<<< HEAD
-=======
 
 // ── Support — à mettre à jour avec les vrais contacts de l'équipe support ──────
 export const SUPPORT_PHONE    = '+22220122724';
 export const SUPPORT_WHATSAPP = '+22220122724';
 export const SUPPORT_EMAIL    = 'support@mishwar.mr';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba

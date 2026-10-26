@@ -6,13 +6,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
-<<<<<<< HEAD
-import { DriverProfile, RootStackParamList } from '../types';
-import RechargeSheet from '../components/RechargeSheet';
-=======
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+import RechargeSheet from '../components/RechargeSheet';
 import { apiGet } from '../services/api';
 import { C, G, SH, RADIUS } from '../theme';
 
@@ -92,7 +88,7 @@ export default function MonCompteScreen({ navigation }: Props) {
   const [driverPhone,  setDriverPhone]  = useState<string | undefined>();
 
   useEffect(() => {
-    apiGet<DriverProfile>('/drivers/me').then((d) => setDriverPhone(d.phone)).catch(() => {});
+    apiGet<{ phone: string }>('/drivers/me').then((d) => setDriverPhone(d.phone)).catch(() => {});
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -202,13 +198,8 @@ export default function MonCompteScreen({ navigation }: Props) {
           {/* ── Action tiles ── */}
           <View style={styles.tilesRow}>
             <ActionTile
-<<<<<<< HEAD
-              icon="💳" label="Recharger" color={C.primary} bg={C.surfaceAlt}
-              onPress={() => setRechargeOpen(true)}
-=======
               icon="add-circle" label="Recharger" color={C.primary} bg={C.surfaceAlt}
-              onPress={() => navigation.navigate('Recharge')}
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+              onPress={() => setRechargeOpen(true)}
             />
             <ActionTile icon="paper-plane-outline" label="Transférer" color={C.sub} bg={C.bg} disabled badge="Bientôt" />
             <ActionTile icon="time-outline" label="Historique" color={C.accent} bg="#ECFDF5"

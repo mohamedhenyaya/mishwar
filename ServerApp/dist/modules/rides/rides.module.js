@@ -15,6 +15,9 @@ const admin_rides_controller_1 = require("./admin-rides.controller");
 const rides_service_1 = require("./rides.service");
 const geolocation_module_1 = require("../geolocation/geolocation.module");
 const drivers_module_1 = require("../drivers/drivers.module");
+const settings_module_1 = require("../settings/settings.module");
+const wallet_module_1 = require("../wallet/wallet.module");
+const promotions_module_1 = require("../promotions/promotions.module");
 const users_module_1 = require("../users/users.module");
 let RidesModule = class RidesModule {
 };
@@ -23,8 +26,11 @@ exports.RidesModule = RidesModule = __decorate([
     (0, common_1.Module)({
         imports: [
             typeorm_1.TypeOrmModule.forFeature([ride_entity_1.Ride]),
-            geolocation_module_1.GeolocationModule,
-            drivers_module_1.DriversModule,
+            (0, common_1.forwardRef)(() => geolocation_module_1.GeolocationModule),
+            (0, common_1.forwardRef)(() => drivers_module_1.DriversModule),
+            settings_module_1.SettingsModule,
+            wallet_module_1.WalletModule,
+            promotions_module_1.PromotionsModule,
             users_module_1.UsersModule,
         ],
         controllers: [rides_controller_1.RidesController, admin_rides_controller_1.AdminRidesController],

@@ -15,10 +15,7 @@ export class CreateRideDto {
   @Type(() => Number)
   startLongitude: number;
 
-<<<<<<< HEAD
   // Ignoré pour un trajet ouvert
-=======
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   @IsOptional()
   @IsString()
   destinationName?: string;
@@ -46,8 +43,4 @@ export class CreateRideDto {
   @IsOptional()
   @IsString()
   couponCode?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isOpenTrip?: boolean;
 }

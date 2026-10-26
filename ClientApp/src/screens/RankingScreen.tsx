@@ -120,7 +120,7 @@ export default function RankingScreen(_props: Props) {
                 <Text style={styles.yourRankLabel}>{t('rankingYourRank')}</Text>
                 <Text style={styles.yourRankPoints}>{currentUser.points}{t('rankingPointsSuffix')}</Text>
               </View>
-            ) : null
+            ) : undefined
           }
         />
       )}

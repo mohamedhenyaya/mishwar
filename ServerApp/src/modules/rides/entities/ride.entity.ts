@@ -16,7 +16,7 @@ export enum RideStatus {
   CANCELLED   = 'CANCELLED',
 }
 
-export type RideCancelledBy = 'rider' | 'driver' | 'system';
+export type RideCancelledBy = 'user' | 'driver' | 'system';
 
 // Course attribuée à un chauffeur et pas encore terminée
 export const ACTIVE_RIDE_STATUSES = [RideStatus.ACCEPTED, RideStatus.ARRIVED, RideStatus.IN_PROGRESS];
@@ -79,34 +79,13 @@ export class Ride {
   @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
   price: number | null;
 
-<<<<<<< HEAD
-  // Trajet ouvert : pas de destination, prix au compteur (temps + distance réellement parcourue)
-=======
   // Trajet ouvert : destination inconnue à la création, tarif calculé en temps réel via le compteur
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   @Column({ default: false })
   isOpenTrip: boolean;
 
   @Column({ type: 'timestamp', nullable: true })
   startedAt: Date | null;
 
-<<<<<<< HEAD
-  // Distance cumulée depuis le démarrage, à partir des positions GPS du chauffeur
-  @Column({ type: 'double precision', default: 0 })
-  distanceMeters: number;
-
-  // Auteur de l'annulation : 'rider', 'driver' ou 'system' (délai dépassé / aucun chauffeur)
-  @Column({ type: 'varchar', length: 10, nullable: true })
-  cancelledBy: RideCancelledBy | null;
-
-  // Note (1-5) donnée par le client au chauffeur
-  @Column({ type: 'smallint', nullable: true })
-  driverRating: number | null;
-
-  // Note (1-5) donnée par le chauffeur au client
-  @Column({ type: 'smallint', nullable: true })
-  userRating: number | null;
-=======
   // Tarif indicatif figé à la création pour une course classique (destination connue) — jamais recalculé
   @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
   estimatedPrice: number | null;
@@ -150,11 +129,10 @@ export class Ride {
 
   // 'user' | 'driver' | 'system' — qui est à l'origine de l'annulation
   @Column({ nullable: true })
-  cancelledBy: string | null;
+  cancelledBy: RideCancelledBy | null;
 
   @Column({ nullable: true })
   cancelReason: string | null;
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
   @CreateDateColumn()
   createdAt: Date;

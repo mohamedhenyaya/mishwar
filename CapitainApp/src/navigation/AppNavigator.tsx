@@ -7,16 +7,6 @@ import * as SecureStore from 'expo-secure-store';
 import { RootStackParamList } from '../types';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { navigationRef } from './navigationRef';
-<<<<<<< HEAD
-import WelcomeScreen    from '../screens/WelcomeScreen';
-import LoginScreen      from '../screens/LoginScreen';
-import AuthScreen       from '../screens/AuthScreen';
-import HomeScreen       from '../screens/HomeScreen';
-import HistoriqueScreen from '../screens/HistoriqueScreen';
-import ParametresScreen from '../screens/ParametresScreen';
-import MonCompteScreen  from '../screens/MonCompteScreen';
-import ProfilScreen     from '../screens/ProfilScreen';
-=======
 import MainDrawer          from './MainDrawer';
 import WelcomeScreen       from '../screens/WelcomeScreen';
 import LoginScreen         from '../screens/LoginScreen';
@@ -27,8 +17,8 @@ import MonCompteScreen     from '../screens/MonCompteScreen';
 import PerformanceScreen   from '../screens/PerformanceScreen';
 import RechargeScreen      from '../screens/RechargeScreen';
 import ActiveTripScreen    from '../screens/ActiveTripScreen';
+import ProfilScreen        from '../screens/ProfilScreen';
 import { C } from '../theme';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -78,16 +68,6 @@ export default function AppNavigator() {
           contentStyle: { backgroundColor: C.bg },
         }}
       >
-<<<<<<< HEAD
-        <Stack.Screen name="Welcome"    component={WelcomeScreen} options={{ animation: 'fade' }} />
-        <Stack.Screen name="Login"      component={LoginScreen} />
-        <Stack.Screen name="Auth"       component={AuthScreen} />
-        <Stack.Screen name="Home"       component={HomeScreen} options={{ animation: 'fade' }} />
-        <Stack.Screen name="Historique" component={HistoriqueScreen} options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="Parametres" component={ParametresScreen} options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="MonCompte"  component={MonCompteScreen}  options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="Profil"     component={ProfilScreen}     options={{ animation: 'slide_from_right' }} />
-=======
         <Stack.Screen name="Welcome"     component={WelcomeScreen} options={{ animation: 'fade' }} />
         <Stack.Screen name="Login"       component={LoginScreen} />
         <Stack.Screen name="Auth"        component={AuthScreen} />
@@ -98,7 +78,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Performance" component={PerformanceScreen} options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Recharge"    component={RechargeScreen}   options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="ActiveTrip"  component={ActiveTripScreen} options={{ animation: 'slide_from_bottom' }} />
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+        <Stack.Screen name="Profil"      component={ProfilScreen}     options={{ animation: 'slide_from_right' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

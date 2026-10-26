@@ -33,7 +33,7 @@ export default function RatingScreen({ navigation, route }: Props) {
   const submit = async () => {
     setSending(true);
     try {
-      await apiPost(`/rides/${rideId}/rate`, { rating });
+      await apiPost(`/rides/${rideId}/rate`, { stars: rating });
       navigation.popToTop();
     } catch (e: any) {
       Alert.alert('Erreur', e?.response?.data?.message ?? 'Impossible d\'envoyer la note.');

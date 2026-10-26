@@ -34,10 +34,7 @@ export default function LoginScreen({ navigation }: Props) {
   const [password, setPassword] = useState('');
   const [loading,  setLoading]  = useState(false);
 
-<<<<<<< HEAD
   const passwordRef = useRef<TextInputInstance>(null);
-=======
-  const passwordRef = useRef<TextInput>(null);
   const fade  = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(20)).current;
 
@@ -47,7 +44,6 @@ export default function LoginScreen({ navigation }: Props) {
       Animated.spring(slide, { toValue: 0, useNativeDriver: true, ...motion.spring }),
     ]).start();
   }, [fade, slide]);
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
   const canSubmit = phone.trim().length >= 9 && password.length >= 6;
 

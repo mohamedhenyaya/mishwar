@@ -40,14 +40,6 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "photoUrl", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'decimal', precision: 3, scale: 2, default: 5.0 }),
-    __metadata("design:type", Number)
-], User.prototype, "rating", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ default: 0 }),
-    __metadata("design:type", Number)
-], User.prototype, "ratingCount", void 0);
-__decorate([
     (0, typeorm_1.Column)({ default: 0 }),
     __metadata("design:type", Number)
 ], User.prototype, "totalRides", void 0);

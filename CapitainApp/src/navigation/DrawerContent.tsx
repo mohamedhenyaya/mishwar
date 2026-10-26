@@ -1,15 +1,19 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { DrawerContentComponentProps } from '@react-navigation/drawer';
+import { DrawerContentComponentProps, useDrawerStatus } from '@react-navigation/drawer';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { SECURE_STORE_KEY, APP_VERSION } from '../config/constants';
 import { resetToWelcome } from './navigationRef';
+import { apiGet } from '../services/api';
+import Avatar from '../components/Avatar';
+import { DriverProfile } from '../types';
 import { C, G, RADIUS } from '../theme';
 
 const MENU_ITEMS = [
   { key: 'Chauffeur',              icon: 'car-sport'      as const, color: '#EDE9FF', route: 'Home'        as const },
+  { key: 'Mon profil',             icon: 'person-circle-outline' as const, color: '#EDE9FF', route: 'Profil' as const },
   { key: 'Mes trajets',            icon: 'reader-outline' as const, color: '#E8F5E9', route: 'Historique'  as const },
   { key: 'Mon compte',             icon: 'wallet-outline' as const, color: '#E3F2FD', route: 'MonCompte'   as const },
   { key: 'Performance et classement', icon: 'trophy-outline' as const, color: '#FFF3E0', route: 'Performance' as const },
@@ -17,7 +21,14 @@ const MENU_ITEMS = [
 ];
 
 export default function DrawerContent({ navigation }: DrawerContentComponentProps) {
-  const isOnline = false; // reflète l'état "hors ligne/en ligne" affiché par HomeScreen — statique ici, purement décoratif
+  // Profil réel (nom, photo, note, statut) rechargé à chaque ouverture du menu
+  const [profile, setProfile] = useState<DriverProfile | null>(null);
+  const drawerStatus = useDrawerStatus();
+  const loadProfile = useCallback(() => {
+    apiGet<DriverProfile>('/drivers/me').then(setProfile).catch(() => {});
+  }, []);
+  React.useEffect(() => { if (drawerStatus === 'open') loadProfile(); }, [drawerStatus, loadProfile]);
+  const isOnline = !!profile && profile.status !== 'OFFLINE';
 
   const handleMenu = (route: (typeof MENU_ITEMS)[number]['route']) => {
     navigation.closeDrawer();
@@ -38,20 +49,18 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
 
         <View style={styles.avatarWrap}>
           <LinearGradient colors={G.primary} style={styles.avatarRing}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>M</Text>
-            </View>
+            <Avatar photoUrl={profile?.photoUrl} name={profile?.name ?? 'C'} size={65} color={C.darkMid} />
           </LinearGradient>
           <View style={[styles.avatarBadge, { backgroundColor: isOnline ? C.accent : C.danger }]} />
         </View>
-        <Text style={styles.name}>MohamedhenYaya</Text>
-        <Text style={styles.phone}>+22220122724</Text>
+        <Text style={styles.name}>{profile?.name || 'Complétez votre profil'}</Text>
+        <Text style={styles.phone}>{profile?.phone ?? ''}</Text>
 
         <View style={styles.ratingChip}>
           <Ionicons name="star" size={12} color="#FFD60A" />
-          <Text style={styles.ratingText}>4.9</Text>
+          <Text style={styles.ratingText}>{Number(profile?.rating ?? 5).toFixed(1)}</Text>
           <Text style={styles.ratingDot}>·</Text>
-          <Text style={styles.ratingText}>238 courses</Text>
+          <Text style={styles.ratingText}>{profile?.totalRides ?? 0} courses</Text>
         </View>
       </LinearGradient>
 
@@ -123,11 +132,6 @@ const styles = StyleSheet.create({
     width: 70, height: 70, borderRadius: 35,
     padding: 2.5, alignItems: 'center', justifyContent: 'center',
   },
-  avatar: {
-    width: 65, height: 65, borderRadius: 32.5,
-    backgroundColor: C.darkMid, alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontSize: 28, fontWeight: '800', color: C.white },
   avatarBadge: {
     position: 'absolute', bottom: 2, right: 2,
     width: 16, height: 16, borderRadius: 8,

@@ -6,18 +6,13 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { CreateRideDto } from './dto/create-ride.dto';
 import { CompleteRideDto } from './dto/complete-ride.dto';
-<<<<<<< HEAD
-import { RateRideDto } from './dto/rate-ride.dto';
-=======
 import { CreateScheduledRideDto } from './dto/create-scheduled-ride.dto';
 import { UpdateScheduledRideDto } from './dto/update-scheduled-ride.dto';
 import { EstimateRideDto } from './dto/estimate-ride.dto';
 import { DriverCancelRideDto } from './dto/driver-cancel-ride.dto';
 import { CancelRideDto } from './dto/cancel-ride.dto';
 import { LeaderboardQueryDto } from './dto/leaderboard-query.dto';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 import { RidesService } from './rides.service';
-import { TARIFF } from './utils/pricing.util';
 
 @Controller('rides')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -70,22 +65,22 @@ export class RidesController {
     return this.ridesService.findByUser(user.sub);
   }
 
-<<<<<<< HEAD
-  // Déclarés avant :id pour ne pas être capturés comme identifiant
+  // Tarifs affichés par les apps (réglables par l'admin dans PlatformSettings)
   @Get('tariff')
   tariff() {
-    return TARIFF;
+    return this.ridesService.getTariff();
   }
 
+  // Course en attente ou en cours (reprise après redémarrage de l'app)
   @Get('active')
   active(@CurrentUser() user: JwtPayload) {
     return this.ridesService.findActive(user);
-=======
+  }
+
   @Get('leaderboard')
   @Roles('user')
   leaderboard(@CurrentUser() user: JwtPayload, @Query() dto: LeaderboardQueryDto) {
     return this.ridesService.getLeaderboard(dto.period, user.sub);
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   }
 
   @Get(':id')
@@ -114,11 +109,6 @@ export class RidesController {
   @Roles('driver')
   arrive(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.ridesService.arriveRide(id, user.sub);
-  }
-
-  @Post(':id/rate')
-  rate(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: RateRideDto) {
-    return this.ridesService.rateRide(id, user, dto.rating);
   }
 
   @Post(':id/start')
@@ -151,11 +141,5 @@ export class RidesController {
     @Body() dto: DriverCancelRideDto,
   ) {
     return this.ridesService.driverCancelRide(id, user.sub, dto);
-  }
-
-  @Post(':id/driver-cancel')
-  @Roles('driver')
-  driverCancel(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.ridesService.cancelRideByDriver(id, user.sub);
   }
 }

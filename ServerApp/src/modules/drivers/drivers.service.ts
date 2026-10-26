@@ -1,14 +1,6 @@
 import { ConflictException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-<<<<<<< HEAD
-import { Subject } from 'rxjs';
-import { Driver, DriverStatus, VehicleType } from './entities/driver.entity';
-import { NearbyDriversDto } from './dto/nearby-drivers.dto';
-import { UpdateLocationDto } from './dto/update-location.dto';
-import { UpdateDriverDto } from './dto/update-driver.dto';
-import { nextAverage } from '../../common/utils/public-profile.util';
-=======
 import * as bcrypt from 'bcryptjs';
 import { Driver, DriverStatus, VehicleType } from './entities/driver.entity';
 import { NearbyDriversDto } from './dto/nearby-drivers.dto';
@@ -24,7 +16,6 @@ import {
   WalletTransactionType,
 } from '../wallet/entities/wallet-transaction.entity';
 import { PaginatedResult } from '../../common/dto/pagination-query.dto';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
 export interface NearbyDriverResult {
   id: string;
@@ -57,7 +48,6 @@ export class DriversService {
 
     const rows = await this.driverRepo.query(
       `
-<<<<<<< HEAD
       SELECT * FROM (
         SELECT
           id,
@@ -82,34 +72,6 @@ export class DriversService {
           AND ($4::text[] IS NULL OR "vehicleType"::text = ANY($4))
       ) AS nearby
       WHERE "distanceMeters" <= $3
-=======
-      SELECT
-        id,
-        name,
-        phone,
-        status,
-        "vehicleType",
-        rating,
-        latitude,
-        longitude,
-        6371000 * 2 * ASIN(SQRT(
-          POWER(SIN((RADIANS($1) - RADIANS(latitude))  / 2), 2) +
-          COS(RADIANS($1)) * COS(RADIANS(latitude)) *
-          POWER(SIN((RADIANS($2) - RADIANS(longitude)) / 2), 2)
-        )) AS "distanceMeters"
-      FROM drivers
-      WHERE
-        status     = 'ONLINE'
-        AND latitude  IS NOT NULL
-        AND longitude IS NOT NULL
-        AND "isActive" = true
-        AND ($4::text[] IS NULL OR "vehicleType"::text = ANY($4))
-        AND 6371000 * 2 * ASIN(SQRT(
-          POWER(SIN((RADIANS($1) - RADIANS(latitude))  / 2), 2) +
-          COS(RADIANS($1)) * COS(RADIANS(latitude)) *
-          POWER(SIN((RADIANS($2) - RADIANS(longitude)) / 2), 2)
-        )) <= $3
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
       ORDER BY "distanceMeters" ASC
       LIMIT 20
       `,
@@ -137,13 +99,10 @@ export class DriversService {
 
   // ── PATCH /drivers/status ─────────────────────────────────────────────────
 
-  // Changements de statut, relayés en temps réel aux clients par le gateway
-  // (Subject plutôt qu'une injection du gateway : évite la dépendance circulaire entre modules)
-  readonly statusChanges = new Subject<{ driverId: string; status: DriverStatus }>();
-
   async updateStatus(id: string, status: DriverStatus): Promise<Driver> {
     await this.driverRepo.update(id, { status });
-    this.statusChanges.next({ driverId: id, status });
+    // Diffusé à tous les clients : carte et compteur de chauffeurs disponibles à jour en direct
+    this.geolocationGateway.notifyDriverStatus(id, status);
     return this.findById(id);
   }
 
@@ -159,9 +118,12 @@ export class DriversService {
     await this.driverRepo.increment({ id }, 'totalRides', 1);
   }
 
-<<<<<<< HEAD
+  // PATCH /drivers/me et POST /drivers/me/photo — profil visible par le client
   async updateProfile(id: string, dto: UpdateDriverDto & { photoUrl?: string }): Promise<Driver> {
-=======
+    await this.driverRepo.update(id, dto);
+    return this.findById(id);
+  }
+
   // ═══════════════════════════ Administration ═══════════════════════════════
 
   async createByAdmin(dto: CreateDriverDto): Promise<Driver> {
@@ -182,19 +144,10 @@ export class DriversService {
 
   async updateByAdmin(id: string, dto: UpdateDriverDto): Promise<Driver> {
     await this.findById(id);
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     await this.driverRepo.update(id, dto);
     return this.findById(id);
   }
 
-<<<<<<< HEAD
-  async addRating(id: string, rating: number): Promise<void> {
-    const driver = await this.findById(id);
-    await this.driverRepo.update(id, {
-      rating:      nextAverage(driver.rating, driver.ratingCount, rating),
-      ratingCount: driver.ratingCount + 1,
-    });
-=======
   async block(id: string, reason?: string): Promise<Driver> {
     await this.findById(id);
     await this.driverRepo.update(id, {
@@ -275,6 +228,5 @@ export class DriversService {
       totalCommissionPaid: parseFloat(commissionRow.total),
       balance:              Number(driver.balance),
     };
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   }
 }

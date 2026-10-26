@@ -55,9 +55,3 @@ export function toPublicUser(u: User): PublicUser {
     totalRides: u.totalRides,
   };
 }
-
-// Nouvelle moyenne après une note supplémentaire (la note par défaut 5.0 ne compte pas)
-export function nextAverage(current: number, count: number, rating: number): number {
-  const avg = count === 0 ? rating : (Number(current) * count + rating) / (count + 1);
-  return Math.round(avg * 100) / 100;
-}

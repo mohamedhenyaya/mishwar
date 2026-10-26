@@ -1,12 +1,4 @@
 import {
-<<<<<<< HEAD
-  BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { ACTIVE_RIDE_STATUSES, Ride, RideStatus, RideVehicleClass } from './entities/ride.entity';
-=======
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -19,9 +11,8 @@ import { ACTIVE_RIDE_STATUSES, Ride, RideStatus, RideVehicleClass } from './enti
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
-import { Ride, RideStatus } from './entities/ride.entity';
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+import { In, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
+import { ACTIVE_RIDE_STATUSES, Ride, RideStatus, RideVehicleClass } from './entities/ride.entity';
 import { CreateRideDto } from './dto/create-ride.dto';
 import { CompleteRideDto } from './dto/complete-ride.dto';
 import { AdminRidesQueryDto } from './dto/admin-rides-query.dto';
@@ -33,17 +24,6 @@ import { LeaderboardPeriod } from './dto/leaderboard-query.dto';
 import { GeolocationGateway } from '../geolocation/geolocation.gateway';
 import { DriversService } from '../drivers/drivers.service';
 import { DriverStatus } from '../drivers/entities/driver.entity';
-<<<<<<< HEAD
-import { computeFare, computeOpenTripFare } from './utils/pricing.util';
-import { JwtPayload } from '../auth/strategies/jwt.strategy';
-import { UsersService } from '../users/users.service';
-import {
-  PublicDriver, PublicUser, toPublicDriver, toPublicUser,
-} from '../../common/utils/public-profile.util';
-
-// Course + profils publics des deux participants
-export type RideDetails = Ride & { driver: PublicDriver | null; user: PublicUser };
-=======
 import { computeFare } from './utils/pricing.util';
 import { haversineMeters } from '../../common/utils/geo.util';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
@@ -52,6 +32,12 @@ import { WalletService } from '../wallet/wallet.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { UsersService } from '../users/users.service';
 import { PaginatedResult, PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import {
+  PublicDriver, PublicUser, toPublicDriver, toPublicUser,
+} from '../../common/utils/public-profile.util';
+
+// Course + profils publics des deux participants (écrans de suivi client et chauffeur)
+export type RideDetails = Ride & { driver: PublicDriver | null; user: PublicUser };
 
 const AVG_TRIP_SPEED_KMH = 30;
 // Une course programmée est activée (PENDING + notification des chauffeurs) dès qu'elle entre dans cette fenêtre
@@ -97,7 +83,6 @@ function getLeaderboardPeriodStart(period: LeaderboardPeriod): Date {
       return new Date(now.getFullYear(), 0, 1);
   }
 }
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
 @Injectable()
 export class RidesService implements OnModuleInit {
@@ -110,7 +95,6 @@ export class RidesService implements OnModuleInit {
     private readonly geolocationGateway: GeolocationGateway,
     @Inject(forwardRef(() => DriversService))
     private readonly driversService: DriversService,
-    private readonly usersService: UsersService,
     private readonly config: ConfigService,
     private readonly settingsService: SettingsService,
     private readonly walletService: WalletService,
@@ -131,22 +115,14 @@ export class RidesService implements OnModuleInit {
   }
 
   async createRide(userId: string, dto: CreateRideDto): Promise<Ride> {
-<<<<<<< HEAD
-    // Trajet ouvert → prix au compteur pendant la course.
-    // Destination connue → prix fixe au kilomètre ; sinon prix calculé à la fin.
-    const isOpenTrip = dto.isOpenTrip === true;
-    const hasDestination = !isOpenTrip && dto.endLatitude != null && dto.endLongitude != null;
+    const isOpenTrip = dto.isOpenTrip ?? false;
     if (!isOpenTrip && !dto.destinationName?.trim()) {
       throw new BadRequestException('Destination requise (ou choisissez un trajet ouvert)');
     }
-    const price = hasDestination
-      ? computeFare(dto.startLatitude, dto.startLongitude, dto.endLatitude, dto.endLongitude)
-      : null;
-=======
-    const isOpenTrip = dto.isOpenTrip ?? false;
+    const hasDestination = !isOpenTrip && dto.endLatitude != null && dto.endLongitude != null;
 
     let estimatedPrice: number | null = null;
-    if (!isOpenTrip && dto.endLatitude != null && dto.endLongitude != null) {
+    if (hasDestination) {
       const settings = await this.settingsService.getSettings();
       estimatedPrice = computeFare(
         dto.startLatitude, dto.startLongitude,
@@ -154,28 +130,18 @@ export class RidesService implements OnModuleInit {
         Number(settings.pricePerKm), Number(settings.minimumFare),
       );
     }
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
     const ride = this.rideRepo.create({
       userId,
       startLatitude:  dto.startLatitude,
       startLongitude: dto.startLongitude,
-<<<<<<< HEAD
       destinationName: isOpenTrip ? 'Trajet ouvert' : dto.destinationName.trim(),
       endLatitude:   hasDestination ? dto.endLatitude  : null,
       endLongitude:  hasDestination ? dto.endLongitude : null,
       vehicleType:   dto.vehicleType ?? RideVehicleClass.ECONOMY,
-      isOpenTrip,
-      price,
-=======
-      destinationName: dto.destinationName,
-      endLatitude:   dto.endLatitude  ?? null,
-      endLongitude:  dto.endLongitude ?? null,
-      vehicleType:   dto.vehicleType,
       couponCode:    dto.couponCode ?? null,
       isOpenTrip,
       estimatedPrice,
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
       status: RideStatus.PENDING,
     });
 
@@ -209,11 +175,10 @@ export class RidesService implements OnModuleInit {
     });
   }
 
-<<<<<<< HEAD
-  async findByIdForParticipant(id: string, jwt: JwtPayload): Promise<RideDetails> {
-=======
-  async findByIdForParticipant(id: string, jwt: JwtPayload): Promise<Ride & { riderName?: string; riderPhone?: string }> {
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+  async findByIdForParticipant(
+    id: string,
+    jwt: JwtPayload,
+  ): Promise<RideDetails & { riderName?: string; riderPhone?: string }> {
     const ride = await this.rideRepo.findOne({ where: { id } });
     if (!ride) throw new NotFoundException('Course non trouvée');
 
@@ -222,8 +187,12 @@ export class RidesService implements OnModuleInit {
     if (!isRider && !isAssignedDriver) {
       throw new ForbiddenException('Accès refusé à cette course');
     }
-<<<<<<< HEAD
-    return this.withParticipants(ride);
+
+    const details = await this.withParticipants(ride);
+    // riderName / riderPhone conservés pour les écrans qui les lisent directement
+    return isAssignedDriver
+      ? { ...details, riderName: details.user.name ?? undefined, riderPhone: details.user.phone }
+      : details;
   }
 
   // Course en attente ou en cours du client / chauffeur connecté (reprise après redémarrage de l'app)
@@ -250,29 +219,27 @@ export class RidesService implements OnModuleInit {
       user:   toPublicUser(user),
       driver: driver ? toPublicDriver(driver) : null,
     };
-=======
+  }
 
-    // Le chauffeur a besoin de savoir qui il récupère — le rider n'a pas besoin de ses propres infos
-    if (isAssignedDriver) {
-      const rider = await this.usersService.findById(ride.userId);
-      return { ...ride, riderName: rider.name ?? undefined, riderPhone: rider.phone };
-    }
-    return ride;
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+  // Tarifs affichés par les apps — mêmes réglages que le calcul serveur (PlatformSettings)
+  async getTariff(): Promise<{ currency: string; minimumFare: number; perKm: number; perStopMinute: number }> {
+    const settings = await this.settingsService.getSettings();
+    return {
+      currency:      'MRU',
+      minimumFare:   Number(settings.minimumFare),
+      perKm:         Number(settings.pricePerKm),
+      perStopMinute: Number(settings.perStopMinuteRate),
+    };
   }
 
   // ── Acceptation : le premier UPDATE conditionnel gagne ────────────────────
 
-<<<<<<< HEAD
   async acceptRide(rideId: string, driverId: string): Promise<RideDetails> {
-=======
-  async acceptRide(rideId: string, driverId: string): Promise<Ride> {
     const driver = await this.driversService.findById(driverId);
     if (!driver.isActive) {
       throw new ForbiddenException(driver.blockedReason ?? 'Compte chauffeur bloqué');
     }
 
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     const result = await this.rideRepo
       .createQueryBuilder()
       .update(Ride)
@@ -320,13 +287,27 @@ export class RidesService implements OnModuleInit {
     }
   }
 
-<<<<<<< HEAD
   async arriveRide(rideId: string, driverId: string): Promise<Ride> {
     const result = await this.rideRepo
       .createQueryBuilder()
       .update(Ride)
       .set({ status: RideStatus.ARRIVED })
-=======
+      .where('id = :id AND status = :status AND "driverId" = :driverId', {
+        id: rideId,
+        status: RideStatus.ACCEPTED,
+        driverId,
+      })
+      .execute();
+
+    if (!result.affected) {
+      throw new ConflictException('Impossible de signaler l\'arrivée pour cette course');
+    }
+
+    const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+    this.geolocationGateway.notifyRideArrived(ride);
+    return ride;
+  }
+
   async startRide(rideId: string, driverId: string): Promise<Ride> {
     const existing = await this.rideRepo.findOne({ where: { id: rideId } });
     if (!existing) throw new NotFoundException('Course non trouvée');
@@ -346,29 +327,7 @@ export class RidesService implements OnModuleInit {
       .createQueryBuilder()
       .update(Ride)
       .set({ status: RideStatus.IN_PROGRESS, startedAt, ...meterSeed })
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
-      .where('id = :id AND status = :status AND "driverId" = :driverId', {
-        id: rideId,
-        status: RideStatus.ACCEPTED,
-        driverId,
-      })
-      .execute();
-
-    if (!result.affected) {
-      throw new ConflictException('Impossible de signaler l\'arrivée pour cette course');
-    }
-
-    const ride = await this.rideRepo.findOne({ where: { id: rideId } });
-    this.geolocationGateway.notifyRideArrived(ride);
-    return ride;
-  }
-
-  async startRide(rideId: string, driverId: string): Promise<Ride> {
-    // Démarrage possible depuis « arrivé » ou directement depuis « acceptée »
-    const result = await this.rideRepo
-      .createQueryBuilder()
-      .update(Ride)
-      .set({ status: RideStatus.IN_PROGRESS, startedAt: new Date() })
+      // Démarrage possible depuis « arrivé » ou directement depuis « acceptée »
       .where('id = :id AND status IN (:...statuses) AND "driverId" = :driverId', {
         id: rideId,
         statuses: [RideStatus.ACCEPTED, RideStatus.ARRIVED],
@@ -445,14 +404,6 @@ export class RidesService implements OnModuleInit {
     if (!existing) throw new NotFoundException('Course non trouvée');
     if (existing.driverId !== driverId) throw new ForbiddenException('Cette course ne vous est pas assignée');
 
-<<<<<<< HEAD
-    const endLatitude  = dto.endLatitude  ?? existing.endLatitude  ?? existing.startLatitude;
-    const endLongitude = dto.endLongitude ?? existing.endLongitude ?? existing.startLongitude;
-    // Trajet ouvert : relevé final du compteur (distance cumulée par le gateway + durée)
-    const price = existing.isOpenTrip && existing.startedAt
-      ? computeOpenTripFare(existing.distanceMeters, existing.startedAt).price
-      : computeFare(existing.startLatitude, existing.startLongitude, endLatitude, endLongitude);
-=======
     const endLatitude  = dto.endLatitude  ?? existing.lastMeterLatitude  ?? existing.endLatitude  ?? existing.startLatitude;
     const endLongitude = dto.endLongitude ?? existing.lastMeterLongitude ?? existing.endLongitude ?? existing.startLongitude;
     const settings = await this.settingsService.getSettings();
@@ -485,7 +436,6 @@ export class RidesService implements OnModuleInit {
       }
     }
     const price = Math.max(0, Math.round((grossPrice - discountAmount) * 100) / 100);
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
 
     const result = await this.rideRepo
       .createQueryBuilder()
@@ -504,11 +454,8 @@ export class RidesService implements OnModuleInit {
 
     await this.driversService.updateStatus(driverId, DriverStatus.ONLINE);
     await this.driversService.incrementTotalRides(driverId);
-<<<<<<< HEAD
-    await this.usersService.incrementTotalRides(existing.userId);
-=======
     await this.walletService.deductCommission(driverId, rideId, price, Number(settings.commissionPercent));
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
+    await this.usersService.incrementTotalRides(existing.userId);
 
     const ride = await this.rideRepo.findOne({ where: { id: rideId } });
     this.geolocationGateway.notifyRideCompleted(ride);
@@ -528,11 +475,7 @@ export class RidesService implements OnModuleInit {
     const result = await this.rideRepo
       .createQueryBuilder()
       .update(Ride)
-<<<<<<< HEAD
-      .set({ status: RideStatus.CANCELLED, cancelledBy: 'rider' })
-=======
       .set({ status: RideStatus.CANCELLED, cancelledBy: 'user', cancelReason: reason ?? null })
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
       .where('id = :id AND status = :status', { id: rideId, status: ride.status })
       .execute();
 
@@ -551,15 +494,9 @@ export class RidesService implements OnModuleInit {
     }
   }
 
-<<<<<<< HEAD
-  // ── Annulation par le chauffeur (avant le démarrage de la course) ─────────
-
-  async cancelRideByDriver(rideId: string, driverId: string): Promise<void> {
-=======
   // ── Annulation par le chauffeur d'une course acceptée mais pas encore démarrée ──
 
   async driverCancelRide(rideId: string, driverId: string, dto: DriverCancelRideDto): Promise<void> {
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
     const ride = await this.rideRepo.findOne({ where: { id: rideId } });
     if (!ride) throw new NotFoundException('Course non trouvée');
     if (ride.driverId !== driverId) throw new ForbiddenException('Cette course ne vous est pas assignée');
@@ -567,64 +504,25 @@ export class RidesService implements OnModuleInit {
     const result = await this.rideRepo
       .createQueryBuilder()
       .update(Ride)
-<<<<<<< HEAD
-      .set({ status: RideStatus.CANCELLED, cancelledBy: 'driver' })
-      .where('id = :id AND "driverId" = :driverId AND status IN (:...statuses)', {
-        id: rideId,
-        driverId,
-        statuses: [RideStatus.ACCEPTED, RideStatus.ARRIVED],
-=======
       .set({
         status: RideStatus.CANCELLED,
         cancelledBy: 'driver',
         cancelReason: dto.reason ?? null,
       })
-      .where('id = :id AND status = :status AND "driverId" = :driverId', {
+      .where('id = :id AND status IN (:...statuses) AND "driverId" = :driverId', {
         id: rideId,
-        status: RideStatus.ACCEPTED,
+        statuses: [RideStatus.ACCEPTED, RideStatus.ARRIVED],
         driverId,
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
       })
       .execute();
 
     if (!result.affected) {
-<<<<<<< HEAD
-      throw new ConflictException('Une course démarrée ne peut plus être annulée');
+      throw new ConflictException('Une course démarrée ne peut plus être annulée par le chauffeur');
     }
 
     await this.driversService.updateStatus(driverId, DriverStatus.ONLINE);
     this.geolocationGateway.releaseDriver(driverId);
     this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'driver_cancelled');
-    this.logger.log(`Course ${rideId} annulée par le chauffeur ${driverId}`);
-  }
-
-  // ── Notation croisée : le client note le chauffeur, le chauffeur note le client
-
-  async rateRide(rideId: string, jwt: JwtPayload, rating: number): Promise<void> {
-    const ride = await this.rideRepo.findOne({ where: { id: rideId } });
-    if (!ride) throw new NotFoundException('Course non trouvée');
-    if (ride.status !== RideStatus.COMPLETED) {
-      throw new BadRequestException('Seule une course terminée peut être notée');
-    }
-
-    if (jwt.role === 'driver') {
-      if (ride.driverId !== jwt.sub) throw new ForbiddenException('Cette course ne vous est pas assignée');
-      if (ride.userRating != null) throw new ConflictException('Vous avez déjà noté ce client');
-      await this.rideRepo.update(rideId, { userRating: rating });
-      await this.usersService.addRating(ride.userId, rating);
-    } else {
-      if (ride.userId !== jwt.sub) throw new ForbiddenException('Cette course ne vous appartient pas');
-      if (ride.driverRating != null) throw new ConflictException('Vous avez déjà noté ce chauffeur');
-      await this.rideRepo.update(rideId, { driverRating: rating });
-      await this.driversService.addRating(ride.driverId, rating);
-    }
-=======
-      throw new ConflictException('Cette course ne peut plus être annulée par le chauffeur');
-    }
-
-    await this.driversService.updateStatus(driverId, DriverStatus.ONLINE);
-    this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'driver_cancelled');
->>>>>>> 0d66f1bbdace3333ddbfb43b3718538b62c6bfba
   }
 
   // ── Annulation automatique si aucun chauffeur n'accepte à temps ───────────

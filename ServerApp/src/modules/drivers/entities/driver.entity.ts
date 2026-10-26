@@ -57,9 +57,6 @@ export class Driver {
   ratingCount: number;
 
   @Column({ default: 0 })
-  ratingCount: number;
-
-  @Column({ default: 0 })
   totalRides: number;
 
   // Token push (FCM/APNs) — stocké en préparation d'une future intégration, rien ne l'envoie encore

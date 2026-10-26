@@ -17,6 +17,7 @@ const STATUS_KEYS: Record<RideStatus, { key: StringTranslationKey; tone: 'succes
   SCHEDULED:   { key: 'tripsStatusScheduled',  tone: 'accent'  },
   PENDING:     { key: 'tripsStatusPending',    tone: 'neutral' },
   ACCEPTED:    { key: 'tripsStatusAccepted',   tone: 'accent'  },
+  ARRIVED:     { key: 'tripsStatusArrived',    tone: 'accent'  },
   IN_PROGRESS: { key: 'tripsStatusInProgress', tone: 'accent'  },
   COMPLETED:   { key: 'tripsStatusCompleted',  tone: 'success' },
   CANCELLED:   { key: 'tripsStatusCancelled',  tone: 'danger'  },
