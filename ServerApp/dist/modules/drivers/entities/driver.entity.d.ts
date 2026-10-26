@@ -21,6 +21,7 @@ export declare class Driver {
     vehiclePlate: string;
     rating: number;
     ratingCount: number;
+    ratingCount: number;
     totalRides: number;
     deviceToken: string | null;
     latitude: number | null;
