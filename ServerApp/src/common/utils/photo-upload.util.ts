@@ -5,8 +5,10 @@ import { randomUUID } from 'crypto';
 import { extname, join } from 'path';
 import { mkdirSync } from 'fs';
 
-// Dossier servi en statique sous /uploads (voir main.ts)
-export const UPLOADS_DIR = join(process.cwd(), 'uploads');
+// Dossier servi en statique sous /uploads (voir main.ts).
+// En production, UPLOADS_DIR pointe vers un volume persistant (ex. /data/uploads sur Railway) :
+// le disque du conteneur est effacé à chaque redéploiement.
+export const UPLOADS_DIR = process.env.UPLOADS_DIR || join(process.cwd(), 'uploads');
 mkdirSync(UPLOADS_DIR, { recursive: true });
 
 export const photoUploadOptions: MulterOptions = {
