@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBooleanString, IsOptional, IsString } from 'class-validator';
+import { IsBooleanString, IsEnum, IsOptional, IsString } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
+import { UserRole } from '../entities/user.entity';
 
 export class AdminUsersQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ description: '"true"/"false" — filtrer les comptes bloqués (isActive=false)' })
@@ -12,4 +13,9 @@ export class AdminUsersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({ enum: UserRole, description: 'Filtrer par rôle (clients ou administrateurs)' })
+  @IsOptional()
+  @IsEnum(UserRole)
+  role?: UserRole;
 }

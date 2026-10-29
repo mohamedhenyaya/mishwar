@@ -40,8 +40,8 @@ export class AdminWalletController {
   @Get('transactions')
   @ApiOperation({ summary: 'Historique complet des transactions (tous comptes), filtrable par type/compte' })
   getTransactions(@Query() query: WalletTransactionsQueryDto) {
-    const { ownerType, ownerId, ...pagination } = query;
-    return this.walletService.getTransactions({ ownerType, ownerId }, pagination);
+    const { ownerType, ownerId, type, ...pagination } = query;
+    return this.walletService.getTransactionsForAdmin({ ownerType, ownerId, type }, pagination);
   }
 
   @Get('requests')

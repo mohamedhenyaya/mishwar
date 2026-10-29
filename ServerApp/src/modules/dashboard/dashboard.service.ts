@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Ride, RideStatus } from '../rides/entities/ride.entity';
 import { Driver, DriverStatus } from '../drivers/entities/driver.entity';
-import { User } from '../users/entities/user.entity';
+import { User, UserRole } from '../users/entities/user.entity';
+import { WalletRequest, WalletRequestStatus } from '../wallet/entities/wallet-request.entity';
+import { Vehicle, VehicleApprovalStatus } from '../vehicles/entities/vehicle.entity';
+import { SupportTicket, TicketStatus } from '../support/entities/support-ticket.entity';
 import { WalletTransaction, WalletTransactionType } from '../wallet/entities/wallet-transaction.entity';
 import { DriversService } from '../drivers/drivers.service';
 import { PaginatedResult, PaginationQueryDto } from '../../common/dto/pagination-query.dto';
@@ -31,12 +34,13 @@ export class DashboardService {
   async getOverview(query: DashboardOverviewQueryDto) {
     const range = this.dateRangeFilter(query.from, query.to);
 
+    // Les comptes supprimés (anonymisés) et les administrateurs ne comptent pas comme clients
     const [totalUsers, totalDrivers, onlineDrivers, blockedDrivers, blockedUsers] = await Promise.all([
-      this.userRepo.count(),
-      this.driverRepo.count(),
+      this.userRepo.count({ where: { role: UserRole.USER, deletedAt: IsNull() } }),
+      this.driverRepo.count({ where: { deletedAt: IsNull() } }),
       this.driverRepo.count({ where: { status: DriverStatus.ONLINE } }),
-      this.driverRepo.count({ where: { isActive: false } }),
-      this.userRepo.count({ where: { isActive: false } }),
+      this.driverRepo.count({ where: { isActive: false, deletedAt: IsNull() } }),
+      this.userRepo.count({ where: { role: UserRole.USER, isActive: false, deletedAt: IsNull() } }),
     ]);
 
     const rideStatusQb = this.rideRepo
@@ -71,17 +75,90 @@ export class DashboardService {
     if (range) commissionQb.andWhere('tx.createdAt BETWEEN :from AND :to', range);
     const commissionRow = await commissionQb.getRawOne();
 
+    const manager = this.rideRepo.manager;
+    const [busyDrivers, pendingWalletRequests, pendingVehicles, openTickets] = await Promise.all([
+      this.driverRepo.count({ where: { status: DriverStatus.BUSY } }),
+      manager.getRepository(WalletRequest).count({ where: { status: WalletRequestStatus.PENDING } }),
+      manager.getRepository(Vehicle).count({ where: { status: VehicleApprovalStatus.PENDING } }),
+      manager.getRepository(SupportTicket).count({ where: { status: In([TicketStatus.OPEN, TicketStatus.IN_PROGRESS]) } }),
+    ]);
+
     return {
       totalUsers,
       totalDrivers,
       onlineDrivers,
+      busyDrivers,
       blockedDrivers,
       blockedUsers,
       ridesByStatus,
       ridesToday,
       revenueTotal:    parseFloat(revenueRow.total),
       commissionTotal: parseFloat(commissionRow.total),
+      // Files d'attente du back-office (badges du menu)
+      pending: {
+        walletRequests: pendingWalletRequests,
+        vehicles:       pendingVehicles,
+        tickets:        openTickets,
+      },
     };
+  }
+
+  // Activité jour par jour sur les N derniers jours (graphiques du tableau de bord) —
+  // les jours sans activité sont renvoyés à zéro pour garder un axe continu
+  async getTimeseries(days: number) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (days - 1));
+
+    const rideRows = await this.rideRepo
+      .createQueryBuilder('ride')
+      .select(`TO_CHAR(DATE_TRUNC('day', ride.createdAt), 'YYYY-MM-DD')`, 'day')
+      .addSelect('COUNT(*)', 'rides')
+      .addSelect(`COUNT(*) FILTER (WHERE ride.status = :completed)`, 'completed')
+      .addSelect(`COUNT(*) FILTER (WHERE ride.status = :cancelled)`, 'cancelled')
+      .addSelect(`COALESCE(SUM(ride.price) FILTER (WHERE ride.status = :completed), 0)`, 'revenue')
+      .where('ride.createdAt >= :start', { start })
+      .setParameters({ completed: RideStatus.COMPLETED, cancelled: RideStatus.CANCELLED })
+      .groupBy('day')
+      .getRawMany();
+
+    const commissionRows = await this.txRepo
+      .createQueryBuilder('tx')
+      .select(`TO_CHAR(DATE_TRUNC('day', tx.createdAt), 'YYYY-MM-DD')`, 'day')
+      .addSelect('COALESCE(SUM(-tx.amount), 0)', 'commission')
+      .where('tx.type = :type AND tx.createdAt >= :start', { type: WalletTransactionType.COMMISSION_DEDUCTION, start })
+      .groupBy('day')
+      .getRawMany();
+
+    const signupRows = await this.userRepo
+      .createQueryBuilder('user')
+      .select(`TO_CHAR(DATE_TRUNC('day', user.createdAt), 'YYYY-MM-DD')`, 'day')
+      .addSelect('COUNT(*)', 'signups')
+      .where('user.createdAt >= :start AND user.role = :role', { start, role: UserRole.USER })
+      .groupBy('day')
+      .getRawMany();
+
+    const rideByDay = new Map(rideRows.map((r) => [r.day, r]));
+    const commissionByDay = new Map(commissionRows.map((r) => [r.day, parseFloat(r.commission)]));
+    const signupsByDay = new Map(signupRows.map((r) => [r.day, parseInt(r.signups, 10)]));
+
+    const series = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const r = rideByDay.get(day);
+      series.push({
+        day,
+        rides:      r ? parseInt(r.rides, 10) : 0,
+        completed:  r ? parseInt(r.completed, 10) : 0,
+        cancelled:  r ? parseInt(r.cancelled, 10) : 0,
+        revenue:    r ? parseFloat(r.revenue) : 0,
+        commission: commissionByDay.get(day) ?? 0,
+        signups:    signupsByDay.get(day) ?? 0,
+      });
+    }
+    return series;
   }
 
   async getDriversStats(pagination: PaginationQueryDto): Promise<PaginatedResult<unknown>> {

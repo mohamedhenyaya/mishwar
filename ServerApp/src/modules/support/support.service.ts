@@ -20,6 +20,7 @@ import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { MyTicketsQueryDto } from './dto/my-tickets-query.dto';
 import { AdminTicketsQueryDto } from './dto/admin-tickets-query.dto';
 import { PaginatedResult } from '../../common/dto/pagination-query.dto';
+import { loadParties, PartySummary } from '../../common/utils/admin-parties.util';
 
 @Injectable()
 export class SupportService {
@@ -78,7 +79,7 @@ export class SupportService {
   async findByIdForParticipant(
     id: string,
     jwt: JwtPayload,
-  ): Promise<{ ticket: SupportTicket; messages: SupportTicketMessage[] }> {
+  ): Promise<{ ticket: SupportTicket; messages: SupportTicketMessage[]; requester?: PartySummary | null }> {
     const ticket = await this.ticketRepo.findOne({ where: { id } });
     if (!ticket) throw new NotFoundException('Ticket non trouvé');
 
@@ -89,7 +90,11 @@ export class SupportService {
       order: { createdAt: 'ASC' },
     });
 
-    return { ticket, messages };
+    if (jwt.role !== 'admin') return { ticket, messages };
+
+    // Back-office : identité du demandeur affichée en tête de la conversation
+    const party = await loadParties(this.ticketRepo.manager, [{ type: ticket.requesterType, id: ticket.requesterId }]);
+    return { ticket, messages, requester: party(ticket.requesterType, ticket.requesterId) };
   }
 
   async addMessage(
@@ -141,7 +146,9 @@ export class SupportService {
     return this.ticketRepo.save(ticket);
   }
 
-  async findAllForAdmin(query: AdminTicketsQueryDto): Promise<PaginatedResult<SupportTicket>> {
+  async findAllForAdmin(
+    query: AdminTicketsQueryDto,
+  ): Promise<PaginatedResult<SupportTicket & { requester: PartySummary | null }>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
 
@@ -151,11 +158,16 @@ export class SupportService {
     if (query.priority) qb.andWhere('t.priority = :priority', { priority: query.priority });
     if (query.category) qb.andWhere('t.category = :category', { category: query.category });
 
-    const [data, total] = await qb
+    const [tickets, total] = await qb
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
 
+    const party = await loadParties(
+      this.ticketRepo.manager,
+      tickets.map((t) => ({ type: t.requesterType, id: t.requesterId })),
+    );
+    const data = tickets.map((t) => ({ ...t, requester: party(t.requesterType, t.requesterId) }));
     return { data, total, page, limit };
   }
 

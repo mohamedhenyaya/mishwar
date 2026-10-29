@@ -5,6 +5,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { DashboardService } from './dashboard.service';
 import { DashboardOverviewQueryDto } from './dto/dashboard-overview-query.dto';
+import { DashboardTimeseriesQueryDto } from './dto/dashboard-timeseries-query.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination-query.dto';
 
 @ApiTags('admin-dashboard')
@@ -22,6 +23,15 @@ export class AdminDashboardController {
   })
   getOverview(@Query() query: DashboardOverviewQueryDto) {
     return this.dashboardService.getOverview(query);
+  }
+
+  @Get('timeseries')
+  @ApiOperation({
+    summary: 'Activité jour par jour (courses, terminées, annulées, revenu, commission, inscriptions)',
+    description: 'Les jours sans activité sont inclus à zéro.',
+  })
+  getTimeseries(@Query() query: DashboardTimeseriesQueryDto) {
+    return this.dashboardService.getTimeseries(query.days ?? 30);
   }
 
   @Get('drivers')

@@ -16,6 +16,7 @@ import { SubmitDocumentDto } from './dto/submit-document.dto';
 import { ReviewDocumentDto } from './dto/review-document.dto';
 import { AdminVehiclesQueryDto } from './dto/admin-vehicles-query.dto';
 import { PaginatedResult } from '../../common/dto/pagination-query.dto';
+import { loadParties } from '../../common/utils/admin-parties.util';
 
 @Injectable()
 export class VehiclesService {
@@ -75,7 +76,7 @@ export class VehiclesService {
 
   // ═══════════════════════════ Administration ═══════════════════════════════
 
-  async findAllForAdmin(query: AdminVehiclesQueryDto): Promise<PaginatedResult<Vehicle>> {
+  async findAllForAdmin(query: AdminVehiclesQueryDto) {
     const page  = query.page  ?? 1;
     const limit = query.limit ?? 20;
 
@@ -83,14 +84,20 @@ export class VehiclesService {
     if (query.status)   qb.andWhere('v.status = :status', { status: query.status });
     if (query.driverId) qb.andWhere('v."driverId" = :driverId', { driverId: query.driverId });
 
-    const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+    const [vehicles, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+    const party = await loadParties(
+      this.vehicleRepo.manager,
+      vehicles.map((v) => ({ type: 'driver', id: v.driverId })),
+    );
+    const data = vehicles.map((v) => ({ ...v, driver: party('driver', v.driverId) }));
     return { data, total, page, limit };
   }
 
   async findByIdForAdmin(id: string) {
     const vehicle = await this.findByIdOrThrow(id);
-    const documents = await this.documentRepo.find({ where: { vehicleId: id } });
-    return { ...vehicle, documents };
+    const documents = await this.documentRepo.find({ where: { vehicleId: id }, order: { createdAt: 'DESC' } });
+    const party = await loadParties(this.vehicleRepo.manager, [{ type: 'driver', id: vehicle.driverId }]);
+    return { ...vehicle, documents, driver: party('driver', vehicle.driverId) };
   }
 
   async approve(id: string): Promise<Vehicle> {

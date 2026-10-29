@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
@@ -9,6 +9,7 @@ import {
   WalletTransactionType,
 } from './entities/wallet-transaction.entity';
 import { PaginatedResult, PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { loadParties, PartySummary } from '../../common/utils/admin-parties.util';
 
 @Injectable()
 export class WalletService {
@@ -40,6 +41,9 @@ export class WalletService {
     note: string | undefined,
     createdByAdminId: string,
   ): Promise<WalletTransaction> {
+    if (!Number.isFinite(amount) || amount === 0) {
+      throw new BadRequestException('Le montant doit être différent de zéro');
+    }
     return this.applyTransaction(
       ownerType,
       ownerId,
@@ -106,7 +110,7 @@ export class WalletService {
   }
 
   async getTransactions(
-    filters: { ownerType?: WalletOwnerType; ownerId?: string },
+    filters: { ownerType?: WalletOwnerType; ownerId?: string; type?: WalletTransactionType },
     pagination: PaginationQueryDto,
   ): Promise<PaginatedResult<WalletTransaction>> {
     const page  = pagination.page  ?? 1;
@@ -115,8 +119,29 @@ export class WalletService {
     const qb = this.txRepo.createQueryBuilder('tx').orderBy('tx.createdAt', 'DESC');
     if (filters.ownerType) qb.andWhere('tx.ownerType = :ownerType', { ownerType: filters.ownerType });
     if (filters.ownerId)   qb.andWhere('tx.ownerId = :ownerId', { ownerId: filters.ownerId });
+    if (filters.type)      qb.andWhere('tx.type = :type', { type: filters.type });
 
     const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+    return { data, total, page, limit };
+  }
+
+  // Variante back-office : joint le titulaire du compte et l'admin auteur de chaque mouvement
+  // (jamais exposée aux clients/chauffeurs — elle révèle le téléphone des admins)
+  async getTransactionsForAdmin(
+    filters: { ownerType?: WalletOwnerType; ownerId?: string; type?: WalletTransactionType },
+    pagination: PaginationQueryDto,
+  ): Promise<PaginatedResult<WalletTransaction & { owner: PartySummary | null; admin: PartySummary | null }>> {
+    const { data: txs, total, page, limit } = await this.getTransactions(filters, pagination);
+
+    const party = await loadParties(this.txRepo.manager, [
+      ...txs.map((t) => ({ type: t.ownerType, id: t.ownerId })),
+      ...txs.map((t) => ({ type: 'user', id: t.createdByAdminId })),
+    ]);
+    const data = txs.map((t) => ({
+      ...t,
+      owner: party(t.ownerType, t.ownerId),
+      admin: party('user', t.createdByAdminId),
+    }));
     return { data, total, page, limit };
   }
 }

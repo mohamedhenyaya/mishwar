@@ -33,4 +33,12 @@ export class AdminReviewsController {
     await this.auditLogService.log(admin.sub, 'review.hide', 'Review', id);
     return review;
   }
+
+  @Patch(':id/unhide')
+  @ApiOperation({ summary: 'Réafficher un avis masqué' })
+  async unhide(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
+    const review = await this.ratingsService.unhideReview(id);
+    await this.auditLogService.log(admin.sub, 'review.unhide', 'Review', id);
+    return review;
+  }
 }

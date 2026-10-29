@@ -13,6 +13,7 @@ import { ReviewWalletRequestDto } from './dto/review-wallet-request.dto';
 import { RejectWalletRequestDto } from './dto/reject-wallet-request.dto';
 import { AdminWalletRequestsQueryDto } from './dto/admin-wallet-requests-query.dto';
 import { PaginatedResult, PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { loadParties, PartySummary } from '../../common/utils/admin-parties.util';
 
 @Injectable()
 export class WalletRequestsService {
@@ -56,7 +57,9 @@ export class WalletRequestsService {
     return { data, total, page, limit };
   }
 
-  async findAllForAdmin(query: AdminWalletRequestsQueryDto): Promise<PaginatedResult<WalletRequest>> {
+  async findAllForAdmin(
+    query: AdminWalletRequestsQueryDto,
+  ): Promise<PaginatedResult<WalletRequest & { owner: PartySummary | null }>> {
     const page  = query.page  ?? 1;
     const limit = query.limit ?? 20;
 
@@ -64,7 +67,12 @@ export class WalletRequestsService {
     if (query.status) qb.andWhere('req.status = :status', { status: query.status });
     if (query.type)   qb.andWhere('req.type = :type', { type: query.type });
 
-    const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+    const [requests, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+    const party = await loadParties(
+      this.requestRepo.manager,
+      requests.map((r) => ({ type: r.ownerType, id: r.ownerId })),
+    );
+    const data = requests.map((r) => ({ ...r, owner: party(r.ownerType, r.ownerId) }));
     return { data, total, page, limit };
   }
 
@@ -84,32 +92,43 @@ export class WalletRequestsService {
       }
     }
 
-    await this.walletService.adjust(
-      request.ownerType,
-      request.ownerId,
-      request.type === WalletRequestType.TOPUP ? amount : -amount,
-      `Demande de wallet approuvée (${request.type})`,
-      adminId,
+    // Réservation atomique : si deux admins approuvent en même temps, un seul passe
+    // (sinon le compte serait crédité deux fois)
+    const reviewedAt = new Date();
+    const claimed = await this.requestRepo.update(
+      { id, status: WalletRequestStatus.PENDING },
+      { status: WalletRequestStatus.APPROVED, reviewedByAdminId: adminId, reviewNote: dto.reviewNote ?? null, reviewedAt },
     );
+    if (!claimed.affected) throw new ConflictException('Cette demande a déjà été traitée');
 
-    request.status = WalletRequestStatus.APPROVED;
-    request.reviewedByAdminId = adminId;
-    request.reviewNote = dto.reviewNote ?? null;
-    request.reviewedAt = new Date();
-    return this.requestRepo.save(request);
+    try {
+      await this.walletService.adjust(
+        request.ownerType,
+        request.ownerId,
+        request.type === WalletRequestType.TOPUP ? amount : -amount,
+        `Demande de wallet approuvée (${request.type})`,
+        adminId,
+      );
+    } catch (error) {
+      await this.requestRepo.update(id, {
+        status: WalletRequestStatus.PENDING, reviewedByAdminId: null, reviewNote: null, reviewedAt: null,
+      });
+      throw error;
+    }
+
+    return this.requestRepo.findOneOrFail({ where: { id } });
   }
 
   async reject(id: string, adminId: string, dto: RejectWalletRequestDto): Promise<WalletRequest> {
-    const request = await this.requestRepo.findOne({ where: { id } });
-    if (!request) throw new NotFoundException('Demande introuvable');
-    if (request.status !== WalletRequestStatus.PENDING) {
+    const claimed = await this.requestRepo.update(
+      { id, status: WalletRequestStatus.PENDING },
+      { status: WalletRequestStatus.REJECTED, reviewedByAdminId: adminId, reviewNote: dto.reviewNote, reviewedAt: new Date() },
+    );
+    if (!claimed.affected) {
+      const exists = await this.requestRepo.exists({ where: { id } });
+      if (!exists) throw new NotFoundException('Demande introuvable');
       throw new ConflictException('Cette demande a déjà été traitée');
     }
-
-    request.status = WalletRequestStatus.REJECTED;
-    request.reviewedByAdminId = adminId;
-    request.reviewNote = dto.reviewNote;
-    request.reviewedAt = new Date();
-    return this.requestRepo.save(request);
+    return this.requestRepo.findOneOrFail({ where: { id } });
   }
 }

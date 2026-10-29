@@ -47,6 +47,10 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   blockedAt: Date | null;
 
+  // Suppression par un admin : le compte est anonymisé (pas effacé) pour garder l'historique cohérent
+  @Column({ type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   balance: number;
 

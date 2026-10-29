@@ -1,6 +1,6 @@
-import { ConflictException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Driver, DriverStatus, VehicleType } from './entities/driver.entity';
 import { NearbyDriversDto } from './dto/nearby-drivers.dto';
@@ -9,7 +9,8 @@ import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { AdminDriversQueryDto } from './dto/admin-drivers-query.dto';
 import { GeolocationGateway } from '../geolocation/geolocation.gateway';
-import { Ride, RideStatus } from '../rides/entities/ride.entity';
+import { ACTIVE_RIDE_STATUSES, Ride, RideStatus } from '../rides/entities/ride.entity';
+import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import {
   WalletOwnerType,
   WalletTransaction,
@@ -148,39 +149,97 @@ export class DriversService {
     return this.findById(id);
   }
 
+  // Bloquer en pleine course laisserait le client sans chauffeur : l'admin doit d'abord
+  // annuler (ou laisser terminer) la course en cours
   async block(id: string, reason?: string): Promise<Driver> {
     await this.findById(id);
+    await this.assertNoActiveRide(id, 'Ce chauffeur a une course en cours — annulez-la avant de le bloquer');
+
     await this.driverRepo.update(id, {
       isActive:      false,
       blockedReason: reason ?? null,
       blockedAt:     new Date(),
       status:        DriverStatus.OFFLINE,
     });
+    await this.revokeSessions(id);
     this.geolocationGateway.notifyCustom(`driver:${id}`, 'account:blocked', { reason: reason ?? null });
+    this.geolocationGateway.notifyDriverStatus(id, DriverStatus.OFFLINE);
     return this.findById(id);
   }
 
   async unblock(id: string): Promise<Driver> {
-    await this.findById(id);
+    const driver = await this.findById(id);
+    if (driver.deletedAt) throw new BadRequestException('Ce compte a été supprimé');
     await this.driverRepo.update(id, { isActive: true, blockedReason: null, blockedAt: null });
     return this.findById(id);
+  }
+
+  async resetPasswordByAdmin(id: string, newPassword: string): Promise<{ message: string }> {
+    const driver = await this.findById(id);
+    if (driver.deletedAt) throw new BadRequestException('Ce compte a été supprimé');
+    await this.driverRepo.update(id, { passwordHash: await bcrypt.hash(newPassword, 10) });
+    await this.revokeSessions(id);
+    return { message: 'Mot de passe réinitialisé' };
+  }
+
+  // Anonymisation plutôt qu'effacement : courses, gains et commissions restent traçables
+  async softDelete(id: string): Promise<{ message: string }> {
+    const driver = await this.findById(id);
+    if (driver.deletedAt) throw new BadRequestException('Ce compte est déjà supprimé');
+    await this.assertNoActiveRide(id, 'Ce chauffeur a une course en cours — annulez-la avant de supprimer le compte');
+
+    const now = new Date();
+    await this.driverRepo.update(id, {
+      phone:         `deleted:${now.getTime()}:${driver.phone}`,
+      name:          'Compte supprimé',
+      photoUrl:      null as unknown as string,
+      passwordHash:  null as unknown as string,
+      deviceToken:   null,
+      status:        DriverStatus.OFFLINE,
+      latitude:      null,
+      longitude:     null,
+      isActive:      false,
+      blockedReason: 'Compte supprimé',
+      blockedAt:     driver.blockedAt ?? now,
+      deletedAt:     now,
+    });
+    await this.revokeSessions(id);
+    this.geolocationGateway.notifyCustom(`driver:${id}`, 'account:blocked', { reason: 'Compte supprimé' });
+    this.geolocationGateway.notifyDriverStatus(id, DriverStatus.OFFLINE);
+    return { message: 'Compte supprimé' };
   }
 
   async findAllPaginated(query: AdminDriversQueryDto): Promise<PaginatedResult<Driver>> {
     const page  = query.page  ?? 1;
     const limit = query.limit ?? 20;
 
-    const qb = this.driverRepo.createQueryBuilder('driver').orderBy('driver.createdAt', 'DESC');
+    const qb = this.driverRepo
+      .createQueryBuilder('driver')
+      .where('driver.deletedAt IS NULL')
+      .orderBy('driver.createdAt', 'DESC');
     if (query.status)      qb.andWhere('driver.status = :status', { status: query.status });
     if (query.isActive !== undefined) {
       qb.andWhere('driver.isActive = :isActive', { isActive: query.isActive === 'true' });
     }
     if (query.search) {
-      qb.andWhere('(driver.name ILIKE :s OR driver.phone ILIKE :s)', { s: `%${query.search}%` });
+      qb.andWhere('(driver.name ILIKE :s OR driver.phone ILIKE :s OR driver.vehiclePlate ILIKE :s)', {
+        s: `%${query.search.trim()}%`,
+      });
     }
 
     const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
     return { data, total, page, limit };
+  }
+
+  // Carte en direct du back-office : chauffeurs connectés ayant une position connue
+  async findLiveForAdmin(): Promise<Driver[]> {
+    return this.driverRepo
+      .createQueryBuilder('driver')
+      .where('driver.status IN (:...statuses)', { statuses: [DriverStatus.ONLINE, DriverStatus.BUSY] })
+      .andWhere('driver.isActive = true')
+      .andWhere('driver.latitude IS NOT NULL AND driver.longitude IS NOT NULL')
+      .orderBy('driver.lastLocationUpdate', 'DESC')
+      .getMany();
   }
 
   async getStats(id: string) {
@@ -228,5 +287,18 @@ export class DriversService {
       totalCommissionPaid: parseFloat(commissionRow.total),
       balance:              Number(driver.balance),
     };
+  }
+
+  private async assertNoActiveRide(driverId: string, message: string): Promise<void> {
+    const activeRide = await this.driverRepo.manager
+      .getRepository(Ride)
+      .findOne({ where: { driverId, status: In(ACTIVE_RIDE_STATUSES) } });
+    if (activeRide) throw new ConflictException(message);
+  }
+
+  private async revokeSessions(ownerId: string): Promise<void> {
+    await this.driverRepo.manager
+      .getRepository(RefreshToken)
+      .update({ ownerId, revokedAt: IsNull() }, { revokedAt: new Date() });
   }
 }

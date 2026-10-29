@@ -20,7 +20,7 @@ import { estimateEtaMinutes } from '../rides/utils/pricing.util';
 import { toPublicDriver } from '../../common/utils/public-profile.util';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
-type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled' | 'driver_cancelled';
+type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled' | 'driver_cancelled' | 'admin_cancelled';
 
 interface ActiveRide {
   rideId: string;

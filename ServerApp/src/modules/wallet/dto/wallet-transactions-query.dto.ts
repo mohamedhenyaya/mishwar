@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
-import { WalletOwnerType } from '../entities/wallet-transaction.entity';
+import { WalletOwnerType, WalletTransactionType } from '../entities/wallet-transaction.entity';
 
 export class WalletTransactionsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: WalletOwnerType })
@@ -13,4 +13,9 @@ export class WalletTransactionsQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   ownerId?: string;
+
+  @ApiPropertyOptional({ enum: WalletTransactionType })
+  @IsOptional()
+  @IsEnum(WalletTransactionType)
+  type?: WalletTransactionType;
 }

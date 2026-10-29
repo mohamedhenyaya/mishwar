@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Coupon, CouponType } from './entities/coupon.entity';
@@ -21,12 +21,32 @@ export class PromotionsService {
   // ── CRUD admin ────────────────────────────────────────────────────────
 
   async create(dto: CreateCouponDto): Promise<Coupon> {
+    const code = dto.code.trim();
+    await this.assertCodeFree(code);
+    this.assertCouponRules(dto.type, dto.value, new Date(dto.validFrom), new Date(dto.validTo));
+
     const coupon = this.couponRepo.create({
       ...dto,
+      code,
       validFrom: new Date(dto.validFrom),
       validTo: new Date(dto.validTo),
     });
     return this.couponRepo.save(coupon);
+  }
+
+  // Le code est unique en base : sans ce contrôle, un doublon remonterait en erreur 500
+  private async assertCodeFree(code: string, exceptId?: string): Promise<void> {
+    const existing = await this.couponRepo.findOne({ where: { code } });
+    if (existing && existing.id !== exceptId) throw new ConflictException(`Le code « ${code} » existe déjà`);
+  }
+
+  private assertCouponRules(type: CouponType, value: number, validFrom: Date, validTo: Date): void {
+    if (type === CouponType.PERCENT && Number(value) > 100) {
+      throw new BadRequestException('Un pourcentage de remise ne peut pas dépasser 100');
+    }
+    if (validTo <= validFrom) {
+      throw new BadRequestException('La date de fin doit être postérieure à la date de début');
+    }
   }
 
   async findAllForAdmin(query: AdminCouponsQueryDto): Promise<PaginatedResult<Coupon>> {
@@ -49,11 +69,16 @@ export class PromotionsService {
 
   async update(id: string, dto: UpdateCouponDto): Promise<Coupon> {
     const coupon = await this.findByIdForAdmin(id);
+    const code = dto.code?.trim();
+    if (code && code !== coupon.code) await this.assertCodeFree(code, id);
+
     Object.assign(coupon, {
       ...dto,
+      ...(code ? { code } : {}),
       validFrom: dto.validFrom ? new Date(dto.validFrom) : coupon.validFrom,
       validTo: dto.validTo ? new Date(dto.validTo) : coupon.validTo,
     });
+    this.assertCouponRules(coupon.type, Number(coupon.value), coupon.validFrom, coupon.validTo);
     return this.couponRepo.save(coupon);
   }
 

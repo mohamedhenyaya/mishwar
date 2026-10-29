@@ -32,6 +32,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { UsersService } from '../users/users.service';
 import { PaginatedResult, PaginationQueryDto } from '../../common/dto/pagination-query.dto';
+import { loadParties, PartySummary } from '../../common/utils/admin-parties.util';
 import {
   PublicDriver, PublicUser, toPublicDriver, toPublicUser,
 } from '../../common/utils/public-profile.util';
@@ -49,6 +50,12 @@ const METER_STOP_THRESHOLD_METERS = 25;
 const METER_MAX_PING_GAP_SECONDS = 30;
 // Nombre d'utilisateurs affichés dans le classement (le rang du client reste calculé même hors podium)
 const LEADERBOARD_LIMIT = 50;
+
+// Résumé des participants joint aux courses dans le back-office
+export interface RideParties {
+  user: PartySummary | null;
+  driver: PartySummary | null;
+}
 
 export interface LeaderboardEntry {
   rank: number;
@@ -728,7 +735,7 @@ export class RidesService implements OnModuleInit {
 
   // ═══════════════════════════ Administration ═══════════════════════════════
 
-  async findAllForAdmin(query: AdminRidesQueryDto): Promise<PaginatedResult<Ride>> {
+  async findAllForAdmin(query: AdminRidesQueryDto): Promise<PaginatedResult<Ride & RideParties>> {
     const page  = query.page  ?? 1;
     const limit = query.limit ?? 20;
 
@@ -739,14 +746,56 @@ export class RidesService implements OnModuleInit {
     if (query.from)      qb.andWhere('ride.createdAt >= :from', { from: query.from });
     if (query.to)         qb.andWhere('ride.createdAt <= :to', { to: query.to });
 
-    const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
-    return { data, total, page, limit };
+    const [rides, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+    return { data: await this.attachParties(rides), total, page, limit };
   }
 
-  async findByIdForAdmin(id: string): Promise<Ride> {
+  async findByIdForAdmin(id: string): Promise<Ride & RideParties> {
     const ride = await this.rideRepo.findOne({ where: { id } });
     if (!ride) throw new NotFoundException('Course non trouvée');
-    return ride;
+    const [withParties] = await this.attachParties([ride]);
+    return withParties;
+  }
+
+  // Débloque une course coincée (chauffeur injoignable, litige, erreur…) : les deux parties
+  // sont prévenues en temps réel et le chauffeur redevient disponible
+  async cancelByAdmin(rideId: string, reason?: string): Promise<Ride & RideParties> {
+    const ride = await this.rideRepo.findOne({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException('Course non trouvée');
+    if (ride.status === RideStatus.COMPLETED || ride.status === RideStatus.CANCELLED) {
+      throw new ConflictException('Cette course est déjà terminée ou annulée');
+    }
+
+    const result = await this.rideRepo
+      .createQueryBuilder()
+      .update(Ride)
+      .set({ status: RideStatus.CANCELLED, cancelledBy: 'admin', cancelReason: reason ?? null })
+      .where('id = :id AND status = :status', { id: rideId, status: ride.status })
+      .execute();
+    if (!result.affected) {
+      throw new ConflictException('La course a changé d\'état entre-temps, rechargez la page');
+    }
+
+    this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'admin_cancelled');
+    if (ride.driverId) {
+      await this.driversService.updateStatus(ride.driverId, DriverStatus.ONLINE);
+      this.geolocationGateway.releaseDriver(ride.driverId);
+      this.geolocationGateway.notifyRideCancelled(`driver:${ride.driverId}`, rideId, 'admin_cancelled');
+    } else {
+      for (const driverId of ride.notifiedDriverIds) {
+        this.geolocationGateway.notifyRideUnavailable(driverId, rideId);
+      }
+    }
+
+    return this.findByIdForAdmin(rideId);
+  }
+
+  private async attachParties(rides: Ride[]): Promise<(Ride & RideParties)[]> {
+    const party = await loadParties(this.rideRepo.manager, [
+      ...rides.map((r) => ({ type: 'user', id: r.userId })),
+      ...rides.map((r) => ({ type: 'driver', id: r.driverId })),
+    ]);
+    return rides.map((r) => ({ ...r, user: party('user', r.userId), driver: party('driver', r.driverId) }));
   }
 
   // ── Classement — un point par course terminée sur la période ──────────────

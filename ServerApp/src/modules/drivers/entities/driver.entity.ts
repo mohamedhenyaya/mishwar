@@ -82,6 +82,10 @@ export class Driver {
   @Column({ type: 'timestamp', nullable: true })
   blockedAt: Date | null;
 
+  // Suppression par un admin : le compte est anonymisé (pas effacé) pour garder l'historique cohérent
+  @Column({ type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
+
   // Solde de crédit prépayé — la commission de chaque course terminée y est automatiquement déduite
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   balance: number;

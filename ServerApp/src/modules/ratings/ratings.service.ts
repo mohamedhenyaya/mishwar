@@ -16,6 +16,7 @@ import { AdminReviewsQueryDto } from './dto/admin-reviews-query.dto';
 import { DriverReviewsQueryDto } from './dto/driver-reviews-query.dto';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { PaginatedResult } from '../../common/dto/pagination-query.dto';
+import { loadParties, PartySummary } from '../../common/utils/admin-parties.util';
 
 @Injectable()
 export class RatingsService {
@@ -152,7 +153,9 @@ export class RatingsService {
 
   // ═══════════════════════════ Administration ═══════════════════════════════
 
-  async findAllForAdmin(query: AdminReviewsQueryDto): Promise<PaginatedResult<Review>> {
+  async findAllForAdmin(
+    query: AdminReviewsQueryDto,
+  ): Promise<PaginatedResult<Review & { rater: PartySummary | null; target: PartySummary | null }>> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
 
@@ -161,15 +164,34 @@ export class RatingsService {
     if (query.targetType) qb.andWhere('review."targetType" = :targetType', { targetType: query.targetType });
     if (query.isHidden !== undefined) qb.andWhere('review."isHidden" = :isHidden', { isHidden: query.isHidden });
 
-    const [data, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+    const [reviews, total] = await qb.skip((page - 1) * limit).take(limit).getManyAndCount();
+
+    const party = await loadParties(this.reviewRepo.manager, [
+      ...reviews.map((r) => ({ type: r.raterType, id: r.raterId })),
+      ...reviews.map((r) => ({ type: r.targetType, id: r.targetId })),
+    ]);
+    const data = reviews.map((r) => ({
+      ...r,
+      rater:  party(r.raterType, r.raterId),
+      target: party(r.targetType, r.targetId),
+    }));
     return { data, total, page, limit };
   }
 
   async hideReview(id: string): Promise<Review> {
+    return this.setHidden(id, true);
+  }
+
+  // Annule une modération faite par erreur
+  async unhideReview(id: string): Promise<Review> {
+    return this.setHidden(id, false);
+  }
+
+  private async setHidden(id: string, isHidden: boolean): Promise<Review> {
     const review = await this.reviewRepo.findOne({ where: { id } });
     if (!review) throw new NotFoundException('Avis non trouvé');
 
-    await this.reviewRepo.update(id, { isHidden: true });
+    await this.reviewRepo.update(id, { isHidden });
     return this.reviewRepo.findOne({ where: { id } });
   }
 }

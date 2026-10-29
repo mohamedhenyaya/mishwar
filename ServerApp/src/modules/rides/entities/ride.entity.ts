@@ -16,7 +16,7 @@ export enum RideStatus {
   CANCELLED   = 'CANCELLED',
 }
 
-export type RideCancelledBy = 'user' | 'driver' | 'system';
+export type RideCancelledBy = 'user' | 'driver' | 'system' | 'admin';
 
 // Course attribuée à un chauffeur et pas encore terminée
 export const ACTIVE_RIDE_STATUSES = [RideStatus.ACCEPTED, RideStatus.ARRIVED, RideStatus.IN_PROGRESS];
@@ -127,7 +127,7 @@ export class Ride {
   @Column({ type: 'decimal', precision: 8, scale: 2, nullable: true })
   discountAmount: number | null;
 
-  // 'user' | 'driver' | 'system' — qui est à l'origine de l'annulation
+  // 'user' | 'driver' | 'system' | 'admin' — qui est à l'origine de l'annulation
   @Column({ nullable: true })
   cancelledBy: RideCancelledBy | null;
 
