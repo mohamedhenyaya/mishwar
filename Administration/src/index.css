@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; }
+  body { @apply bg-slate-50 text-slate-900 dark:bg-[#0B0B16] dark:text-slate-100; }
+  ::selection { @apply bg-accent-200 text-ink dark:bg-accent-700 dark:text-white; }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-slate-200/80 bg-white shadow-card dark:border-white/[0.07] dark:bg-[#13131F]; }
+  .input {
+    @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition
+           placeholder:text-slate-400 focus:border-accent-500 focus:ring-4 focus:ring-accent-500/15
+           disabled:cursor-not-allowed disabled:opacity-60
+           dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-100 dark:placeholder:text-slate-500;
+  }
+  .label { @apply mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400; }
+  .th { @apply whitespace-nowrap px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400; }
+  .td { @apply px-4 py-3 align-middle text-sm; }
+  .tr { @apply border-t border-slate-100 transition-colors hover:bg-slate-50/70 dark:border-white/[0.05] dark:hover:bg-white/[0.02]; }
+}
+
+/* Leaflet : coins arrondis et fond cohérent avec le thème */
+.leaflet-container { font-family: inherit; background: #e5e7eb; }
+.dark .leaflet-container { background: #1a1a2a; }
+.dark .leaflet-tile { filter: brightness(.65) invert(1) contrast(3) hue-rotate(200deg) saturate(.3) brightness(.7); }
