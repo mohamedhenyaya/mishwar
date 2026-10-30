@@ -3,3 +3,10 @@ node_modules/
 dist/
 .env
 .env*.local
+
+# Clés de compte de service Firebase : jamais dans le dépôt
+*firebase-adminsdk*.json
+
+# Dossiers natifs générés par « expo prebuild » (régénérés à chaque build)
+CapitainApp/android/
+CapitainApp/ios/
