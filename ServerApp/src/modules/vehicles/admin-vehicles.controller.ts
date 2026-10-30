@@ -1,5 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Res, UploadedFile, UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { documentUploadOptions } from '../../common/utils/photo-upload.util';
+import { SubmitDocumentDto } from './dto/submit-document.dto';
+import { Response } from 'express';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { VehiclesService } from './vehicles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -28,6 +35,22 @@ export class AdminVehiclesController {
     return this.vehiclesService.findAllForAdmin(query);
   }
 
+  @Post('drivers/:driverId/documents')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Envoyer une pièce du dossier d’un chauffeur (champ « photo ») — assurance : avec sa date de fin' })
+  @UseInterceptors(FileInterceptor('photo', documentUploadOptions))
+  async submitDocument(
+    @CurrentUser() admin: JwtPayload,
+    @Param('driverId', ParseUUIDPipe) driverId: string,
+    @Body() dto: SubmitDocumentDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Aucune photo reçue');
+    const document = await this.vehiclesService.submitDocument(driverId, dto, file, { byAdmin: true });
+    await this.auditLogService.log(admin.sub, 'vehicle.document.submit', 'VehicleDocument', document.id, { type: dto.type });
+    return document;
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Détail d\'un véhicule et de ses documents' })
   getOne(@Param('id') id: string) {
@@ -35,7 +58,7 @@ export class AdminVehiclesController {
   }
 
   @Patch(':id/approve')
-  @ApiOperation({ summary: 'Approuver un véhicule (activation automatique si aucun véhicule actif)' })
+  @ApiOperation({ summary: 'Approuver le dossier du capitaine (toutes les pièces requises), ses pièces en attente avec' })
   async approve(@CurrentUser() admin: JwtPayload, @Param('id') id: string) {
     const vehicle = await this.vehiclesService.approve(id);
     await this.auditLogService.log(admin.sub, 'vehicle.approve', 'Vehicle', id);
@@ -48,6 +71,12 @@ export class AdminVehiclesController {
     const vehicle = await this.vehiclesService.reject(id, dto);
     await this.auditLogService.log(admin.sub, 'vehicle.reject', 'Vehicle', id, { reason: dto.reason });
     return vehicle;
+  }
+
+  @Get('documents/:id/file')
+  @ApiOperation({ summary: 'Fichier d’une pièce du dossier (pièces d’identité : jamais publiques)' })
+  async documentFile(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+    res.sendFile(await this.vehiclesService.documentFile(id));
   }
 
   @Patch('documents/:id/review')

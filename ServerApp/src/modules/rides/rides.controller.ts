@@ -1,4 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body, Controller, DefaultValuePipe, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -63,6 +65,16 @@ export class RidesController {
   @Roles('user')
   myRides(@CurrentUser() user: JwtPayload) {
     return this.ridesService.findByUser(user.sub);
+  }
+
+  // Historique du chauffeur (« Mes trajets »), 30 jours par défaut, 365 au plus
+  @Get('driver/history')
+  @Roles('driver')
+  driverHistory(
+    @CurrentUser() user: JwtPayload,
+    @Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number,
+  ) {
+    return this.ridesService.findDriverHistory(user.sub, Math.min(Math.max(days, 1), 365));
   }
 
   // Tarifs affichés par les apps (réglables par l'admin dans PlatformSettings)

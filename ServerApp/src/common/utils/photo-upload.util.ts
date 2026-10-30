@@ -26,3 +26,17 @@ export const photoUploadOptions: MulterOptions = {
 };
 
 export const photoPath = (file: Express.Multer.File): string => `/uploads/${file.filename}`;
+
+// Pièces du dossier (carte d'identité, permis, carte grise, assurance) : même volume que les
+// photos, mais dans un sous-dossier que main.ts refuse de servir — seuls les admins y accèdent
+export const DOCUMENTS_DIR = join(UPLOADS_DIR, 'private');
+mkdirSync(DOCUMENTS_DIR, { recursive: true });
+
+export const documentUploadOptions: MulterOptions = {
+  ...photoUploadOptions,
+  storage: diskStorage({
+    destination: DOCUMENTS_DIR,
+    filename: (_req, file, cb) => cb(null, `${randomUUID()}${extname(file.originalname) || '.jpg'}`),
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+};

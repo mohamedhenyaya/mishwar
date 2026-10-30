@@ -1,3 +1,4 @@
+import { blockedMessage, stillBlocked } from '../../common/utils/account-block.util';
 import {
   ConnectedSocket,
   MessageBody,
@@ -7,10 +8,10 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { forwardRef, Inject, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, LessThan, Repository } from 'typeorm';
 import { Server, Socket } from 'socket.io';
 import { DriversService } from '../drivers/drivers.service';
 import { Driver, DriverStatus } from '../drivers/entities/driver.entity';
@@ -19,6 +20,10 @@ import { RidesService } from '../rides/rides.service';
 import { estimateEtaMinutes } from '../rides/utils/pricing.util';
 import { toPublicDriver } from '../../common/utils/public-profile.util';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { User, UserRole } from '../users/entities/user.entity';
+import { PushService } from '../push/push.service';
+
+const ADMINS_ROOM = 'admins';
 
 type RideCancelReason = 'no_driver_available' | 'timeout' | 'rider_cancelled' | 'driver_cancelled' | 'admin_cancelled';
 
@@ -31,10 +36,16 @@ interface ActiveRide {
 // (le téléphone n'envoie pas de position quand il ne bouge pas : le temps d'arrêt doit quand même compter)
 const METER_TICK_MS = 5_000;
 // Chauffeur déconnecté sans course en cours : repasse hors ligne s'il ne revient pas dans ce délai
+// (sauf s'il reçoit les courses par push : il reste en ligne app fermée)
 const OFFLINE_GRACE_MS = 60_000;
+// Capitaine « en ligne » sans position reçue depuis ce délai (téléphone éteint, app tuée) : hors ligne
+const STALE_POSITION_MS = 15 * 60_000;
+const STALE_CHECK_MS = 5 * 60_000;
+// Durée de vie d'une demande de course envoyée par push (= délai d'acceptation côté serveur)
+const RIDE_OFFER_TTL_MS = 60_000;
 
 @WebSocketGateway({ cors: { origin: '*' } })
-export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(GeolocationGateway.name);
 
@@ -55,7 +66,13 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
     private readonly jwtService: JwtService,
     @InjectRepository(Ride)
     private readonly rideRepo: Repository<Ride>,
+    private readonly push: PushService,
   ) {}
+
+  onModuleInit(): void {
+    const timer = setInterval(() => { void this.markStaleDriversOffline(); }, STALE_CHECK_MS);
+    timer.unref();
+  }
 
   // ── Connexion : authentifie via le JWT envoyé par le client (handshake.auth.token)
 
@@ -71,9 +88,22 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
       client.data.role = payload.role;
 
       if (payload.role === 'driver') {
+        // Même contrôle que JwtStrategy : un capitaine bloqué ne reçoit plus de courses
+        const driver = await this.driversService.findById(payload.sub).catch(() => null);
+        if (!driver || await stillBlocked(this.rideRepo.manager, Driver, driver)) {
+          client.emit('account:blocked', { reason: driver ? blockedMessage(driver) : null });
+          client.disconnect(true);
+          return;
+        }
         this.connectedDrivers.set(payload.sub, client.id);
         client.join(`driver:${payload.sub}`);
         await this.restoreActiveRide(payload.sub);
+      } else if (payload.role === 'admin') {
+        // Back-office : reçoit les changements des éléments à traiter (compteurs du menu)
+        const admin = await this.rideRepo.manager.getRepository(User).findOne({
+          where: { id: payload.sub }, select: { id: true, role: true, isActive: true, deletedAt: true },
+        });
+        if (admin?.role === UserRole.ADMIN && admin.isActive && !admin.deletedAt) client.join(ADMINS_ROOM);
       } else {
         client.join(`user:${payload.sub}`);
       }
@@ -96,10 +126,26 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
   // App fermée ou réseau perdu : un chauffeur « en ligne » fantôme ne doit pas rester visible
   private async markOfflineIfGone(driverId: string): Promise<void> {
     if (this.connectedDrivers.has(driverId) || this.driverActiveRide.has(driverId)) return;
+    // Joignable par push : reste en ligne, l'écran de course s'ouvrira même app fermée
+    if (await this.push.driverHasDevice(driverId)) return;
     const driver = await this.driversService.findById(driverId).catch(() => null);
     if (driver?.status !== DriverStatus.ONLINE) return;
     await this.driversService.updateStatus(driverId, DriverStatus.OFFLINE);
     this.logger.log(`Chauffeur ${driverId} hors ligne (déconnecté depuis ${OFFLINE_GRACE_MS / 1000} s)`);
+  }
+
+  // En ligne mais plus aucune position depuis longtemps (téléphone éteint, app tuée par le système) :
+  // ne doit plus recevoir de courses auxquelles il ne répondra pas
+  private async markStaleDriversOffline(): Promise<void> {
+    const stale = await this.rideRepo.manager.getRepository(Driver).find({
+      select: { id: true },
+      where: { status: DriverStatus.ONLINE, lastLocationUpdate: LessThan(new Date(Date.now() - STALE_POSITION_MS)) },
+    });
+    for (const { id } of stale) {
+      if (this.connectedDrivers.has(id) || this.driverActiveRide.has(id)) continue;
+      await this.driversService.updateStatus(id, DriverStatus.OFFLINE).catch(() => undefined);
+      this.logger.log(`Chauffeur ${id} hors ligne (aucune position depuis ${STALE_POSITION_MS / 60_000} min)`);
+    }
   }
 
   // Après un redémarrage serveur, les Maps sont vides : on les reconstruit depuis la base
@@ -234,7 +280,20 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
       this.server.to(`driver:${driver.id}`).emit('ride:new', payload);
     }
 
-    return nearbyDrivers.map((d) => d.id);
+    // Même demande par push : réveille l'app fermée ou en arrière-plan (écran d'appel)
+    const driverIds = nearbyDrivers.map((d) => d.id);
+    void this.push.sendToDrivers(driverIds, {
+      type:            'ride:new',
+      rideId:          ride.id,
+      destinationName: ride.destinationName ?? '',
+      price:           ride.estimatedPrice != null ? String(ride.estimatedPrice) : '',
+      isOpenTrip:      String(ride.isOpenTrip),
+      startLatitude:   String(ride.startLatitude),
+      startLongitude:  String(ride.startLongitude),
+      createdAt:       new Date(ride.createdAt ?? Date.now()).toISOString(),
+    }, RIDE_OFFER_TTL_MS);
+
+    return driverIds;
   }
 
   // ── Course acceptée : notifie le client avec le profil complet du chauffeur ─
@@ -249,11 +308,7 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
       driver:   toPublicDriver(driver),
     });
 
-    for (const driverId of ride.notifiedDriverIds) {
-      if (driverId !== driver.id) {
-        this.notifyRideUnavailable(driverId, ride.id);
-      }
-    }
+    this.notifyRidesUnavailable(ride.notifiedDriverIds.filter((id) => id !== driver.id), ride.id);
   }
 
   notifyRideArrived(ride: Ride): void {
@@ -290,7 +345,16 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
   }
 
   notifyRideUnavailable(driverId: string, rideId: string): void {
-    this.server.to(`driver:${driverId}`).emit('ride:unavailable', { rideId });
+    this.notifyRidesUnavailable([driverId], rideId);
+  }
+
+  // Course prise par un autre, expirée ou annulée : l'écran d'appel se ferme et la sonnerie s'arrête,
+  // y compris sur les téléphones joints seulement par push
+  notifyRidesUnavailable(driverIds: string[], rideId: string): void {
+    for (const driverId of driverIds) {
+      this.server.to(`driver:${driverId}`).emit('ride:unavailable', { rideId });
+    }
+    void this.push.sendToDrivers(driverIds, { type: 'ride:unavailable', rideId }, RIDE_OFFER_TTL_MS);
   }
 
   // Course terminée ou annulée : le chauffeur ne diffuse plus vers ce client
@@ -309,5 +373,21 @@ export class GeolocationGateway implements OnGatewayConnection, OnGatewayDisconn
 
   notifyCustom(room: string, event: string, payload: unknown): void {
     this.server.to(room).emit(event, payload);
+  }
+
+  // Dossier capitaine créé, complété ou traité : les admins connectés rechargent leurs compteurs
+  notifyAdminsPendingChanged(): void {
+    this.server.to(ADMINS_ROOM).emit('admin:pending-changed');
+  }
+
+  // Dossier du capitaine traité ou modifié par un admin (pièce validée/refusée, compte approuvé…)
+  notifyDriverDossierChanged(driverId: string, payload: Record<string, unknown>): void {
+    this.server.to(`driver:${driverId}`).emit('driver:dossier-updated', payload);
+  }
+
+  // Compte bloqué ou supprimé : prévient l'app puis coupe ses sockets
+  notifyAccountBlocked(room: string, reason: string | null): void {
+    this.server.to(room).emit('account:blocked', { reason });
+    this.server.in(room).disconnectSockets(true);
   }
 }

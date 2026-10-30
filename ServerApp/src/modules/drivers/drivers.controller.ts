@@ -5,7 +5,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { photoPath, photoUploadOptions } from '../../common/utils/photo-upload.util';
+import { normalizeUploadedImage } from '../../common/utils/heic.util';
 import { UpdateDriverDto } from './dto/update-driver.dto';
+import { IdentityDto } from './dto/identity.dto';
 import { DriversService } from './drivers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -45,6 +47,15 @@ export class DriversController {
     return this.driversService.updateProfile(user.sub, dto);
   }
 
+  @Patch('me/identity')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('driver')
+  @ApiOperation({ summary: 'Prénom, nom et NNI du dossier — modifiables tant que le compte n\u2019est pas approuvé' })
+  updateIdentity(@CurrentUser() user: JwtPayload, @Body() dto: IdentityDto) {
+    return this.driversService.updateIdentity(user.sub, dto);
+  }
+
   @Post('me/photo')
   @ApiBearerAuth()
   @ApiConsumes('multipart/form-data')
@@ -52,8 +63,9 @@ export class DriversController {
   @Roles('driver')
   @ApiOperation({ summary: 'Envoyer sa photo de profil (champ "photo")' })
   @UseInterceptors(FileInterceptor('photo', photoUploadOptions))
-  uploadPhoto(@CurrentUser() user: JwtPayload, @UploadedFile() file?: Express.Multer.File) {
+  async uploadPhoto(@CurrentUser() user: JwtPayload, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Aucune photo reçue');
+    await normalizeUploadedImage(file); // HEIC (iPhone) → JPEG
     return this.driversService.updateProfile(user.sub, { photoUrl: photoPath(file) });
   }
 
@@ -75,6 +87,6 @@ export class DriversController {
     @CurrentUser() user: JwtPayload,
     @Body('status') status: DriverStatus,
   ) {
-    return this.driversService.updateStatus(user.sub, status);
+    return this.driversService.updateStatusByDriver(user.sub, status);
   }
 }

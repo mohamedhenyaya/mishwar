@@ -1,9 +1,3 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { BlockAccountDto } from '../../../common/dto/block-account.dto';
 
-export class BlockDriverDto {
-  @ApiPropertyOptional({ example: 'Signalements répétés de clients' })
-  @IsOptional()
-  @IsString()
-  reason?: string;
-}
+export class BlockDriverDto extends BlockAccountDto {}

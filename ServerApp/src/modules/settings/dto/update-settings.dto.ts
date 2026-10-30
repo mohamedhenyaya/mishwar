@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, Min } from 'class-validator';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class UpdateSettingsDto {
   @ApiPropertyOptional({ example: 30, description: 'Prix par kilomètre (en DA/MRU/unité monétaire locale)' })
@@ -18,6 +18,7 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(100)
   commissionPercent?: number;
 
   @ApiPropertyOptional({ example: 5, description: 'Prix par minute d\'arrêt pendant un trajet ouvert (compteur temps réel)' })

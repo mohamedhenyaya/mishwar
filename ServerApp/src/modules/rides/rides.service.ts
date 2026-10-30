@@ -51,6 +51,31 @@ const METER_MAX_PING_GAP_SECONDS = 30;
 // Nombre d'utilisateurs affichés dans le classement (le rang du client reste calculé même hors podium)
 const LEADERBOARD_LIMIT = 50;
 
+// Ligne de l'historique du chauffeur — format lu par l'écran « Mes trajets » de CapitainApp
+export type DriverHistoryStatus =
+  | 'completed' | 'cancelled_by_client' | 'cancelled_by_driver' | 'cancelled_other' | 'ongoing';
+
+export interface DriverHistoryItem {
+  id:              string;
+  status:          DriverHistoryStatus;
+  date:            string;        // ISO — mis en forme par l'app
+  startLatitude:   number;
+  startLongitude:  number;
+  destinationName: string | null; // null : trajet ouvert
+  isOpenTrip:      boolean;
+  clientName:      string | null;
+  price:           number;        // prix final, sinon tarif indicatif
+  currency:        string;
+}
+
+function driverHistoryStatus(ride: Ride): DriverHistoryStatus {
+  if (ride.status === RideStatus.COMPLETED) return 'completed';
+  if (ride.status !== RideStatus.CANCELLED) return 'ongoing';
+  if (ride.cancelledBy === 'user') return 'cancelled_by_client';
+  if (ride.cancelledBy === 'driver') return 'cancelled_by_driver';
+  return 'cancelled_other'; // système ou admin
+}
+
 // Résumé des participants joint aux courses dans le back-office
 export interface RideParties {
   user: PartySummary | null;
@@ -182,6 +207,31 @@ export class RidesService implements OnModuleInit {
     });
   }
 
+  // Historique du chauffeur (écran « Mes trajets ») : courses qui lui ont été attribuées sur les
+  // `days` derniers jours, du plus récent au plus ancien, avec le nom du client
+  async findDriverHistory(driverId: string, days: number): Promise<DriverHistoryItem[]> {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1_000);
+    const rides = await this.rideRepo.find({
+      where: { driverId, createdAt: MoreThanOrEqual(since) },
+      order: { createdAt: 'DESC' },
+    });
+    const users = await this.usersService.findByIds([...new Set(rides.map((r) => r.userId))]);
+    const names = new Map(users.map((u) => [u.id, u.name ?? null]));
+
+    return rides.map((r) => ({
+      id:              r.id,
+      status:          driverHistoryStatus(r),
+      date:            r.createdAt.toISOString(),
+      startLatitude:   Number(r.startLatitude),
+      startLongitude:  Number(r.startLongitude),
+      destinationName: r.isOpenTrip ? null : r.destinationName ?? null,
+      isOpenTrip:      r.isOpenTrip,
+      clientName:      names.get(r.userId) ?? null,
+      price:           Math.round(Number(r.price ?? r.estimatedPrice ?? 0)),
+      currency:        'MRU',
+    }));
+  }
+
   async findByIdForParticipant(
     id: string,
     jwt: JwtPayload,
@@ -246,6 +296,8 @@ export class RidesService implements OnModuleInit {
     if (!driver.isActive) {
       throw new ForbiddenException(driver.blockedReason ?? 'Compte chauffeur bloqué');
     }
+    const blocker = await this.driversService.onlineBlocker(driver);
+    if (blocker) throw blocker;
 
     const result = await this.rideRepo
       .createQueryBuilder()
@@ -459,9 +511,10 @@ export class RidesService implements OnModuleInit {
       throw new ConflictException('Impossible de terminer cette course');
     }
 
-    await this.driversService.updateStatus(driverId, DriverStatus.ONLINE);
     await this.driversService.incrementTotalRides(driverId);
     await this.walletService.deductCommission(driverId, rideId, price, Number(settings.commissionPercent));
+    // Après la commission : un solde passé sous zéro met le capitaine hors ligne
+    await this.driversService.makeAvailable(driverId);
     await this.usersService.incrementTotalRides(existing.userId);
 
     const ride = await this.rideRepo.findOne({ where: { id: rideId } });
@@ -491,13 +544,11 @@ export class RidesService implements OnModuleInit {
     }
 
     if (ride.driverId) {
-      await this.driversService.updateStatus(ride.driverId, DriverStatus.ONLINE);
+      await this.driversService.makeAvailable(ride.driverId);
       this.geolocationGateway.releaseDriver(ride.driverId);
       this.geolocationGateway.notifyRideCancelled(`driver:${ride.driverId}`, rideId, 'rider_cancelled');
     } else {
-      for (const driverId of ride.notifiedDriverIds) {
-        this.geolocationGateway.notifyRideUnavailable(driverId, rideId);
-      }
+      this.geolocationGateway.notifyRidesUnavailable(ride.notifiedDriverIds, rideId);
     }
   }
 
@@ -527,7 +578,7 @@ export class RidesService implements OnModuleInit {
       throw new ConflictException('Une course démarrée ne peut plus être annulée par le chauffeur');
     }
 
-    await this.driversService.updateStatus(driverId, DriverStatus.ONLINE);
+    await this.driversService.makeAvailable(driverId);
     this.geolocationGateway.releaseDriver(driverId);
     this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'driver_cancelled');
   }
@@ -551,9 +602,7 @@ export class RidesService implements OnModuleInit {
       if (!result.affected) return;
 
       this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'timeout');
-      for (const driverId of ride.notifiedDriverIds) {
-        this.geolocationGateway.notifyRideUnavailable(driverId, rideId);
-      }
+      this.geolocationGateway.notifyRidesUnavailable(ride.notifiedDriverIds, rideId);
     }, timeoutMs);
 
     timer.unref();
@@ -778,7 +827,7 @@ export class RidesService implements OnModuleInit {
 
     this.geolocationGateway.notifyRideCancelled(`user:${ride.userId}`, rideId, 'admin_cancelled');
     if (ride.driverId) {
-      await this.driversService.updateStatus(ride.driverId, DriverStatus.ONLINE);
+      await this.driversService.makeAvailable(ride.driverId);
       this.geolocationGateway.releaseDriver(ride.driverId);
       this.geolocationGateway.notifyRideCancelled(`driver:${ride.driverId}`, rideId, 'admin_cancelled');
     } else {

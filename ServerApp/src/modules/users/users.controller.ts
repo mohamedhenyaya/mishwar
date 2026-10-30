@@ -5,6 +5,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { photoPath, photoUploadOptions } from '../../common/utils/photo-upload.util';
+import { normalizeUploadedImage } from '../../common/utils/heic.util';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -34,8 +35,9 @@ export class UsersController {
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Envoyer sa photo de profil (champ "photo")' })
   @UseInterceptors(FileInterceptor('photo', photoUploadOptions))
-  uploadPhoto(@CurrentUser() user: JwtPayload, @UploadedFile() file?: Express.Multer.File) {
+  async uploadPhoto(@CurrentUser() user: JwtPayload, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Aucune photo reçue');
+    await normalizeUploadedImage(file); // HEIC (iPhone) → JPEG
     return this.usersService.setPhoto(user.sub, photoPath(file));
   }
 }

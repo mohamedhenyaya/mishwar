@@ -8,6 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { VehicleType } from '../../drivers/entities/driver.entity';
+import { FuelType } from '../entities/vehicle.entity';
 
 export class UpdateVehicleDto {
   @ApiPropertyOptional({ enum: VehicleType })
@@ -36,6 +37,11 @@ export class UpdateVehicleDto {
   @IsOptional()
   @IsString()
   plateNumber?: string;
+
+  @ApiPropertyOptional({ enum: FuelType })
+  @IsOptional()
+  @IsEnum(FuelType)
+  fuelType?: FuelType;
 
   @ApiPropertyOptional({ example: 'Blanc' })
   @IsOptional()

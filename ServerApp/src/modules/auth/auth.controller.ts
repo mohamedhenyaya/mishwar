@@ -1,3 +1,4 @@
+import { CheckOtpDto } from './dto/check-otp.dto';
 import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -22,6 +23,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   sendOtp(@Body() dto: SendOtpDto) {
     return this.authService.sendOtp(dto);
+  }
+
+  // Inscription — vérifie le code reçu avant de passer aux étapes suivantes (ne le consomme pas)
+  @Post('register/check-otp')
+  @HttpCode(HttpStatus.OK)
+  checkRegisterOtp(@Body() dto: CheckOtpDto) {
+    return this.authService.checkRegisterOtp(dto.phone, dto.code);
   }
 
   // Inscription étape 2 — vérifier OTP + définir le mot de passe → JWT

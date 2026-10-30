@@ -1,5 +1,11 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException, Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UploadedFile, UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { photoPath, photoUploadOptions } from '../../common/utils/photo-upload.util';
+import { normalizeUploadedImage } from '../../common/utils/heic.util';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -7,7 +13,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { DriversService } from './drivers.service';
 import { CreateDriverDto } from './dto/create-driver.dto';
-import { UpdateDriverDto } from './dto/update-driver.dto';
+import { AdminUpdateDriverDto } from './dto/update-driver.dto';
 import { BlockDriverDto } from './dto/block-driver.dto';
 import { AdminDriversQueryDto } from './dto/admin-drivers-query.dto';
 import { AdminResetPasswordDto } from '../../common/dto/admin-reset-password.dto';
@@ -53,9 +59,21 @@ export class AdminDriversController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Modifier le profil / véhicule d\'un chauffeur' })
-  async update(@CurrentUser() admin: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateDriverDto) {
+  async update(@CurrentUser() admin: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AdminUpdateDriverDto) {
     const driver = await this.driversService.updateByAdmin(id, dto);
     await this.auditLogService.log(admin.sub, 'driver.update', 'Driver', id, { ...dto });
+    return driver;
+  }
+
+  @Post(':id/photo')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Envoyer la photo de profil d’un chauffeur (champ « photo »)' })
+  @UseInterceptors(FileInterceptor('photo', photoUploadOptions))
+  async uploadPhoto(@CurrentUser() admin: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @UploadedFile() file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Aucune photo reçue');
+    await normalizeUploadedImage(file);
+    const driver = await this.driversService.setPhotoByAdmin(id, photoPath(file));
+    await this.auditLogService.log(admin.sub, 'driver.photo', 'Driver', id);
     return driver;
   }
 
@@ -65,8 +83,8 @@ export class AdminDriversController {
     description: 'Empêche toute connexion future, révoque ses sessions, force son statut à OFFLINE, et notifie sa session en temps réel si elle est connectée. Refusé pendant une course en cours.',
   })
   async block(@CurrentUser() admin: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @Body() dto: BlockDriverDto) {
-    const driver = await this.driversService.block(id, dto.reason);
-    await this.auditLogService.log(admin.sub, 'driver.block', 'Driver', id, { reason: dto.reason });
+    const driver = await this.driversService.block(id, dto.reason, dto.durationMinutes);
+    await this.auditLogService.log(admin.sub, 'driver.block', 'Driver', id, { reason: dto.reason, durationMinutes: dto.durationMinutes ?? null });
     return driver;
   }
 

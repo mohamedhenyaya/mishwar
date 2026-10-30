@@ -7,13 +7,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ModuleRef } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { User, UserRole } from '../users/entities/user.entity';
-import { Driver } from '../drivers/entities/driver.entity';
+import { Driver, DriverStatus, VehicleType } from '../drivers/entities/driver.entity';
+import { DriversService } from '../drivers/drivers.service';
+import { GeolocationGateway } from '../geolocation/geolocation.gateway';
+import { VehicleApprovalStatus } from '../vehicles/entities/vehicle.entity';
+import { createDriverVehicle } from '../vehicles/driver-vehicle.util';
+import { assertNniFree } from '../drivers/identity.util';
+import { blockedMessage, releaseExpiredBlocks, stillBlocked } from '../../common/utils/account-block.util';
 import { RefreshToken } from './entities/refresh-token.entity';
 import { SendOtpDto, AuthRole } from './dto/send-otp.dto';
 import { RegisterVerifyDto } from './dto/register-verify.dto';
@@ -24,12 +31,17 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { DeviceOwnerType, DeviceToken } from '../notifications/entities/device-token.entity';
 
 interface OtpEntry {
   code: string;
   role: AuthRole;
   expiresAt: Date;
+  attempts: number; // codes faux saisis
 }
+
+// Au-delà, le code est invalidé : il faut en redemander un (empêche de le deviner)
+const MAX_OTP_ATTEMPTS = 5;
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 
@@ -48,7 +60,23 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly whatsappService: WhatsappService,
     private readonly config: ConfigService,
+    // Résolu à l'appel : DriversModule dépend (indirectement) d'AuthModule
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  // Blocages temporaires arrivés à échéance : comptes réactivés chaque minute
+  onModuleInit(): void {
+    const timer = setInterval(() => { void releaseExpiredBlocks(this.userRepo.manager).catch(() => undefined); }, 60_000);
+    timer.unref();
+  }
+
+  // Connexion ou déconnexion d'un capitaine : il repasse hors ligne et devra cliquer
+  // « En ligne » lui-même. Une course en cours (BUSY) n'est pas touchée.
+  private async setDriverOffline(driverId: string): Promise<void> {
+    const driver = await this.driverRepo.findOne({ where: { id: driverId }, select: { id: true, status: true } });
+    if (driver?.status !== DriverStatus.ONLINE) return;
+    await this.moduleRef.get(DriversService, { strict: false }).updateStatus(driverId, DriverStatus.OFFLINE);
+  }
 
   // ── Émet un couple access/refresh token et persiste le hash du refresh ────
 
@@ -84,7 +112,7 @@ export class AuthService {
     const code = Math.floor(100_000 + Math.random() * 900_000).toString();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1_000);
 
-    this.otpStore.set(dto.phone, { code, role: dto.role, expiresAt });
+    this.otpStore.set(dto.phone, { code, role: dto.role, expiresAt, attempts: 0 });
 
     await this.whatsappService.sendOtp(dto.phone, code);
 
@@ -97,18 +125,37 @@ export class AuthService {
     return response;
   }
 
+  // Code reçu valide et non expiré (sans le consommer) — sinon erreur explicite
+  private checkOtp(phone: string, code: string): OtpEntry {
+    const entry = this.otpStore.get(phone);
+    if (!entry) throw new BadRequestException('Aucun code en cours pour ce numéro : demandez-en un nouveau');
+    if (entry.expiresAt < new Date()) {
+      this.otpStore.delete(phone);
+      throw new UnauthorizedException('Code expiré : demandez-en un nouveau');
+    }
+    if (entry.code !== code) {
+      entry.attempts += 1;
+      const left = MAX_OTP_ATTEMPTS - entry.attempts;
+      if (left <= 0) {
+        this.otpStore.delete(phone);
+        throw new UnauthorizedException('Trop d’essais : demandez un nouveau code');
+      }
+      throw new UnauthorizedException(`Code incorrect (${left} essai${left > 1 ? 's' : ''} restant${left > 1 ? 's' : ''})`);
+    }
+    return entry;
+  }
+
+  // Inscription : vérifie le code dès sa saisie, avant les étapes véhicule et documents.
+  // Le code reste valable pour la création du compte (register/verify).
+  checkRegisterOtp(phone: string, code: string): { valid: true } {
+    this.checkOtp(phone, code);
+    return { valid: true };
+  }
+
   // ── Inscription : étape 2 — vérifier OTP + créer compte avec mot de passe ─
 
   async registerVerify(dto: RegisterVerifyDto): Promise<{ accessToken: string; refreshToken: string }> {
-    const entry = this.otpStore.get(dto.phone);
-
-    if (!entry) throw new BadRequestException('Aucun OTP trouvé pour ce numéro');
-    if (entry.code !== dto.code) throw new UnauthorizedException('Code OTP invalide');
-    if (entry.expiresAt < new Date()) {
-      this.otpStore.delete(dto.phone);
-      throw new UnauthorizedException('OTP expiré, veuillez en demander un nouveau');
-    }
-    this.otpStore.delete(dto.phone);
+    const entry = this.checkOtp(dto.phone, dto.code);
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
@@ -117,14 +164,43 @@ export class AuthService {
       let driver = await this.driverRepo.findOne({ where: { phone: dto.phone } });
       if (driver) {
         await this.driverRepo.update(driver.id, { passwordHash });
+        await this.setDriverOffline(driver.id);
       } else {
-        driver = this.driverRepo.create({ phone: dto.phone, passwordHash });
-        await this.driverRepo.save(driver);
+        // Un capitaine = un véhicule : pas de compte sans véhicule. L'OTP n'est consommé
+        // qu'après la création, pour pouvoir corriger une plaque refusée sans nouveau code.
+        if (!dto.firstName?.trim() || !dto.lastName?.trim() || !dto.nni) {
+          throw new BadRequestException('Le prénom, le nom et le NNI sont obligatoires');
+        }
+        if (!dto.vehicleMake?.trim() || !dto.vehicleModel?.trim() || !dto.vehicleYear || !dto.vehicleFuel || !dto.vehiclePlate?.trim()) {
+          throw new BadRequestException('Marque, modèle, année, énergie et immatriculation du véhicule sont obligatoires');
+        }
+        const firstName = dto.firstName.trim();
+        const lastName  = dto.lastName.trim();
+        await assertNniFree(this.driverRepo.manager, dto.nni);
+        driver = await this.driverRepo.manager.transaction(async (manager) => {
+          const created = await manager.getRepository(Driver).save(
+            manager.getRepository(Driver).create({
+              phone: dto.phone, passwordHash, firstName, lastName, nni: dto.nni, name: `${firstName} ${lastName}`,
+            }),
+          );
+          await createDriverVehicle(manager, created.id, {
+            type:        dto.vehicleType ?? VehicleType.SEDAN,
+            make:        dto.vehicleMake!.trim(),
+            model:       dto.vehicleModel!.trim(),
+            year:        dto.vehicleYear,
+            fuelType:    dto.vehicleFuel,
+            plateNumber: dto.vehiclePlate!,
+          }, VehicleApprovalStatus.PENDING);
+          return created;
+        });
         this.logger.log(`Nouveau chauffeur inscrit: ${driver.id}`);
+        this.moduleRef.get(GeolocationGateway, { strict: false }).notifyAdminsPendingChanged();
       }
 
+      this.otpStore.delete(dto.phone);
       return this.issueTokenPair(driver.id, driver.phone, 'driver');
     }
+    this.otpStore.delete(dto.phone);
 
     // Crée ou met à jour le compte avec le hash du mot de passe
     let user = await this.userRepo.findOne({ where: { phone: dto.phone } });
@@ -162,10 +238,11 @@ export class AuthService {
       if (!isValid) {
         throw new UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
       }
-      if (!driver.isActive) {
-        throw new ForbiddenException(driver.blockedReason ?? 'Compte bloqué');
+      if (await stillBlocked(this.driverRepo.manager, Driver, driver)) {
+        throw new ForbiddenException(blockedMessage(driver));
       }
 
+      await this.setDriverOffline(driver.id);
       return this.issueTokenPair(driver.id, driver.phone, 'driver');
     }
 
@@ -186,8 +263,8 @@ export class AuthService {
     if (!isValid) {
       throw new UnauthorizedException('Numéro de téléphone ou mot de passe incorrect');
     }
-    if (!user.isActive) {
-      throw new ForbiddenException(user.blockedReason ?? 'Compte bloqué');
+    if (await stillBlocked(this.userRepo.manager, User, user)) {
+      throw new ForbiddenException(blockedMessage(user));
     }
 
     return this.issueTokenPair(user.id, user.phone, user.role);
@@ -244,6 +321,12 @@ export class AuthService {
 
   async logout(jwt: JwtPayload): Promise<{ message: string }> {
     await this.refreshTokenRepo.update({ ownerId: jwt.sub }, { revokedAt: new Date() });
+    if (jwt.role === 'driver') {
+      await this.setDriverOffline(jwt.sub);
+      // Plus d'écran « Nouvelle course » par push sur ce téléphone une fois déconnecté
+      await this.refreshTokenRepo.manager.getRepository(DeviceToken)
+        .delete({ ownerType: DeviceOwnerType.DRIVER, ownerId: jwt.sub });
+    }
     return { message: 'Déconnexion réussie' };
   }
 
@@ -254,14 +337,7 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
-    const entry = this.otpStore.get(dto.phone);
-
-    if (!entry) throw new BadRequestException('Aucun OTP trouvé pour ce numéro');
-    if (entry.code !== dto.code) throw new UnauthorizedException('Code OTP invalide');
-    if (entry.expiresAt < new Date()) {
-      this.otpStore.delete(dto.phone);
-      throw new UnauthorizedException('OTP expiré, veuillez en demander un nouveau');
-    }
+    const entry = this.checkOtp(dto.phone, dto.code);
     this.otpStore.delete(dto.phone);
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);

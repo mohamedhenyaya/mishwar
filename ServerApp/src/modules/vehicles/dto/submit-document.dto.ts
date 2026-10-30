@@ -1,18 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional } from 'class-validator';
 import { VehicleDocumentType } from '../entities/vehicle-document.entity';
 
+// Envoyé en multipart/form-data avec le fichier dans le champ « photo »
 export class SubmitDocumentDto {
   @ApiProperty({ enum: VehicleDocumentType })
   @IsEnum(VehicleDocumentType)
   type: VehicleDocumentType;
 
-  @ApiProperty({ example: 'https://storage.example.com/documents/abc.jpg' })
-  @IsString()
-  @IsNotEmpty()
-  fileUrl: string;
-
-  @ApiPropertyOptional({ example: '2027-01-01T00:00:00.000Z' })
+  @ApiPropertyOptional({ example: '2027-01-01', description: 'Obligatoire pour l’assurance : date de fin de validité' })
   @IsOptional()
   @IsDateString()
   expiresAt?: string;

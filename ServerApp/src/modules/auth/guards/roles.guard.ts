@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import { JwtPayload } from '../strategies/jwt.strategy';
 import { User, UserRole } from '../../users/entities/user.entity';
+import { blockedMessage, stillBlocked } from '../../../common/utils/account-block.util';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -30,10 +31,13 @@ export class RolesGuard implements CanActivate {
     if (user.role === UserRole.ADMIN) {
       const admin = await this.dataSource.getRepository(User).findOne({
         where: { id: user.sub },
-        select: { id: true, role: true, isActive: true, deletedAt: true },
+        select: { id: true, role: true, isActive: true, blockedReason: true, blockedUntil: true, deletedAt: true },
       });
-      if (!admin || admin.role !== UserRole.ADMIN || !admin.isActive || admin.deletedAt) {
+      if (!admin || admin.role !== UserRole.ADMIN || admin.deletedAt) {
         throw new UnauthorizedException('Compte administrateur désactivé');
+      }
+      if (await stillBlocked(this.dataSource.manager, User, admin)) {
+        throw new UnauthorizedException(blockedMessage(admin));
       }
     }
     return true;

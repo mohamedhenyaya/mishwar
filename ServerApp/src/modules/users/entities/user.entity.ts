@@ -47,6 +47,10 @@ export class User {
   @Column({ type: 'timestamp', nullable: true })
   blockedAt: Date | null;
 
+  // Fin d'un blocage temporaire (null = définitif) — réactivation automatique à l'échéance
+  @Column({ type: 'timestamp', nullable: true })
+  blockedUntil: Date | null;
+
   // Suppression par un admin : le compte est anonymisé (pas effacé) pour garder l'historique cohérent
   @Column({ type: 'timestamp', nullable: true })
   deletedAt: Date | null;

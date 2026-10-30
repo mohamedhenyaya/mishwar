@@ -1,3 +1,4 @@
+import { blockedUntilFrom } from '../../common/utils/account-block.util';
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
@@ -116,7 +117,7 @@ export class UsersService {
     return this.userRepo.save(user);
   }
 
-  async block(id: string, reason: string | undefined, actingAdminId: string): Promise<User> {
+  async block(id: string, reason: string | undefined, actingAdminId: string, durationMinutes?: number): Promise<User> {
     const user = await this.findById(id);
     if (id === actingAdminId) throw new BadRequestException('Vous ne pouvez pas bloquer votre propre compte');
     if (user.role === UserRole.ADMIN) await this.assertNotLastActiveAdmin(id);
@@ -125,6 +126,7 @@ export class UsersService {
       isActive:      false,
       blockedReason: reason ?? null,
       blockedAt:     new Date(),
+      blockedUntil:  blockedUntilFrom(durationMinutes),
     });
     await this.revokeSessions(id);
     return this.findById(id);
@@ -133,7 +135,7 @@ export class UsersService {
   async unblock(id: string): Promise<User> {
     const user = await this.findById(id);
     if (user.deletedAt) throw new BadRequestException('Ce compte a été supprimé');
-    await this.userRepo.update(id, { isActive: true, blockedReason: null, blockedAt: null });
+    await this.userRepo.update(id, { isActive: true, blockedReason: null, blockedAt: null, blockedUntil: null });
     return this.findById(id);
   }
 
@@ -190,6 +192,7 @@ export class UsersService {
       isActive:      false,
       blockedReason: 'Compte supprimé',
       blockedAt:     user.blockedAt ?? now,
+      blockedUntil:  null,
       deletedAt:     now,
     });
     await this.revokeSessions(id);

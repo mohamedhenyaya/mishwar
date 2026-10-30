@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { Driver } from '../drivers/entities/driver.entity';
+import { DriversService } from '../drivers/drivers.service';
 import {
   WalletOwnerType,
   WalletTransaction,
@@ -20,6 +22,8 @@ export class WalletService {
     private readonly driverRepo: Repository<Driver>,
     @InjectRepository(WalletTransaction)
     private readonly txRepo: Repository<WalletTransaction>,
+    // Résolu à l'appel : DriversModule dépend (indirectement) de WalletModule
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   private repoFor(ownerType: WalletOwnerType): Repository<any> {
@@ -84,7 +88,7 @@ export class WalletService {
     createdByAdminId: string | null,
     note: string | null,
   ): Promise<WalletTransaction> {
-    return this.txRepo.manager.transaction(async (manager) => {
+    const tx = await this.txRepo.manager.transaction(async (manager) => {
       const repo = ownerType === WalletOwnerType.DRIVER
         ? manager.getRepository(Driver)
         : manager.getRepository(User);
@@ -107,6 +111,12 @@ export class WalletService {
       });
       return manager.getRepository(WalletTransaction).save(tx);
     });
+
+    // Solde du capitaine passé sous zéro : il ne peut plus rester en ligne
+    if (ownerType === WalletOwnerType.DRIVER && Number(tx.balanceAfter) < 0) {
+      await this.moduleRef.get(DriversService, { strict: false }).enforceOnlineRules(ownerId);
+    }
+    return tx;
   }
 
   async getTransactions(

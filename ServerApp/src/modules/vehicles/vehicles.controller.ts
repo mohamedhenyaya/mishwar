@@ -1,58 +1,55 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Res, UploadedFile, UseGuards, UseInterceptors,
+} from '@nestjs/common';
+import { Response } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { documentUploadOptions } from '../../common/utils/photo-upload.util';
 import { VehiclesService } from './vehicles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
-import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { SubmitDocumentDto } from './dto/submit-document.dto';
 
 @ApiTags('vehicles')
 @ApiBearerAuth()
-@Controller('drivers/vehicles')
+@Controller('drivers/vehicle')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('driver')
 export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 
-  @Post()
-  @ApiOperation({ summary: 'Déclarer un nouveau véhicule (statut PENDING)' })
-  create(@CurrentUser() user: JwtPayload, @Body() dto: CreateVehicleDto) {
-    return this.vehiclesService.createForDriver(user.sub, dto);
-  }
-
   @Get()
-  @ApiOperation({ summary: 'Liste des véhicules du chauffeur connecté' })
+  @ApiOperation({ summary: 'Dossier du chauffeur connecté : véhicule, pièces, pièces manquantes, fin d’assurance' })
   findMine(@CurrentUser() user: JwtPayload) {
     return this.vehiclesService.findMine(user.sub);
   }
 
-  @Patch(':id')
-  @ApiOperation({ summary: 'Modifier un véhicule en attente d\'approbation' })
-  update(
-    @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
-    @Body() dto: UpdateVehicleDto,
-  ) {
-    return this.vehiclesService.updateOwn(id, user.sub, dto);
+  @Patch()
+  @ApiOperation({ summary: 'Modifier son véhicule — repasse en attente de validation' })
+  update(@CurrentUser() user: JwtPayload, @Body() dto: UpdateVehicleDto) {
+    return this.vehiclesService.updateOwn(user.sub, dto);
   }
 
-  @Patch(':id/activate')
-  @ApiOperation({ summary: 'Activer un véhicule approuvé (devient le véhicule en cours d\'utilisation)' })
-  activate(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
-    return this.vehiclesService.activate(id, user.sub);
+  @Get('documents/:id/file')
+  @ApiOperation({ summary: 'Photo d’une de ses pièces (validée ou non)' })
+  async documentFile(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+    res.sendFile(await this.vehiclesService.documentFile(id, user.sub));
   }
 
-  @Post(':id/documents')
-  @ApiOperation({ summary: 'Soumettre un document (carte grise, assurance, contrôle technique)' })
+  @Post('documents')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Envoyer la photo d’une pièce du dossier (champ « photo ») — assurance : avec sa date de fin' })
+  @UseInterceptors(FileInterceptor('photo', documentUploadOptions))
   submitDocument(
     @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
     @Body() dto: SubmitDocumentDto,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.vehiclesService.submitDocument(id, user.sub, dto);
+    if (!file) throw new BadRequestException('Aucune photo reçue');
+    return this.vehiclesService.submitDocument(user.sub, dto, file);
   }
 }

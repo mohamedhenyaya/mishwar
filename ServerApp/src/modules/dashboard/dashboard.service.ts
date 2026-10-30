@@ -5,7 +5,8 @@ import { Ride, RideStatus } from '../rides/entities/ride.entity';
 import { Driver, DriverStatus } from '../drivers/entities/driver.entity';
 import { User, UserRole } from '../users/entities/user.entity';
 import { WalletRequest, WalletRequestStatus } from '../wallet/entities/wallet-request.entity';
-import { Vehicle, VehicleApprovalStatus } from '../vehicles/entities/vehicle.entity';
+import { Vehicle } from '../vehicles/entities/vehicle.entity';
+import { TO_REVIEW_SQL } from '../vehicles/dossier.util';
 import { SupportTicket, TicketStatus } from '../support/entities/support-ticket.entity';
 import { WalletTransaction, WalletTransactionType } from '../wallet/entities/wallet-transaction.entity';
 import { DriversService } from '../drivers/drivers.service';
@@ -79,7 +80,11 @@ export class DashboardService {
     const [busyDrivers, pendingWalletRequests, pendingVehicles, openTickets] = await Promise.all([
       this.driverRepo.count({ where: { status: DriverStatus.BUSY } }),
       manager.getRepository(WalletRequest).count({ where: { status: WalletRequestStatus.PENDING } }),
-      manager.getRepository(Vehicle).count({ where: { status: VehicleApprovalStatus.PENDING } }),
+      // Mêmes dossiers que le filtre « À vérifier » de la liste : comptes supprimés exclus
+      manager.getRepository(Vehicle).createQueryBuilder('vehicle')
+        .innerJoin(Driver, 'driver', 'driver.id = vehicle.driverId AND driver.deletedAt IS NULL')
+        .where(TO_REVIEW_SQL)
+        .getCount(),
       manager.getRepository(SupportTicket).count({ where: { status: In([TicketStatus.OPEN, TicketStatus.IN_PROGRESS]) } }),
     ]);
 

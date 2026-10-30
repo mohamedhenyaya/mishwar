@@ -74,8 +74,8 @@ export class AdminUsersController {
   @Patch(':id/block')
   @ApiOperation({ summary: 'Bloquer un utilisateur — empêche toute connexion future et révoque ses sessions' })
   async block(@CurrentUser() admin: JwtPayload, @Param('id', ParseUUIDPipe) id: string, @Body() dto: BlockUserDto) {
-    const user = await this.usersService.block(id, dto.reason, admin.sub);
-    await this.auditLogService.log(admin.sub, 'user.block', 'User', id, { reason: dto.reason });
+    const user = await this.usersService.block(id, dto.reason, admin.sub, dto.durationMinutes);
+    await this.auditLogService.log(admin.sub, 'user.block', 'User', id, { reason: dto.reason, durationMinutes: dto.durationMinutes ?? null });
     return user;
   }
 

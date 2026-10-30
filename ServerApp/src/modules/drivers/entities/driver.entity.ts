@@ -30,6 +30,17 @@ export class Driver {
   @Column({ nullable: true })
   name: string;
 
+  // Identité du dossier (vérifiée avec la carte d'identité) — name reste le nom affiché au client
+  @Column({ type: 'varchar', nullable: true })
+  firstName: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  lastName: string | null;
+
+  // Numéro national d'identification, unique (libéré à la suppression du compte)
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  nni: string | null;
+
   // Chemin relatif servi en statique, ex. /uploads/xxx.jpg
   @Column({ nullable: true })
   photoUrl: string;
@@ -81,6 +92,10 @@ export class Driver {
 
   @Column({ type: 'timestamp', nullable: true })
   blockedAt: Date | null;
+
+  // Fin d'un blocage temporaire (null = définitif) — réactivation automatique à l'échéance
+  @Column({ type: 'timestamp', nullable: true })
+  blockedUntil: Date | null;
 
   // Suppression par un admin : le compte est anonymisé (pas effacé) pour garder l'historique cohérent
   @Column({ type: 'timestamp', nullable: true })

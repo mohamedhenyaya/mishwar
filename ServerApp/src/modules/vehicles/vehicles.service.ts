@@ -1,15 +1,20 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import { existsSync } from 'fs';
+import { basename, join } from 'path';
 import { Vehicle, VehicleApprovalStatus } from './entities/vehicle.entity';
-import { VehicleDocument } from './entities/vehicle-document.entity';
+import {
+  DocumentReviewStatus,
+  REQUIRED_DOCUMENT_TYPES,
+  VehicleDocument,
+  VehicleDocumentType,
+} from './entities/vehicle-document.entity';
 import { Driver } from '../drivers/entities/driver.entity';
-import { CreateVehicleDto } from './dto/create-vehicle.dto';
+import { DOCUMENTS_DIR } from '../../common/utils/photo-upload.util';
+import { heicToJpeg, isHeic, normalizeUploadedImage } from '../../common/utils/heic.util';
+import { assertDossierEditable, DOSSIER_LABELS, insuranceValidUntil, latestByType, missingItems } from './dossier.util';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { RejectVehicleDto } from './dto/reject-vehicle.dto';
 import { SubmitDocumentDto } from './dto/submit-document.dto';
@@ -17,6 +22,9 @@ import { ReviewDocumentDto } from './dto/review-document.dto';
 import { AdminVehiclesQueryDto } from './dto/admin-vehicles-query.dto';
 import { PaginatedResult } from '../../common/dto/pagination-query.dto';
 import { loadParties } from '../../common/utils/admin-parties.util';
+import { updateDriverVehicle } from './driver-vehicle.util';
+import { DriversService } from '../drivers/drivers.service';
+import { GeolocationGateway } from '../geolocation/geolocation.gateway';
 
 @Injectable()
 export class VehiclesService {
@@ -25,53 +33,56 @@ export class VehiclesService {
     private readonly vehicleRepo: Repository<Vehicle>,
     @InjectRepository(VehicleDocument)
     private readonly documentRepo: Repository<VehicleDocument>,
-    @InjectRepository(Driver)
-    private readonly driverRepo: Repository<Driver>,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   // ═══════════════════════════ Espace chauffeur ══════════════════════════════
 
-  async createForDriver(driverId: string, dto: CreateVehicleDto): Promise<Vehicle> {
-    const vehicle = this.vehicleRepo.create({
-      ...dto,
-      driverId,
-      status:   VehicleApprovalStatus.PENDING,
-      isActive: false,
-    });
-    return this.vehicleRepo.save(vehicle);
+  // Dossier vu par le capitaine : statut, pièces envoyées, pièces manquantes, fin d'assurance
+  async findMine(driverId: string) {
+    const vehicle = await this.findByDriverOrThrow(driverId);
+    return this.withDossier(vehicle);
   }
 
-  async findMine(driverId: string): Promise<Vehicle[]> {
-    return this.vehicleRepo.find({ where: { driverId }, order: { createdAt: 'DESC' } });
+  async updateOwn(driverId: string, dto: UpdateVehicleDto): Promise<Vehicle> {
+    await assertDossierEditable(this.vehicleRepo.manager, driverId);
+    const vehicle = await updateDriverVehicle(this.vehicleRepo.manager, driverId, dto, { resetApproval: true });
+    await this.drivers().enforceOnlineRules(driverId);
+    this.pendingChanged();
+    return vehicle;
   }
 
-  async updateOwn(id: string, driverId: string, dto: UpdateVehicleDto): Promise<Vehicle> {
-    const vehicle = await this.getOwned(id, driverId);
-    if (vehicle.status !== VehicleApprovalStatus.PENDING) {
-      throw new ConflictException('Seul un véhicule en attente peut être modifié');
+  // Photo d'une pièce (inscription, pièce refusée, nouvelle assurance) : en attente de vérification
+  async submitDocument(driverId: string, dto: SubmitDocumentDto, file: Express.Multer.File, { byAdmin = false } = {}): Promise<VehicleDocument> {
+    const vehicle = await this.findByDriverOrThrow(driverId);
+
+    // Pièce déjà validée : figée pour le capitaine (seule l'assurance se renouvelle) ; un admin peut la remplacer
+    if (!byAdmin && dto.type !== VehicleDocumentType.INSURANCE) {
+      const current = await this.documentRepo.findOne({ where: { vehicleId: vehicle.id, type: dto.type }, order: { createdAt: 'DESC' } });
+      if (current?.status === DocumentReviewStatus.APPROVED) throw new ConflictException('Ce document a déjà été validé : il n’est plus modifiable');
     }
-    await this.vehicleRepo.update(id, dto);
-    return this.findByIdOrThrow(id);
-  }
 
-  async activate(id: string, driverId: string): Promise<Vehicle> {
-    const vehicle = await this.getOwned(id, driverId);
-    if (vehicle.status !== VehicleApprovalStatus.APPROVED) {
-      throw new ConflictException('Seul un véhicule approuvé peut être activé');
+    let expiresAt: Date | null = null;
+    if (dto.type === VehicleDocumentType.INSURANCE) {
+      if (!dto.expiresAt) throw new BadRequestException('Indiquez la date de fin de l’assurance');
+      // Valable jusqu'à la fin du jour indiqué
+      expiresAt = new Date(`${dto.expiresAt.slice(0, 10)}T23:59:59Z`);
+      if (expiresAt < new Date()) throw new BadRequestException('Cette assurance est déjà expirée');
     }
-    await this.activateVehicle(vehicle);
-    return this.findByIdOrThrow(id);
-  }
 
-  async submitDocument(vehicleId: string, driverId: string, dto: SubmitDocumentDto): Promise<VehicleDocument> {
-    await this.getOwned(vehicleId, driverId);
-    const document = this.documentRepo.create({
-      vehicleId,
+    const document = await this.documentRepo.save(this.documentRepo.create({
+      vehicleId: vehicle.id,
       type:      dto.type,
-      fileUrl:   dto.fileUrl,
-      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
-    });
-    return this.documentRepo.save(document);
+      fileUrl:   await normalizeUploadedImage(file), // HEIC (iPhone) → JPEG lisible par les admins
+      expiresAt,
+    }));
+    // Dossier refusé puis complété : il repart en vérification
+    if (vehicle.status === VehicleApprovalStatus.REJECTED) {
+      await this.vehicleRepo.update(vehicle.id, { status: VehicleApprovalStatus.PENDING, rejectedReason: null });
+    }
+    this.pendingChanged();
+    if (byAdmin) this.dossierChanged(driverId, { event: 'UPDATED' });
+    return document;
   }
 
   // ═══════════════════════════ Administration ═══════════════════════════════
@@ -95,31 +106,38 @@ export class VehiclesService {
 
   async findByIdForAdmin(id: string) {
     const vehicle = await this.findByIdOrThrow(id);
-    const documents = await this.documentRepo.find({ where: { vehicleId: id }, order: { createdAt: 'DESC' } });
     const party = await loadParties(this.vehicleRepo.manager, [{ type: 'driver', id: vehicle.driverId }]);
-    return { ...vehicle, documents, driver: party('driver', vehicle.driverId) };
+    return { ...(await this.withDossier(vehicle)), driver: party('driver', vehicle.driverId) };
   }
 
+  // Approuver le dossier = toutes les pièces sont là : les dernières en attente sont validées avec lui
   async approve(id: string): Promise<Vehicle> {
     const vehicle = await this.findByIdOrThrow(id);
-    await this.vehicleRepo.update(id, { status: VehicleApprovalStatus.APPROVED, rejectedReason: null });
-
-    const activeVehicle = await this.vehicleRepo.findOne({
-      where: { driverId: vehicle.driverId, isActive: true },
-    });
-    if (!activeVehicle) {
-      await this.activateVehicle(vehicle);
+    const { documents, missing } = await this.withDossier(vehicle);
+    if (missing.length) {
+      throw new ConflictException(`Dossier incomplet : ${missing.map((m) => DOSSIER_LABELS[m]).join(', ')}`);
     }
+    const toApprove = [...latestByType(documents).values()]
+      .filter((d) => REQUIRED_DOCUMENT_TYPES.includes(d.type) && d.status === DocumentReviewStatus.PENDING)
+      .map((d) => d.id);
+    if (toApprove.length) await this.documentRepo.update({ id: In(toApprove) }, { status: DocumentReviewStatus.APPROVED });
 
+    await this.vehicleRepo.update(id, { status: VehicleApprovalStatus.APPROVED, rejectedReason: null });
+    this.pendingChanged();
+    this.dossierChanged(vehicle.driverId, { event: 'ACCOUNT_APPROVED' });
     return this.findByIdOrThrow(id);
   }
 
+  // Un véhicule rejeté ne roule plus : le capitaine en ligne passe hors ligne
   async reject(id: string, dto: RejectVehicleDto): Promise<Vehicle> {
-    await this.findByIdOrThrow(id);
+    const vehicle = await this.findByIdOrThrow(id);
     await this.vehicleRepo.update(id, {
       status:         VehicleApprovalStatus.REJECTED,
       rejectedReason: dto.reason,
     });
+    await this.drivers().enforceOnlineRules(vehicle.driverId);
+    this.pendingChanged();
+    this.dossierChanged(vehicle.driverId, { event: 'DOSSIER_REJECTED', reason: dto.reason });
     return this.findByIdOrThrow(id);
   }
 
@@ -131,10 +149,69 @@ export class VehiclesService {
       status:     dto.status,
       reviewNote: dto.reviewNote ?? null,
     });
+    // Assurance refusée ou remplacée : le capitaine en ligne peut ne plus avoir le droit de rouler
+    const vehicle = await this.findByIdOrThrow(document.vehicleId);
+    await this.drivers().enforceOnlineRules(vehicle.driverId);
+    this.pendingChanged();
+    this.dossierChanged(vehicle.driverId, {
+      event: 'DOCUMENT_REVIEWED', type: document.type, status: dto.status, note: dto.reviewNote ?? null,
+    });
     return this.documentRepo.findOne({ where: { id: documentId } }) as Promise<VehicleDocument>;
   }
 
+  // Fichier d'une pièce : admins, ou le capitaine propriétaire (jamais servi en statique)
+  async documentFile(documentId: string, ownerDriverId?: string): Promise<string> {
+    const document = await this.documentRepo.findOne({ where: { id: documentId } });
+    if (!document) throw new NotFoundException('Document non trouvé');
+    if (ownerDriverId) {
+      const vehicle = await this.findByIdOrThrow(document.vehicleId);
+      if (vehicle.driverId !== ownerDriverId) throw new NotFoundException('Document non trouvé');
+    }
+    let path = join(DOCUMENTS_DIR, basename(document.fileUrl));
+    if (!existsSync(path)) throw new NotFoundException('Fichier introuvable');
+    // Pièce reçue en HEIC avant la conversion à l'arrivée : convertie une fois, à la première lecture
+    if (isHeic(document.fileUrl)) {
+      const fileUrl = await heicToJpeg(path);
+      await this.documentRepo.update(document.id, { fileUrl });
+      path = join(DOCUMENTS_DIR, fileUrl);
+    }
+    return path;
+  }
+
   // ── Utilitaires internes ────────────────────────────────────────────────────
+
+  // Résolu à l'appel : DriversModule dépend (indirectement) de VehiclesModule
+  private drivers(): DriversService {
+    return this.moduleRef.get(DriversService, { strict: false });
+  }
+
+  private pendingChanged(): void {
+    this.moduleRef.get(GeolocationGateway, { strict: false }).notifyAdminsPendingChanged();
+  }
+
+  // Décision ou modification d'un admin : l'app du capitaine recharge son profil (et l'avertit)
+  private dossierChanged(driverId: string, payload: Record<string, unknown>): void {
+    this.moduleRef.get(GeolocationGateway, { strict: false }).notifyDriverDossierChanged(driverId, payload);
+  }
+
+  private async withDossier(vehicle: Vehicle) {
+    const manager = this.vehicleRepo.manager;
+    const documents = await this.documentRepo.find({ where: { vehicleId: vehicle.id }, order: { createdAt: 'DESC' } });
+    const driver = await manager.getRepository(Driver).findOne({
+      where: { id: vehicle.driverId },
+      select: { id: true, photoUrl: true, firstName: true, lastName: true, nni: true },
+    });
+    return {
+      ...vehicle,
+      documents,
+      identity:            { firstName: driver?.firstName ?? null, lastName: driver?.lastName ?? null, nni: driver?.nni ?? null },
+      missing:             missingItems(documents, {
+        hasIdentity:     !!(driver?.firstName && driver.lastName && driver.nni),
+        hasProfilePhoto: !!driver?.photoUrl,
+      }),
+      insuranceValidUntil: await insuranceValidUntil(manager, vehicle.id),
+    };
+  }
 
   private async findByIdOrThrow(id: string): Promise<Vehicle> {
     const vehicle = await this.vehicleRepo.findOne({ where: { id } });
@@ -142,24 +219,9 @@ export class VehiclesService {
     return vehicle;
   }
 
-  private async getOwned(id: string, driverId: string): Promise<Vehicle> {
-    const vehicle = await this.findByIdOrThrow(id);
-    if (vehicle.driverId !== driverId) {
-      throw new ForbiddenException('Ce véhicule ne vous appartient pas');
-    }
+  private async findByDriverOrThrow(driverId: string): Promise<Vehicle> {
+    const vehicle = await this.vehicleRepo.findOne({ where: { driverId } });
+    if (!vehicle) throw new NotFoundException('Véhicule non trouvé');
     return vehicle;
-  }
-
-  // Active ce véhicule, désactive les autres du même chauffeur, et synchronise
-  // les colonnes plates de Driver utilisées pour le matching des courses.
-  private async activateVehicle(vehicle: Vehicle): Promise<void> {
-    await this.vehicleRepo.update({ driverId: vehicle.driverId }, { isActive: false });
-    await this.vehicleRepo.update(vehicle.id, { isActive: true });
-
-    await this.driverRepo.update(vehicle.driverId, {
-      vehicleType:  vehicle.type,
-      vehicleModel: `${vehicle.make} ${vehicle.model}`,
-      vehiclePlate: vehicle.plateNumber,
-    });
   }
 }
