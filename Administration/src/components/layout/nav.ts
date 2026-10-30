@@ -1,5 +1,5 @@
 import {
-  BadgePercent, Bell, Car, CarFront, LayoutDashboard, LifeBuoy, Map, ScrollText, Settings, ShieldCheck, Star,
+  BadgePercent, Bell, CarFront, LayoutDashboard, LifeBuoy, Map, ScrollText, Settings, ShieldCheck, Star,
   Users, Wallet, Route,
 } from 'lucide-react';
 import type { Overview } from '@/lib/types';
@@ -24,8 +24,8 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     section: 'Comptes',
     items: [
       { to: '/clients', label: 'Clients', icon: Users },
-      { to: '/capitaines', label: 'Capitaines', icon: CarFront },
-      { to: '/vehicules', label: 'Véhicules', icon: Car, badge: (o) => o.pending.vehicles },
+      // Le véhicule et les pièces font partie du capitaine : badge = dossiers à vérifier
+      { to: '/capitaines', label: 'Capitaines', icon: CarFront, badge: (o) => o.pending.vehicles },
       { to: '/administrateurs', label: 'Administrateurs', icon: ShieldCheck },
     ],
   },

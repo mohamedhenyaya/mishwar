@@ -4,12 +4,12 @@ import { toast } from 'sonner';
 import { Copy, KeyRound, Minus, Plus, RefreshCw, Wallet } from 'lucide-react';
 import clsx from 'clsx';
 import { api, errorMessage } from '@/lib/api';
-import { money, num } from '@/lib/format';
+import { fullDateTime, money, num } from '@/lib/format';
 import { CURRENCY } from '@/lib/config';
 import type { Decimal } from '@/lib/types';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Field, Input, Textarea } from '@/components/ui/Field';
+import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export type AccountKind = 'user' | 'driver';
@@ -42,16 +42,48 @@ const BLOCK_SUGGESTIONS: Record<AccountKind, string[]> = {
   driver: ['Signalements répétés de clients', 'Documents expirés', 'Conduite dangereuse', 'Solde négatif non régularisé'],
 };
 
+// Durées proposées (minutes) ; null = définitif, 'custom' = saisie libre
+const BLOCK_DURATIONS: { value: string; label: string; minutes: number | null }[] = [
+  { value: '15', label: '15 minutes', minutes: 15 },
+  { value: '30', label: '30 minutes', minutes: 30 },
+  { value: '60', label: '1 heure', minutes: 60 },
+  { value: '120', label: '2 heures', minutes: 120 },
+  { value: '1440', label: '24 heures', minutes: 1440 },
+  { value: '2880', label: '48 heures', minutes: 2880 },
+  { value: '4320', label: '72 heures', minutes: 4320 },
+  { value: '10080', label: '1 semaine', minutes: 10080 },
+  { value: '43200', label: '1 mois (30 jours)', minutes: 43200 },
+  { value: 'permanent', label: 'Définitivement', minutes: null },
+  { value: 'custom', label: 'Autre durée…', minutes: null },
+];
+const CUSTOM_UNITS = { minutes: 1, heures: 60, jours: 1440 } as const;
+
 export function BlockDialog({ kind, account, open, onClose }: {
   kind: AccountKind; account: AccountRef; open: boolean; onClose: () => void;
 }) {
   const invalidate = useInvalidateAccount();
   const blocking = account.isActive;
+  const [duration, setDuration] = useState('1440');
+  const [customValue, setCustomValue] = useState('');
+  const [customUnit, setCustomUnit] = useState<keyof typeof CUSTOM_UNITS>('heures');
+  useEffect(() => { if (open) { setDuration('1440'); setCustomValue(''); setCustomUnit('heures'); } }, [open]);
+
+  const preset = BLOCK_DURATIONS.find((d) => d.value === duration);
+  const durationMinutes = duration === 'custom'
+    ? Math.round(Number(customValue) * CUSTOM_UNITS[customUnit])
+    : preset?.minutes ?? null;
+  const customInvalid = duration === 'custom' && !(durationMinutes && durationMinutes > 0);
+  const until = durationMinutes && !customInvalid ? new Date(Date.now() + durationMinutes * 60_000) : null;
+
   const mutation = useMutation({
-    mutationFn: (reason: string) =>
-      api.patch(`${basePath(kind)}/${account.id}/${blocking ? 'block' : 'unblock'}`, blocking ? { reason: reason || undefined } : {}),
+    mutationFn: (reason: string) => api.patch(
+      `${basePath(kind)}/${account.id}/${blocking ? 'block' : 'unblock'}`,
+      blocking ? { reason: reason || undefined, durationMinutes: durationMinutes ?? undefined } : {},
+    ),
     onSuccess: () => {
-      toast.success(blocking ? 'Compte bloqué — ses sessions ont été fermées' : 'Compte débloqué');
+      toast.success(blocking
+        ? `Compte bloqué ${until ? `jusqu’au ${fullDateTime(until.toISOString())}` : 'définitivement'} — ses sessions ont été fermées`
+        : 'Compte débloqué');
       invalidate(kind, account.id);
       onClose();
     },
@@ -64,14 +96,33 @@ export function BlockDialog({ kind, account, open, onClose }: {
       onClose={onClose}
       onConfirm={(reason) => mutation.mutate(reason)}
       loading={mutation.isPending}
+      confirmDisabled={blocking && customInvalid}
       tone={blocking ? 'danger' : 'success'}
       title={blocking ? `Bloquer ${account.name || 'ce compte'} ?` : `Débloquer ${account.name || 'ce compte'} ?`}
       description={blocking
-        ? 'La personne sera déconnectée et ne pourra plus se connecter. Le motif lui est affiché à la connexion.'
+        ? 'La personne sera déconnectée et ne pourra plus se connecter. Le motif et la durée lui sont affichés à la connexion.'
         : 'La personne pourra de nouveau se connecter et utiliser l\'application.'}
       confirmLabel={blocking ? 'Bloquer' : 'Débloquer'}
       reason={blocking ? { label: 'Motif', placeholder: 'Ex. signalements répétés', suggestions: BLOCK_SUGGESTIONS[kind] } : undefined}
-    />
+    >
+      {blocking && (
+        <Field label="Durée du blocage" hint={until ? `Déblocage automatique le ${fullDateTime(until.toISOString())}` : duration === 'permanent' ? 'Jusqu’à un déblocage manuel' : undefined}>
+          <div className="space-y-2">
+            <Select value={duration} onChange={(e) => setDuration(e.target.value)}>
+              {BLOCK_DURATIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </Select>
+            {duration === 'custom' && (
+              <div className="flex gap-2">
+                <Input type="number" min={1} value={customValue} onChange={(e) => setCustomValue(e.target.value)} placeholder="Durée" autoFocus />
+                <Select className="w-32" value={customUnit} onChange={(e) => setCustomUnit(e.target.value as keyof typeof CUSTOM_UNITS)}>
+                  {Object.keys(CUSTOM_UNITS).map((u) => <option key={u} value={u}>{u}</option>)}
+                </Select>
+              </div>
+            )}
+          </div>
+        </Field>
+      )}
+    </ConfirmDialog>
   );
 }
 
@@ -216,7 +267,7 @@ export function AdjustBalanceDialog({ kind, account, open, onClose }: {
         </div>
         {after < 0 && (
           <p className="text-xs text-danger">
-            Le solde deviendra négatif.{kind === 'driver' && ' Un capitaine à solde négatif continue de recevoir des courses — les commissions creuseront la dette.'}
+            Le solde deviendra négatif.{kind === 'driver' && ' Un capitaine à solde négatif est mis hors ligne et ne reçoit plus de courses jusqu’à sa recharge.'}
           </p>
         )}
       </div>

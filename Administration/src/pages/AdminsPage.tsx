@@ -42,7 +42,7 @@ export default function AdminsPage() {
         </div>
       ),
     },
-    { key: 'status', header: 'Statut', cell: (a) => <AccountStatusBadge isActive={a.isActive} blockedReason={a.blockedReason} /> },
+    { key: 'status', header: 'Statut', cell: (a) => <AccountStatusBadge isActive={a.isActive} blockedReason={a.blockedReason} blockedUntil={a.blockedUntil} /> },
     { key: 'balance', header: 'Solde', hideOnMobile: true, cell: (a) => money(a.balance) },
     { key: 'created', header: 'Créé le', hideOnMobile: true, cell: (a) => <span className="text-slate-500">{date(a.createdAt)}</span> },
     {

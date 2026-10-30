@@ -51,7 +51,7 @@ export default function ClientDetailPage() {
               <span className="flex flex-wrap items-center gap-2">
                 <span className="truncate">{user.name || 'Sans nom'}</span>
                 {isAdmin && <Badge tone="violet"><ShieldCheck className="h-3 w-3" /> Administrateur</Badge>}
-                {deleted ? <Badge tone="gray">Supprimé</Badge> : <AccountStatusBadge isActive={user.isActive} blockedReason={user.blockedReason} />}
+                {deleted ? <Badge tone="gray">Supprimé</Badge> : <AccountStatusBadge isActive={user.isActive} blockedReason={user.blockedReason} blockedUntil={user.blockedUntil} />}
               </span>
               <span className="mt-0.5 block text-sm font-normal text-slate-500">{deleted ? 'Compte anonymisé' : user.phone}</span>
             </span>
@@ -74,7 +74,7 @@ export default function ClientDetailPage() {
         <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
           <Ban className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-medium">Compte bloqué depuis le {fullDateTime(user.blockedAt)}</p>
+            <p className="font-medium">Compte bloqué depuis le {fullDateTime(user.blockedAt)} · {user.blockedUntil ? `jusqu’au ${fullDateTime(user.blockedUntil)}` : 'définitivement'}</p>
             <p className="mt-0.5 opacity-80">{user.blockedReason || 'Aucun motif renseigné'}</p>
           </div>
         </div>

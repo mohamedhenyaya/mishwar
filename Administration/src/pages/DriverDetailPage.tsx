@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Ban, Car, CircleDollarSign, MapPin, Percent, Phone, Route, Star, Wallet } from 'lucide-react';
+import { AlertTriangle, Ban, CircleDollarSign, MapPin, Percent, Phone, Route, Star, Wallet } from 'lucide-react';
 import { api, errorMessage } from '@/lib/api';
 import { date, fullDateTime, int, money, num, relative } from '@/lib/format';
-import { APPROVAL_STATUS, DRIVER_STATUS, RIDE_STATUS, VEHICLE_TYPE } from '@/lib/labels';
+import { DRIVER_STATUS, RIDE_STATUS, VEHICLE_TYPE } from '@/lib/labels';
 import type { DriverStats, Paginated, Vehicle } from '@/lib/types';
 import { Card, DefinitionList, PageHeader, PageLoader, StatCard, Tabs } from '@/components/ui/Misc';
 import { Avatar } from '@/components/ui/Avatar';
@@ -12,24 +12,26 @@ import { Badge, StatusBadge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/Table';
 import { AccountActions } from '@/components/accounts/AccountActions';
 import { EditDriverDialog } from '@/components/accounts/AccountForms';
+import { VehicleCard } from '@/components/drivers/VehicleCard';
 import { OwnerRidesTable } from '@/components/rides/RidesTable';
 import { TransactionsTable } from '@/components/wallet/TransactionsTable';
-import { AccountStatusBadge } from './ClientsPage';
+import { DriverAccountBadge } from './ClientsPage';
 
 export default function DriverDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'rides' | 'wallet' | 'vehicles'>('rides');
+  const [tab, setTab] = useState<'rides' | 'wallet'>('rides');
   const [editing, setEditing] = useState(false);
+  // Même requête que la carte « Dossier du capitaine » (partagée par le cache)
+  const vehicle = useQuery({
+    queryKey: ['vehicles', 'driver', id],
+    queryFn: async () => (await api.get<Paginated<Vehicle>>('/admin/vehicles', { params: { driverId: id, limit: 1 } })).data.data[0] ?? null,
+  });
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['driver', id],
     queryFn: async () => (await api.get<DriverStats>(`/admin/drivers/${id}`)).data,
     refetchInterval: 30_000,
-  });
-  const vehicles = useQuery({
-    queryKey: ['vehicles', 'driver', id],
-    queryFn: async () => (await api.get<Paginated<Vehicle>>('/admin/vehicles', { params: { driverId: id, limit: 50 } })).data,
   });
 
   if (isLoading) return <PageLoader />;
@@ -38,7 +40,6 @@ export default function DriverDetailPage() {
   const { driver } = data;
   const deleted = !!driver.deletedAt;
   const hasPosition = driver.latitude !== null && driver.longitude !== null;
-  const pendingVehicles = vehicles.data?.data.filter((v) => v.status === 'PENDING').length ?? 0;
 
   return (
     <>
@@ -50,7 +51,7 @@ export default function DriverDetailPage() {
             <span className="min-w-0">
               <span className="flex flex-wrap items-center gap-2">
                 <span className="truncate">{driver.name || 'Sans nom'}</span>
-                {deleted ? <Badge>Supprimé</Badge> : <AccountStatusBadge isActive={driver.isActive} blockedReason={driver.blockedReason} />}
+                {deleted ? <Badge>Supprimé</Badge> : <DriverAccountBadge driver={driver} approval={vehicle.data?.status} />}
                 {!deleted && <StatusBadge map={DRIVER_STATUS} value={driver.status} />}
               </span>
               <span className="mt-0.5 block text-sm font-normal text-slate-500">
@@ -68,7 +69,7 @@ export default function DriverDetailPage() {
         <div className="mb-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
           <Ban className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p className="font-medium">Capitaine bloqué depuis le {fullDateTime(driver.blockedAt)}</p>
+            <p className="font-medium">Capitaine bloqué depuis le {fullDateTime(driver.blockedAt)} · {driver.blockedUntil ? `jusqu’au ${fullDateTime(driver.blockedUntil)}` : 'définitivement'}</p>
             <p className="mt-0.5 opacity-80">{driver.blockedReason || 'Aucun motif renseigné'}</p>
           </div>
         </div>
@@ -93,9 +94,6 @@ export default function DriverDetailPage() {
             <DefinitionList items={[
               { label: 'Téléphone', value: deleted ? '—' : <a href={`tel:${driver.phone}`} className="inline-flex items-center gap-1.5 hover:underline"><Phone className="h-3.5 w-3.5" />{driver.phone}</a> },
               { label: 'Note', value: <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />{num(driver.rating).toFixed(2)} ({int(driver.ratingCount)})</span> },
-              { label: 'Type', value: VEHICLE_TYPE[driver.vehicleType] },
-              { label: 'Modèle', value: driver.vehicleModel || '—' },
-              { label: 'Plaque', value: driver.vehiclePlate ? <span className="font-mono">{driver.vehiclePlate}</span> : '—' },
               { label: 'Inscrit le', value: date(driver.createdAt) },
             ]} />
           </Card>
@@ -124,31 +122,17 @@ export default function DriverDetailPage() {
         </div>
 
         <div>
+          <div className="mb-4">
+            <VehicleCard driverId={driver.id} photoUrl={driver.photoUrl} readOnly={deleted} />
+          </div>
           <div className="mb-3">
             <Tabs value={tab} onChange={setTab} tabs={[
               { value: 'rides', label: 'Courses' },
               { value: 'wallet', label: 'Transactions' },
-              { value: 'vehicles', label: 'Véhicules', count: pendingVehicles },
             ]} />
           </div>
           {tab === 'rides' && <OwnerRidesTable driverId={driver.id} />}
           {tab === 'wallet' && <TransactionsTable ownerType="driver" ownerId={driver.id} />}
-          {tab === 'vehicles' && (
-            <div className="space-y-3">
-              {vehicles.data?.data.length === 0 && <div className="card"><EmptyState icon={<Car className="h-5 w-5" />} title="Aucun véhicule déclaré" description="Le capitaine déclare ses véhicules depuis l'application Capitaine." /></div>}
-              {vehicles.data?.data.map((v) => (
-                <Link key={v.id} to={`/vehicules?open=${v.id}`} className="card flex items-center gap-4 p-4 transition hover:border-slate-300 dark:hover:border-white/15">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 dark:bg-white/5"><Car className="h-5 w-5 text-slate-500" /></div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{v.make} {v.model} · {v.year}</p>
-                    <p className="font-mono text-xs text-slate-500">{v.plateNumber}{v.color ? ` · ${v.color}` : ''}</p>
-                  </div>
-                  {v.isActive && <Badge tone="blue">Actif</Badge>}
-                  <StatusBadge map={APPROVAL_STATUS} value={v.status} />
-                </Link>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 

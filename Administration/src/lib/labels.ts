@@ -20,6 +20,13 @@ export const DRIVER_STATUS: LabelMap = {
   OFFLINE: { label: 'Hors ligne', tone: 'gray' },
 };
 
+export const FUEL_TYPE: Record<string, string> = {
+  essence: 'Essence',
+  diesel: 'Gazoil',
+  hybrid: 'Hybride',
+  electric: 'Électrique',
+};
+
 export const VEHICLE_TYPE: Record<string, string> = {
   sedan: 'Berline',
   suv: 'SUV',
@@ -63,9 +70,23 @@ export const APPROVAL_STATUS: LabelMap = {
   REJECTED: { label: 'Rejeté', tone: 'red' },
 };
 
+// Statut du dossier d'un capitaine (liste des capitaines)
+export const DOSSIER_STATUS: LabelMap = {
+  PENDING:  { label: 'En attente d’approbation', tone: 'amber' },
+  APPROVED: { label: 'Compte approuvé', tone: 'green' },
+  REJECTED: { label: 'Dossier refusé', tone: 'red' },
+};
+
 export const DOCUMENT_TYPE: Record<string, string> = {
-  REGISTRATION: 'Carte grise',
+  IDENTITY: 'Prénom, nom et NNI',
+  PROFILE_PHOTO: 'Photo de profil',
+  ID_CARD_FRONT: 'Carte d’identité (recto)',
+  ID_CARD_BACK: 'Carte d’identité (verso)',
+  TRANSPORT_PERMIT: 'Permis de transport',
+  REGISTRATION_FRONT: 'Carte grise (recto)',
+  REGISTRATION_BACK: 'Carte grise (verso)',
   INSURANCE: 'Assurance',
+  REGISTRATION: 'Carte grise',
   INSPECTION: 'Contrôle technique',
 };
 

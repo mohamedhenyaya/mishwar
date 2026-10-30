@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import { LogOut, Menu, Moon, Search, Sun, UserCog, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { useAdminRealtime } from '@/lib/realtime';
 import { useTheme } from '@/lib/theme';
 import type { Overview } from '@/lib/types';
 import { Avatar } from '@/components/ui/Avatar';
@@ -16,7 +17,7 @@ export function useOverview() {
   return useQuery({
     queryKey: ['overview'],
     queryFn: async () => (await api.get<Overview>('/admin/dashboard/overview')).data,
-    refetchInterval: 60_000,
+    refetchInterval: 60_000, // filet de sécurité : le temps réel (useAdminRealtime) rafraîchit aussitôt
   });
 }
 
@@ -80,6 +81,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
 export function Layout() {
   const { me, logout } = useAuth();
+  useAdminRealtime();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();

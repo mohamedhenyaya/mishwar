@@ -56,3 +56,7 @@ export function toE164(raw: string, countryCode: string): string {
 // Date locale « YYYY-MM-DD » → ISO début/fin de journée pour les filtres from/to
 export function dayStartIso(day: string) { return new Date(`${day}T00:00:00`).toISOString(); }
 export function dayEndIso(day: string) { return new Date(`${day}T23:59:59.999`).toISOString(); }
+
+export function vehicleName(v: { make: string | null; model: string }) {
+  return [v.make, v.model].filter(Boolean).join(' ');
+}

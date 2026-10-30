@@ -152,9 +152,9 @@ export default function DashboardPage() {
           <ul className="space-y-2">
             {[
               { to: '/portefeuille', icon: Wallet, label: 'Demandes de recharge / retrait', count: o?.pending.walletRequests },
-              { to: '/vehicules', icon: Car, label: 'Véhicules à valider', count: o?.pending.vehicles },
+              { to: '/capitaines?vehicleStatus=TO_REVIEW', icon: Car, label: 'Dossiers capitaines à traiter', count: o?.pending.vehicles },
               { to: '/support', icon: LifeBuoy, label: 'Tickets support ouverts', count: o?.pending.tickets },
-              { to: '/capitaines?isActive=false', icon: Ban, label: 'Capitaines bloqués', count: o?.blockedDrivers },
+              { to: '/capitaines?account=blocked', icon: Ban, label: 'Capitaines bloqués', count: o?.blockedDrivers },
               { to: '/clients?isActive=false', icon: Users, label: 'Clients bloqués', count: o?.blockedUsers },
             ].map((item) => (
               <li key={item.to}>

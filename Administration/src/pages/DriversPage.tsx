@@ -1,28 +1,57 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Plus, Search, Star } from 'lucide-react';
+import { Plus, Search, Star, X } from 'lucide-react';
 import { api, errorMessage } from '@/lib/api';
 import { useSearchInput, useUrlFilters } from '@/lib/hooks';
 import { int, money, num, relative } from '@/lib/format';
-import { DRIVER_STATUS, VEHICLE_TYPE } from '@/lib/labels';
+import { DOSSIER_STATUS, DRIVER_STATUS, VEHICLE_TYPE } from '@/lib/labels';
 import type { Driver, Paginated } from '@/lib/types';
-import { PageHeader, Toolbar } from '@/components/ui/Misc';
+import { PageHeader } from '@/components/ui/Misc';
 import { Button } from '@/components/ui/Button';
-import { Input, Select } from '@/components/ui/Field';
+import { Field, Input, Select } from '@/components/ui/Field';
 import { Column, DataTable, EmptyState, Pagination } from '@/components/ui/Table';
 import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/Badge';
 import { AccountActions } from '@/components/accounts/AccountActions';
-import { CreateAccountDialog } from '@/components/accounts/AccountForms';
-import { AccountStatusBadge } from './ClientsPage';
+import { CreateDriverDialog } from '@/components/drivers/CreateDriverDialog';
+import { DriverAccountBadge } from './ClientsPage';
 
 const LIMIT = 20;
+
+// Filtre « Dossier » : qui doit agir. Choix exclusifs de l'état du compte (filtre « Compte »).
+const DOSSIER_FILTERS: Record<string, { label: string; hint?: string; params: Record<string, string> }> = {
+  '':                { label: 'Tous', params: {} },
+  TO_REVIEW:         { label: 'À traiter (par vous)', hint: 'À vous d’agir : une pièce envoyée attend sa vérification (ex. nouvelle assurance), ou le dossier est complet et le compte attend son approbation.', params: { toReview: 'true' } },
+  INCOMPLETE:        { label: 'Incomplet (attente du capitaine)', hint: 'Au capitaine d’agir : identité, photo ou pièce manquante, ou pièce refusée à renvoyer depuis l’application.', params: { incomplete: 'true' } },
+  REJECTED:          { label: 'Refusé', hint: 'Dossiers refusés : le capitaine doit corriger son dossier depuis l’application.', params: { vehicleStatus: 'REJECTED' } },
+  INSURANCE_EXPIRED: { label: 'Assurance expirée', hint: 'Comptes approuvés sans assurance valide : ils ne peuvent plus passer en ligne tant que la nouvelle n’est pas validée.', params: { insuranceExpired: 'true' } },
+};
+
+// Colonne « Dossier » : état du compte et ce qui reste à faire
+function DossierCell({ d }: { d: Driver }) {
+  if (!d.vehicle) return <span className="text-slate-400">—</span>;
+  const pending = d.dossier?.pendingDocuments ?? 0;
+  const missing = d.vehicle.status !== 'APPROVED' ? d.dossier?.missing ?? 0 : 0;
+  const until = d.dossier?.insuranceValidUntil;
+  const insuranceExpired = d.vehicle.status === 'APPROVED' && (!until || new Date(until) < new Date());
+  return (
+    <div className="space-y-1">
+      <StatusBadge map={DOSSIER_STATUS} value={d.vehicle.status} />
+      {pending > 0 && <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300">{pending} pièce{pending > 1 ? 's' : ''} à vérifier</p>}
+      {missing > 0 && <p className="text-[11px] font-medium text-slate-500">Incomplet : {missing} élément{missing > 1 ? 's' : ''} manquant{missing > 1 ? 's' : ''}</p>}
+      {d.vehicle.status === 'PENDING' && !missing && !pending && <p className="text-[11px] font-medium text-accent-600 dark:text-accent-300">Prêt à approuver</p>}
+      {insuranceExpired && <p className="text-[11px] font-medium text-danger">Assurance expirée</p>}
+    </div>
+  );
+}
 
 export default function DriversPage() {
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
-  const { values, page, set } = useUrlFilters({ search: '', status: '', isActive: '' });
+  const { values, page, set } = useUrlFilters({ search: '', status: '', account: '', vehicleStatus: '' });
+  const dossierFilter = DOSSIER_FILTERS[values.vehicleStatus] ?? DOSSIER_FILTERS[''];
+  const filtered = !!(values.search || values.status || values.account || values.vehicleStatus);
   const [searchInput, setSearchInput] = useSearchInput(values.search, (search) => set({ search }));
 
   const query = useQuery({
@@ -30,7 +59,8 @@ export default function DriversPage() {
     queryFn: async () => (await api.get<Paginated<Driver>>('/admin/drivers', {
       params: {
         page, limit: LIMIT,
-        search: values.search || undefined, status: values.status || undefined, isActive: values.isActive || undefined,
+        search: values.search || undefined, status: values.status || undefined, account: values.account || undefined,
+        ...dossierFilter.params,
       },
     })).data,
     placeholderData: keepPreviousData,
@@ -70,6 +100,7 @@ export default function DriversPage() {
         </div>
       ),
     },
+    { key: 'dossier', header: 'Dossier', cell: (d) => <DossierCell d={d} /> },
     { key: 'rides', header: 'Courses', cell: (d) => int(d.totalRides) },
     {
       key: 'rating', header: 'Note', hideOnMobile: true, cell: (d) => (
@@ -78,7 +109,7 @@ export default function DriversPage() {
       ),
     },
     { key: 'balance', header: 'Solde', cell: (d) => <span className={num(d.balance) < 0 ? 'font-medium text-danger' : 'font-medium'}>{money(d.balance)}</span> },
-    { key: 'account', header: 'Compte', cell: (d) => <AccountStatusBadge isActive={d.isActive} blockedReason={d.blockedReason} /> },
+    { key: 'account', header: 'Compte', cell: (d) => <DriverAccountBadge driver={d} approval={d.vehicle?.status} /> },
     { key: 'actions', header: '', className: 'w-12', cell: (d) => <AccountActions kind="driver" account={d} /> },
   ];
 
@@ -89,22 +120,41 @@ export default function DriversPage() {
         description={query.data ? `${int(query.data.total)} capitaine${query.data.total > 1 ? 's' : ''}` : 'Chauffeurs partenaires'}
         actions={<Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreating(true)}>Nouveau capitaine</Button>}
       />
-      <Toolbar>
-        <div className="sm:w-80">
-          <Input leading={<Search className="h-4 w-4" />} placeholder="Nom, téléphone ou plaque" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+      {/* Filtres : chacun porte son titre ; l'explication du filtre « Dossier » s'affiche dessous */}
+      <div className="mb-4 space-y-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))_auto] lg:items-end">
+          <Field label="Recherche">
+            <Input leading={<Search className="h-4 w-4" />} placeholder="Nom, téléphone, plaque ou NNI" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
+          </Field>
+          <Field label="Disponibilité">
+            <Select value={values.status} onChange={(e) => set({ status: e.target.value })}>
+              <option value="">Toutes</option>
+              <option value="ONLINE">En ligne</option>
+              <option value="BUSY">En course</option>
+              <option value="OFFLINE">Hors ligne</option>
+            </Select>
+          </Field>
+          <Field label="Compte">
+            <Select value={values.account} onChange={(e) => set({ account: e.target.value })}>
+              <option value="">Tous</option>
+              <option value="active">Actifs</option>
+              <option value="pending">En cours de validation</option>
+              <option value="blocked">Bloqués</option>
+            </Select>
+          </Field>
+          <Field label="Dossier">
+            <Select value={values.vehicleStatus} onChange={(e) => set({ vehicleStatus: e.target.value })}>
+              {Object.entries(DOSSIER_FILTERS).map(([value, f]) => <option key={value} value={value}>{f.label}</option>)}
+            </Select>
+          </Field>
+          {filtered && (
+            <Button variant="ghost" icon={<X className="h-4 w-4" />} onClick={() => { setSearchInput(''); set({ search: '', status: '', account: '', vehicleStatus: '' }); }}>
+              Effacer les filtres
+            </Button>
+          )}
         </div>
-        <Select className="sm:w-44" value={values.status} onChange={(e) => set({ status: e.target.value })}>
-          <option value="">Toute disponibilité</option>
-          <option value="ONLINE">En ligne</option>
-          <option value="BUSY">En course</option>
-          <option value="OFFLINE">Hors ligne</option>
-        </Select>
-        <Select className="sm:w-40" value={values.isActive} onChange={(e) => set({ isActive: e.target.value })}>
-          <option value="">Tous les comptes</option>
-          <option value="true">Actifs</option>
-          <option value="false">Bloqués</option>
-        </Select>
-      </Toolbar>
+        {dossierFilter.hint && <p className="text-xs text-slate-500">{dossierFilter.hint}</p>}
+      </div>
       <DataTable
         columns={columns}
         rows={query.data?.data}
@@ -117,7 +167,7 @@ export default function DriversPage() {
           <Pagination page={page} limit={LIMIT} total={query.data.total} fetching={query.isFetching} onChange={(p) => set({ page: p })} />
         )}
       />
-      <CreateAccountDialog kind="driver" open={creating} onClose={() => setCreating(false)} />
+      <CreateDriverDialog open={creating} onClose={() => setCreating(false)} />
     </>
   );
 }

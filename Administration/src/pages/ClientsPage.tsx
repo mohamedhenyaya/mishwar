@@ -4,7 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Plus, Search, Star } from 'lucide-react';
 import { api, errorMessage } from '@/lib/api';
 import { useSearchInput, useUrlFilters } from '@/lib/hooks';
-import { date, int, money, num } from '@/lib/format';
+import { date, fullDateTime, int, money, num } from '@/lib/format';
 import type { Paginated, User } from '@/lib/types';
 import { PageHeader, Toolbar } from '@/components/ui/Misc';
 import { Button } from '@/components/ui/Button';
@@ -17,10 +17,23 @@ import { CreateAccountDialog } from '@/components/accounts/AccountForms';
 
 const LIMIT = 20;
 
-export function AccountStatusBadge({ isActive, blockedReason }: { isActive: boolean; blockedReason?: string | null }) {
-  return isActive
-    ? <Badge tone="green" dot>Actif</Badge>
-    : <span title={blockedReason ?? undefined}><Badge tone="red" dot>Bloqué</Badge></span>;
+export function AccountStatusBadge({ isActive, blockedReason, blockedUntil }: {
+  isActive: boolean; blockedReason?: string | null; blockedUntil?: string | null;
+}) {
+  if (isActive) return <Badge tone="green" dot>Actif</Badge>;
+  const title = [blockedUntil ? `Jusqu’au ${fullDateTime(blockedUntil)}` : 'Définitivement', blockedReason].filter(Boolean).join(' — ');
+  return <span title={title}><Badge tone="red" dot>{blockedUntil ? `Bloqué jusqu’au ${date(blockedUntil)}` : 'Bloqué'}</Badge></span>;
+}
+
+// Capitaine : bloqué, sinon « en cours de validation » tant que son dossier n'est pas approuvé, sinon actif
+export function DriverAccountBadge({ driver, approval }: {
+  driver: { isActive: boolean; blockedReason?: string | null; blockedUntil?: string | null };
+  approval?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+}) {
+  if (driver.isActive && approval && approval !== 'APPROVED') {
+    return <span title="Dossier pas encore approuvé : ne peut pas passer en ligne"><Badge tone="amber" dot>En cours de validation</Badge></span>;
+  }
+  return <AccountStatusBadge isActive={driver.isActive} blockedReason={driver.blockedReason} blockedUntil={driver.blockedUntil} />;
 }
 
 export default function ClientsPage() {
@@ -58,7 +71,7 @@ export default function ClientsPage() {
       ),
     },
     { key: 'balance', header: 'Solde', cell: (u) => <span className={num(u.balance) < 0 ? 'font-medium text-danger' : 'font-medium'}>{money(u.balance)}</span> },
-    { key: 'status', header: 'Statut', cell: (u) => <AccountStatusBadge isActive={u.isActive} blockedReason={u.blockedReason} /> },
+    { key: 'status', header: 'Statut', cell: (u) => <AccountStatusBadge isActive={u.isActive} blockedReason={u.blockedReason} blockedUntil={u.blockedUntil} /> },
     { key: 'created', header: 'Inscrit le', hideOnMobile: true, cell: (u) => <span className="text-slate-500">{date(u.createdAt)}</span> },
     { key: 'actions', header: '', className: 'w-12', cell: (u) => <AccountActions kind="user" account={u} /> },
   ];

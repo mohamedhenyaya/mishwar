@@ -31,6 +31,7 @@ export interface User {
   isActive: boolean;
   blockedReason: string | null;
   blockedAt: string | null;
+  blockedUntil: string | null; // null = blocage définitif
   deletedAt: string | null;
   balance: Decimal;
   rating: Decimal;
@@ -46,6 +47,9 @@ export interface Driver {
   id: string;
   phone: string;
   name: string | null;
+  firstName: string | null; // identité du dossier
+  lastName: string | null;
+  nni: string | null;
   photoUrl: string | null;
   status: DriverStatus;
   vehicleType: VehicleType;
@@ -60,10 +64,13 @@ export interface Driver {
   isActive: boolean;
   blockedReason: string | null;
   blockedAt: string | null;
+  blockedUntil: string | null; // null = blocage définitif
   deletedAt: string | null;
   balance: Decimal;
   createdAt: string;
   updatedAt: string;
+  vehicle?: Vehicle | null; // liste admin : un capitaine = un véhicule
+  dossier?: { pendingDocuments: number; missing: number; insuranceValidUntil: string | null }; // liste admin
 }
 
 export interface UserStats {
@@ -180,7 +187,15 @@ export interface TimeseriesPoint {
 }
 
 export type VehicleApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type DocumentType = 'REGISTRATION' | 'INSURANCE' | 'INSPECTION';
+export type DocumentType =
+  | 'ID_CARD_FRONT' | 'ID_CARD_BACK' | 'TRANSPORT_PERMIT'
+  | 'REGISTRATION_FRONT' | 'REGISTRATION_BACK' | 'INSURANCE'
+  | 'REGISTRATION' | 'INSPECTION'; // anciens types
+
+// Pièces exigées pour approuver le compte d'un capitaine (en plus de sa photo de profil)
+export const REQUIRED_DOCUMENT_TYPES: DocumentType[] = [
+  'ID_CARD_FRONT', 'ID_CARD_BACK', 'TRANSPORT_PERMIT', 'REGISTRATION_FRONT', 'REGISTRATION_BACK', 'INSURANCE',
+];
 
 export interface VehicleDocument {
   id: string;
@@ -197,18 +212,21 @@ export interface Vehicle {
   id: string;
   driverId: string;
   type: VehicleType;
-  make: string;
+  make: string | null;
   model: string;
-  year: number;
+  year: number | null;
+  fuelType: 'essence' | 'diesel' | 'hybrid' | 'electric' | null;
   plateNumber: string;
   color: string | null;
   capacity: number | null;
   status: VehicleApprovalStatus;
-  isActive: boolean;
   rejectedReason: string | null;
   createdAt: string;
   driver?: Party | null;
-  documents?: VehicleDocument[];
+  documents?: VehicleDocument[];          // du plus récent au plus ancien
+  missing?: (DocumentType | 'PROFILE_PHOTO' | 'IDENTITY')[];
+  identity?: { firstName: string | null; lastName: string | null; nni: string | null };
+  insuranceValidUntil?: string | null;    // assurance validée la plus lointaine
 }
 
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';

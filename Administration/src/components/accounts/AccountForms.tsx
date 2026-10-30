@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/Button';
 import { Field, Input, Select } from '@/components/ui/Field';
 import { PhoneInput } from '@/components/ui/PhoneInput';
 
-type CreateKind = 'user' | 'driver' | 'admin';
+// Capitaines : CreateDriverDialog (mêmes informations et pièces que l'application Capitaine)
+type CreateKind = 'user' | 'admin';
 
 const CREATE_COPY: Record<CreateKind, { title: string; description: string; endpoint: string; done: string }> = {
   user: {
@@ -21,12 +22,6 @@ const CREATE_COPY: Record<CreateKind, { title: string; description: string; endp
     description: 'Le client pourra se connecter immédiatement avec ce numéro et ce mot de passe.',
     endpoint: '/admin/users',
     done: 'Client créé',
-  },
-  driver: {
-    title: 'Nouveau capitaine',
-    description: 'Le capitaine pourra se connecter à l\'application Capitaine dès maintenant.',
-    endpoint: '/admin/drivers',
-    done: 'Capitaine créé',
   },
   admin: {
     title: 'Nouvel administrateur',
@@ -51,35 +46,26 @@ export function CreateAccountDialog({ kind, open, onClose }: { kind: CreateKind;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [vehicleType, setVehicleType] = useState<VehicleType>('sedan');
-  const [vehicleModel, setVehicleModel] = useState('');
-  const [vehiclePlate, setVehiclePlate] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setPhone(''); setName(''); setEmail(''); setPassword(randomPassword());
-    setVehicleType('sedan'); setVehicleModel(''); setVehiclePlate(''); setError(null);
+    setPhone(''); setName(''); setEmail(''); setPassword(randomPassword()); setError(null);
   }, [open]);
 
   const mutation = useMutation({
     mutationFn: async () => {
       const body: Record<string, unknown> = { phone: toE164(phone, countryCode), name: name.trim(), password };
       if (kind === 'user' && email.trim()) body.email = email.trim();
-      if (kind === 'driver') {
-        body.vehicleType = vehicleType;
-        if (vehicleModel.trim()) body.vehicleModel = vehicleModel.trim();
-        if (vehiclePlate.trim()) body.vehiclePlate = vehiclePlate.trim().toUpperCase();
-      }
-      const { data } = await api.post<User | Driver>(copy.endpoint, body);
+      const { data } = await api.post<User>(copy.endpoint, body);
       return data;
     },
     onSuccess: (created) => {
       toast.success(copy.done, { description: `Mot de passe initial : ${password}`, duration: 15_000 });
-      qc.invalidateQueries({ queryKey: [kind === 'driver' ? 'drivers' : kind === 'admin' ? 'admins' : 'users'] });
+      qc.invalidateQueries({ queryKey: [kind === 'admin' ? 'admins' : 'users'] });
       qc.invalidateQueries({ queryKey: ['overview'] });
       onClose();
-      if (kind !== 'admin') navigate(kind === 'driver' ? `/capitaines/${created.id}` : `/clients/${created.id}`);
+      if (kind === 'user') navigate(`/clients/${created.id}`);
     },
     onError: (e) => setError(errorMessage(e)),
   });
@@ -111,21 +97,6 @@ export function CreateAccountDialog({ kind, open, onClose }: { kind: CreateKind;
           <Field label="Email (facultatif)">
             <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@exemple.com" />
           </Field>
-        )}
-        {kind === 'driver' && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Type de véhicule">
-              <Select value={vehicleType} onChange={(e) => setVehicleType(e.target.value as VehicleType)}>
-                {Object.entries(VEHICLE_TYPE).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </Select>
-            </Field>
-            <Field label="Modèle">
-              <Input value={vehicleModel} onChange={(e) => setVehicleModel(e.target.value)} placeholder="Toyota Corolla" maxLength={60} />
-            </Field>
-            <Field label="Plaque">
-              <Input value={vehiclePlate} onChange={(e) => setVehiclePlate(e.target.value)} placeholder="1234 AB 00" maxLength={20} />
-            </Field>
-          </div>
         )}
         <Field label="Mot de passe initial" hint="À transmettre à la personne. Elle pourra le changer via « mot de passe oublié ».">
           <div className="flex gap-2">
@@ -174,10 +145,15 @@ export function EditUserDialog({ user, open, onClose }: { user: User; open: bool
 
 export function EditDriverDialog({ driver, open, onClose }: { driver: Driver; open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ name: '', vehicleType: 'sedan' as VehicleType, vehicleModel: '', vehiclePlate: '' });
+  const [form, setForm] = useState({
+    name: '', firstName: '', lastName: '', nni: '', vehicleType: 'sedan' as VehicleType, vehicleModel: '', vehiclePlate: '',
+  });
   useEffect(() => {
     if (open) setForm({
       name: driver.name ?? '',
+      firstName: driver.firstName ?? '',
+      lastName: driver.lastName ?? '',
+      nni: driver.nni ?? '',
       vehicleType: driver.vehicleType,
       vehicleModel: driver.vehicleModel ?? '',
       vehiclePlate: driver.vehiclePlate ?? '',
@@ -187,6 +163,9 @@ export function EditDriverDialog({ driver, open, onClose }: { driver: Driver; op
   const mutation = useMutation({
     mutationFn: () => api.patch(`/admin/drivers/${driver.id}`, {
       name: form.name.trim() || undefined,
+      firstName: form.firstName.trim() || undefined,
+      lastName: form.lastName.trim() || undefined,
+      nni: form.nni.trim() || undefined,
       vehicleType: form.vehicleType,
       vehicleModel: form.vehicleModel.trim() || undefined,
       vehiclePlate: form.vehiclePlate.trim().toUpperCase() || undefined,
@@ -195,6 +174,7 @@ export function EditDriverDialog({ driver, open, onClose }: { driver: Driver; op
       toast.success('Capitaine mis à jour');
       qc.invalidateQueries({ queryKey: ['driver', driver.id] });
       qc.invalidateQueries({ queryKey: ['drivers'] });
+      qc.invalidateQueries({ queryKey: ['vehicle'] });
       onClose();
     },
     onError: (e) => toast.error(errorMessage(e)),
@@ -206,7 +186,12 @@ export function EditDriverDialog({ driver, open, onClose }: { driver: Driver; op
     <Modal open={open} onClose={onClose} title="Modifier le capitaine"
       footer={<><Button variant="outline" onClick={onClose}>Annuler</Button><Button loading={mutation.isPending} onClick={() => mutation.mutate()}>Enregistrer</Button></>}>
       <div className="space-y-4">
-        <Field label="Nom"><Input value={form.name} onChange={set('name')} maxLength={80} /></Field>
+        <Field label="Nom affiché au client"><Input value={form.name} onChange={set('name')} maxLength={80} /></Field>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Prénom (dossier)"><Input value={form.firstName} onChange={set('firstName')} maxLength={40} /></Field>
+          <Field label="Nom (dossier)"><Input value={form.lastName} onChange={set('lastName')} maxLength={40} /></Field>
+          <Field label="NNI"><Input value={form.nni} onChange={(e) => setForm((f) => ({ ...f, nni: e.target.value.replace(/\D/g, '').slice(0, 10) }))} placeholder="10 chiffres" inputMode="numeric" /></Field>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Type">
             <Select value={form.vehicleType} onChange={set('vehicleType')}>
@@ -214,7 +199,7 @@ export function EditDriverDialog({ driver, open, onClose }: { driver: Driver; op
             </Select>
           </Field>
           <Field label="Modèle"><Input value={form.vehicleModel} onChange={set('vehicleModel')} maxLength={60} /></Field>
-          <Field label="Plaque"><Input value={form.vehiclePlate} onChange={set('vehiclePlate')} maxLength={20} /></Field>
+          <Field label="Plaque"><Input value={form.vehiclePlate} onChange={set('vehiclePlate')} placeholder="1234 AB 12" maxLength={20} /></Field>
         </div>
       </div>
     </Modal>

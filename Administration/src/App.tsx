@@ -13,7 +13,6 @@ const DriversPage = lazy(() => import('@/pages/DriversPage'));
 const DriverDetailPage = lazy(() => import('@/pages/DriverDetailPage'));
 const RidesPage = lazy(() => import('@/pages/RidesPage'));
 const WalletPage = lazy(() => import('@/pages/WalletPage'));
-const VehiclesPage = lazy(() => import('@/pages/VehiclesPage'));
 const SupportPage = lazy(() => import('@/pages/SupportPage'));
 const ReviewsPage = lazy(() => import('@/pages/ReviewsPage'));
 const CouponsPage = lazy(() => import('@/pages/CouponsPage'));
@@ -45,7 +44,7 @@ export function App() {
           <Route path="capitaines/:id" element={<DriverDetailPage />} />
           <Route path="courses" element={<RidesPage />} />
           <Route path="portefeuille" element={<WalletPage />} />
-          <Route path="vehicules" element={<VehiclesPage />} />
+          <Route path="vehicules" element={<Navigate to="/capitaines?vehicleStatus=TO_REVIEW" replace />} />
           <Route path="support" element={<SupportPage />} />
           <Route path="avis" element={<ReviewsPage />} />
           <Route path="coupons" element={<CouponsPage />} />
