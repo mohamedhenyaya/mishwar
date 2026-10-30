@@ -10,18 +10,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { C, G, SH, RADIUS } from '../theme';
 import { RootStackParamList } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
+import { LANGUAGE_NAMES } from '../i18n/translations';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
 const { height } = Dimensions.get('window');
 
-const STATS = [
-  { icon: 'car-sport'  as const, value: '50K+', label: 'Courses' },
-  { icon: 'star'       as const, value: '4.9',  label: 'Note moy.' },
-  { icon: 'diamond'    as const, value: '24/7', label: 'Support' },
-];
-
 export default function WelcomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t, language, setLanguage } = useLanguage();
+  const otherLanguage = language === 'fr' ? 'ar' : 'fr';
+
+  const STATS = [
+    { icon: 'car-sport'  as const, value: '50K+', label: t('welcomeStatRides') },
+    { icon: 'star'       as const, value: '4.9',  label: t('welcomeStatRating') },
+    { icon: 'diamond'    as const, value: '24/7', label: t('welcomeStatSupport') },
+  ];
 
   const logoScale   = useRef(new Animated.Value(0.5)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -85,6 +89,16 @@ export default function WelcomeScreen({ navigation }: Props) {
         <Animated.View style={[styles.blob2, { transform: [{ translateY: float2 }] }]} />
         <View style={styles.blob3} />
 
+        {/* Langue : bascule FR ⇄ AR */}
+        <TouchableOpacity
+          style={[styles.langChip, { top: insets.top + 12 }]}
+          onPress={() => setLanguage(otherLanguage)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="globe-outline" size={15} color={C.white} />
+          <Text style={styles.langChipText}>{LANGUAGE_NAMES[otherLanguage]}</Text>
+        </TouchableOpacity>
+
         {/* Logo block */}
         <Animated.View
           style={[styles.logoBlock, {
@@ -99,13 +113,13 @@ export default function WelcomeScreen({ navigation }: Props) {
           </Animated.View>
           <Text style={styles.appName}>Volta</Text>
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>CAPITAINE</Text>
+            <Text style={styles.roleText}>{t('welcomeRole')}</Text>
           </View>
         </Animated.View>
 
         {/* Tagline */}
         <Animated.View style={{ opacity: textOpacity, transform: [{ translateY: textY }] }}>
-          <Text style={styles.tagline}>Gérez vos courses.{'\n'}Maximisez vos gains.</Text>
+          <Text style={styles.tagline}>{t('welcomeTagline')}</Text>
         </Animated.View>
 
         {/* Stats row */}
@@ -128,10 +142,8 @@ export default function WelcomeScreen({ navigation }: Props) {
         ]}
       >
         <View style={styles.cardHandle} />
-        <Text style={styles.cardTitle}>Commencer maintenant</Text>
-        <Text style={styles.cardSub}>
-          Rejoignez des milliers de chauffeurs professionnels qui font confiance à Volta.
-        </Text>
+        <Text style={styles.cardTitle}>{t('welcomeCardTitle')}</Text>
+        <Text style={styles.cardSub}>{t('welcomeCardSub')}</Text>
 
         {/* Primary button */}
         <TouchableOpacity
@@ -145,7 +157,7 @@ export default function WelcomeScreen({ navigation }: Props) {
             end={{ x: 1, y: 0 }}
             style={styles.btnPrimary}
           >
-            <Text style={styles.btnPrimaryLabel}>Se connecter</Text>
+            <Text style={styles.btnPrimaryLabel}>{t('welcomeLogin')}</Text>
             <View style={styles.btnArrowWrap}>
               <Text style={styles.btnArrow}>›</Text>
             </View>
@@ -158,14 +170,14 @@ export default function WelcomeScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('Auth', { mode: 'register' })}
           activeOpacity={0.85}
         >
-          <Text style={styles.btnSecondaryLabel}>Créer un compte chauffeur</Text>
+          <Text style={styles.btnSecondaryLabel}>{t('welcomeRegister')}</Text>
         </TouchableOpacity>
 
         {/* WhatsApp note */}
         <View style={styles.waBadge}>
           <Ionicons name="logo-whatsapp" size={16} color="#25D366" />
           <Text style={styles.waText}>
-            Inscription sécurisée via <Text style={styles.waGreen}>WhatsApp OTP</Text>
+            {t('welcomeWaPrefix')}<Text style={styles.waGreen}>{t('welcomeWaOtp')}</Text>
           </Text>
         </View>
       </Animated.View>
@@ -201,6 +213,15 @@ const styles = StyleSheet.create({
     width: 110, height: 110, borderRadius: 55,
     backgroundColor: C.primaryLt, opacity: 0.1,
   },
+
+  langChip: {
+    position: 'absolute', right: 20, zIndex: 2,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 6,
+  },
+  langChipText: { fontSize: 13, fontWeight: '700', color: C.white },
 
   // Logo
   logoBlock: { alignItems: 'center', gap: 12, marginTop: 8 },

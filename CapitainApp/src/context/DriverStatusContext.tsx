@@ -4,7 +4,7 @@ import React, {
 import * as Location from 'expo-location';
 import * as SecureStore from 'expo-secure-store';
 import { captainSocketService, RideNewPayload } from '../services/socket';
-import { apiPatch } from '../services/api';
+import { apiPatch, onSignedOut } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { Coordinates } from '../types';
 
@@ -39,6 +39,16 @@ export function DriverStatusProvider({ children }: { children: React.ReactNode }
   const hasActiveRideRef = useRef(false);
 
   useEffect(() => () => { captainSocketService.disconnect(); }, []);
+
+  // Session terminée (compte bloqué, jeton refusé) : plus de socket ni de demandes de course
+  useEffect(() => onSignedOut(() => {
+    captainSocketService.offRideNew();
+    captainSocketService.offRideCancelled();
+    captainSocketService.offRideUnavailable();
+    captainSocketService.disconnect();
+    setIsOnline(false);
+    setIncomingRequest(null);
+  }), []);
 
   // ── Ping de position pendant que le chauffeur est en ligne ────────────────
   useEffect(() => {

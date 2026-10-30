@@ -4,6 +4,7 @@
     "slug": "CapitainApp",
     "version": "3.2.65",
     "orientation": "portrait",
+    "scheme": "mishwarcapitaine",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
@@ -14,6 +15,8 @@
       }
     },
     "android": {
+      "package": "com.mishwar.capitaine",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -25,6 +28,8 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
       "config": {
@@ -41,7 +46,8 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Nous utilisons votre position pour recevoir et effectuer les courses.",
-          "isAndroidBackgroundLocationEnabled": true
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "expo-asset",
@@ -50,10 +56,16 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Nous accédons à vos photos pour choisir votre photo de profil."
+          "photosPermission": "Nous accédons à vos photos pour votre photo de profil et les documents de votre dossier.",
+          "cameraPermission": "Nous utilisons l’appareil photo pour votre photo de profil et les documents de votre dossier."
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/sounds/new_ride.wav"]
+        }
+      ],
       "expo-audio",
       [
         "expo-splash-screen",

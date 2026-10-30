@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
 import RechargeSheet from '../components/RechargeSheet';
 import { apiGet } from '../services/api';
+import { tr, useLanguage } from '../i18n/LanguageContext';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MonCompte'>;
@@ -25,13 +26,12 @@ interface WalletTransaction {
 }
 
 const BAR_DATA = [6, 9, 4, 11, 8, 14, 3];
-const BAR_DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
-function txnLabel(t: WalletTransaction): string {
-  if (t.note) return t.note;
-  if (t.type === 'commission_deduction') return 'Commission course';
-  if (t.type === 'admin_credit') return 'Recharge validée';
-  return 'Retrait validé';
+function txnLabel(txn: WalletTransaction): string {
+  if (txn.note) return txn.note;
+  if (txn.type === 'commission_deduction') return tr('accountTxnCommission');
+  if (txn.type === 'admin_credit') return tr('accountTxnTopup');
+  return tr('accountTxnWithdrawal');
 }
 
 function formatDate(iso: string): string {
@@ -76,8 +76,9 @@ function StatCard({ icon, value, label, color, bg }: {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function MonCompteScreen({ navigation }: Props) {
+export default function MonCompteScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [activeTab,  setActiveTab]  = useState<Tab>('compte');
   const [balance,    setBalance]    = useState(0);
   const [profile,    setProfile]    = useState<DriverProfile>({ rating: 5, totalRides: 0 });
@@ -128,26 +129,26 @@ export default function MonCompteScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color={C.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mon espace financier</Text>
-        <Text style={styles.headerSub}>Gérez vos revenus et statistiques</Text>
+        <Text style={styles.headerTitle}>{t('accountTitle')}</Text>
+        <Text style={styles.headerSub}>{t('accountSub')}</Text>
       </LinearGradient>
 
       {/* ── Tabs ── */}
       <View style={styles.tabs}>
-        {(['compte', 'statistiques'] as Tab[]).map((t) => (
+        {(['compte', 'statistiques'] as Tab[]).map((tab) => (
           <TouchableOpacity
-            key={t}
-            style={[styles.tab, activeTab === t && styles.tabActive]}
-            onPress={() => setActiveTab(t)}
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.tabActive]}
+            onPress={() => setActiveTab(tab)}
             activeOpacity={0.7}
           >
             <Ionicons
-              name={t === 'compte' ? 'card' : 'bar-chart'}
+              name={tab === 'compte' ? 'card' : 'bar-chart'}
               size={15}
-              color={activeTab === t ? C.white : C.sub}
+              color={activeTab === tab ? C.white : C.sub}
             />
-            <Text style={[styles.tabText, activeTab === t && styles.tabTextActive]}>
-              {t === 'compte' ? 'Mon compte' : 'Statistiques'}
+            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+              {tab === 'compte' ? t('accountTabAccount') : t('accountTabStats')}
             </Text>
           </TouchableOpacity>
         ))}
@@ -159,6 +160,17 @@ export default function MonCompteScreen({ navigation }: Props) {
           contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} colors={[C.primary]} />}
         >
+          {/* ── Solde négatif : ni en ligne ni courses tant que le compte n'est pas rechargé ── */}
+          {(balance < 0 || route.params?.insufficientBalance) && (
+            <View style={styles.lowBalance}>
+              <Ionicons name="alert-circle" size={22} color={C.danger} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.lowBalanceTitle}>{t('accountLowBalanceTitle')}</Text>
+                <Text style={styles.lowBalanceText}>{t('accountLowBalanceText')}</Text>
+              </View>
+            </View>
+          )}
+
           {/* ── Credit card style balance ── */}
           <View style={styles.balanceCardWrap}>
             <LinearGradient
@@ -171,7 +183,7 @@ export default function MonCompteScreen({ navigation }: Props) {
               <View style={styles.balanceBlob2} />
 
               <View style={styles.balanceTop}>
-                <Text style={styles.balanceCardLabel}>Solde disponible</Text>
+                <Text style={styles.balanceCardLabel}>{t('accountAvailableBalance')}</Text>
                 <View style={styles.balanceCurrencyBadge}>
                   <Text style={styles.balanceCurrencyText}>MRU</Text>
                 </View>
@@ -183,12 +195,12 @@ export default function MonCompteScreen({ navigation }: Props) {
 
               <View style={styles.balanceBottom}>
                 <View style={styles.balanceStat}>
-                  <Text style={styles.balanceStatLabel}>Courses</Text>
+                  <Text style={styles.balanceStatLabel}>{t('commonRides')}</Text>
                   <Text style={styles.balanceStatValue}>{profile.totalRides}</Text>
                 </View>
                 <View style={styles.balanceStatDiv} />
                 <View style={styles.balanceStat}>
-                  <Text style={styles.balanceStatLabel}>Note</Text>
+                  <Text style={styles.balanceStatLabel}>{t('commonRating')}</Text>
                   <Text style={styles.balanceStatValue}>★ {profile.rating.toFixed(1)}</Text>
                 </View>
               </View>
@@ -198,38 +210,38 @@ export default function MonCompteScreen({ navigation }: Props) {
           {/* ── Action tiles ── */}
           <View style={styles.tilesRow}>
             <ActionTile
-              icon="add-circle" label="Recharger" color={C.primary} bg={C.surfaceAlt}
+              icon="add-circle" label={t('accountTopup')} color={C.primary} bg={C.surfaceAlt}
               onPress={() => setRechargeOpen(true)}
             />
-            <ActionTile icon="paper-plane-outline" label="Transférer" color={C.sub} bg={C.bg} disabled badge="Bientôt" />
-            <ActionTile icon="time-outline" label="Historique" color={C.accent} bg="#ECFDF5"
+            <ActionTile icon="paper-plane-outline" label={t('accountTransfer')} color={C.sub} bg={C.bg} disabled badge={t('accountSoon')} />
+            <ActionTile icon="time-outline" label={t('commonHistory')} color={C.accent} bg="#ECFDF5"
               onPress={() => navigation.navigate('Historique')}
             />
           </View>
 
           {/* ── Transactions ── */}
           <View style={styles.txnSection}>
-            <Text style={styles.sectionTitle}>Dernières opérations</Text>
+            <Text style={styles.sectionTitle}>{t('accountLastOperations')}</Text>
             {txns.length === 0 ? (
               <View style={styles.emptyTxn}>
                 <Ionicons name="receipt-outline" size={32} color={C.muted} />
-                <Text style={styles.emptyTxnText}>Aucune opération pour le moment</Text>
+                <Text style={styles.emptyTxnText}>{t('accountNoOperations')}</Text>
               </View>
             ) : (
               <View style={styles.txnCard}>
-                {txns.map((t, idx) => {
-                  const isCredit = Number(t.amount) >= 0;
+                {txns.map((txn, idx) => {
+                  const isCredit = Number(txn.amount) >= 0;
                   return (
-                    <View key={t.id} style={[styles.txnRow, idx === txns.length - 1 && styles.txnRowLast]}>
+                    <View key={txn.id} style={[styles.txnRow, idx === txns.length - 1 && styles.txnRowLast]}>
                       <View style={[styles.txnIconWrap, { backgroundColor: isCredit ? '#ECFDF5' : '#FFF1F5' }]}>
                         <Ionicons name={isCredit ? 'arrow-up' : 'arrow-down'} size={16} color={isCredit ? C.accentDk : C.danger} />
                       </View>
                       <View style={styles.txnInfo}>
-                        <Text style={styles.txnLabel}>{txnLabel(t)}</Text>
-                        <Text style={styles.txnDate}>{formatDate(t.createdAt)}</Text>
+                        <Text style={styles.txnLabel}>{txnLabel(txn)}</Text>
+                        <Text style={styles.txnDate}>{formatDate(txn.createdAt)}</Text>
                       </View>
                       <Text style={[styles.txnAmount, { color: isCredit ? C.accentDk : C.danger }]}>
-                        {isCredit ? '+' : ''}{Number(t.amount).toFixed(0)} MRU
+                        {isCredit ? '+' : ''}{Number(txn.amount).toFixed(0)} MRU
                       </Text>
                     </View>
                   );
@@ -247,15 +259,15 @@ export default function MonCompteScreen({ navigation }: Props) {
         >
           {/* Stat cards */}
           <View style={styles.statsGrid}>
-            <StatCard icon="star" value={profile.rating.toFixed(1)} label="Note moyenne" color={C.warning} bg="#FFF8E1" />
-            <StatCard icon="car-sport" value={`${profile.totalRides}`} label="Total courses" color={C.primary} bg={C.surfaceAlt} />
+            <StatCard icon="star" value={profile.rating.toFixed(1)} label={t('accountAvgRating')} color={C.warning} bg="#FFF8E1" />
+            <StatCard icon="car-sport" value={`${profile.totalRides}`} label={t('accountTotalRides')} color={C.primary} bg={C.surfaceAlt} />
           </View>
 
           {/* Bar chart */}
           <View style={styles.chartCard}>
             <View style={styles.chartTitleRow}>
-              <Text style={styles.chartTitle}>Courses — 7 derniers jours</Text>
-              <View style={styles.previewBadge}><Text style={styles.previewBadgeText}>Aperçu</Text></View>
+              <Text style={styles.chartTitle}>{t('accountRidesLast7')}</Text>
+              <View style={styles.previewBadge}><Text style={styles.previewBadgeText}>{t('accountPreview')}</Text></View>
             </View>
             <View style={styles.barChart}>
               {BAR_DATA.map((val, i) => (
@@ -267,7 +279,7 @@ export default function MonCompteScreen({ navigation }: Props) {
                       style={[styles.bar, { height: `${(val / maxBar) * 100}%` }]}
                     />
                   </View>
-                  <Text style={styles.barDay}>{BAR_DAYS[i]}</Text>
+                  <Text style={styles.barDay}>{t('accountWeekDays')[i]}</Text>
                 </View>
               ))}
             </View>
@@ -276,15 +288,15 @@ export default function MonCompteScreen({ navigation }: Props) {
           {/* Performance strip */}
           <View style={styles.perfCard}>
             <View style={styles.chartTitleRow}>
-              <Text style={styles.sectionTitle}>Taux d'acceptation</Text>
-              <View style={styles.previewBadge}><Text style={styles.previewBadgeText}>Aperçu</Text></View>
+              <Text style={styles.sectionTitle}>{t('accountAcceptanceRate')}</Text>
+              <View style={styles.previewBadge}><Text style={styles.previewBadgeText}>{t('accountPreview')}</Text></View>
             </View>
             <View style={styles.perfBar}>
               <View style={[styles.perfFill, { width: '86%' }]} />
             </View>
             <View style={styles.perfRow}>
               <Text style={styles.perfLabel}>86%</Text>
-              <Text style={styles.perfSub}>Excellent — continuez comme ça !</Text>
+              <Text style={styles.perfSub}>{t('accountAcceptanceExcellent')}</Text>
             </View>
           </View>
         </ScrollView>
@@ -328,6 +340,13 @@ const styles = StyleSheet.create({
   scroll: { padding: 16, gap: 16 },
 
   // Balance card
+  lowBalance: {
+    flexDirection: 'row', gap: 12, alignItems: 'flex-start',
+    backgroundColor: '#FFF1F1', borderRadius: RADIUS.lg,
+    padding: 14, borderWidth: 1, borderColor: '#FFD0D0',
+  },
+  lowBalanceTitle: { fontSize: 14, fontWeight: '800', color: C.danger, marginBottom: 2 },
+  lowBalanceText:  { fontSize: 13, color: C.text, lineHeight: 19 },
   balanceCardWrap: { borderRadius: RADIUS.xl + 4, overflow: 'hidden', ...SH.lg },
   balanceCard:     { padding: 24, borderRadius: RADIUS.xl + 4, overflow: 'hidden', minHeight: 180 },
   balanceBlob1: {

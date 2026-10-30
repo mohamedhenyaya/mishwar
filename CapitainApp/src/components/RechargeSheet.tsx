@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Linking, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, Text, TextInput,
+  TouchableOpacity, View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import PaymentLogo from './PaymentLogo';
-import { apiPost } from '../services/api';
+import { apiPost, apiErrorMessage } from '../services/api';
 import {
   PAYMENT_METHODS, PaymentMethod, RECHARGE_WHATSAPP, formatAccountNumber, formatWhatsapp,
 } from '../config/payments';
+import { useLanguage } from '../i18n/LanguageContext';
 import { C, RADIUS } from '../theme';
 
 interface Props {
@@ -22,6 +24,7 @@ const WHATSAPP_GREEN = '#25D366';
 // Recharge du compte capitaine : choix du moyen de paiement puis numéro de compte + envoi de la capture
 export default function RechargeSheet({ visible, onClose, driverPhone }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [method, setMethod] = useState<PaymentMethod | null>(null);
   const [copied, setCopied] = useState(false);
   const [amount, setAmount] = useState('');
@@ -39,16 +42,19 @@ export default function RechargeSheet({ visible, onClose, driverPhone }: Props) 
     try {
       await apiPost('/wallet/requests', { type: 'TOPUP', amount: Number(amount), method: method.name });
       Alert.alert(
-        'Demande envoyée',
-        `Votre recharge de ${amount} MRU via ${method.name} sera créditée après vérification de la capture.`,
-        [{ text: 'OK', onPress: onClose }],
+        t('rechargeRequestSentTitle'),
+        t('rechargeSheetSentMessage')(amount, methodName(method)),
+        [{ text: t('commonOk'), onPress: onClose }],
       );
     } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.message ?? 'Impossible d\'envoyer la demande de recharge.');
+      Alert.alert(t('commonError'), apiErrorMessage(e, t('rechargeRequestError')));
     } finally {
       setSending(false);
     }
   };
+
+  // « Autres » : nom envoyé au serveur inchangé, affiché traduit
+  const methodName = (m: PaymentMethod) => (m.id === 'autres' ? t('rechargePaymentOther') : m.name);
 
   const copyAccount = async () => {
     if (!method?.accountNumber) return;
@@ -59,28 +65,30 @@ export default function RechargeSheet({ visible, onClose, driverPhone }: Props) 
 
   const openWhatsapp = () => {
     const text = method?.accountNumber
-      ? `Bonjour, voici la capture de ma recharge ${method.name} pour le compte capitaine ${driverPhone ?? ''}.`
-      : `Bonjour, je souhaite recharger mon compte capitaine ${driverPhone ?? ''} avec un autre moyen de paiement.`;
+      ? t('rechargeWaTextAccount')(method.name, driverPhone ?? '')
+      : t('rechargeWaTextOther')(driverPhone ?? '');
     const url = `https://wa.me/${RECHARGE_WHATSAPP}?text=${encodeURIComponent(text.trim())}`;
-    Linking.openURL(url).catch(() => Alert.alert('WhatsApp indisponible', formatWhatsapp(RECHARGE_WHATSAPP)));
+    Linking.openURL(url).catch(() => Alert.alert(t('rechargeWaUnavailable'), formatWhatsapp(RECHARGE_WHATSAPP)));
   };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      {/* La feuille remonte au-dessus du clavier : le bouton « Déclarer » reste visible */}
+      <KeyboardAvoidingView style={styles.avoider} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.handle} />
 
         {!method ? (
           <>
-            <Text style={styles.title}>Recharger mon compte</Text>
-            <Text style={styles.subtitle}>Choisissez votre moyen de paiement</Text>
+            <Text style={styles.title}>{t('rechargeMyAccount')}</Text>
+            <Text style={styles.subtitle}>{t('rechargeChoosePayment')}</Text>
 
             <View style={styles.grid}>
               {PAYMENT_METHODS.map((m) => (
                 <TouchableOpacity key={m.id} style={styles.option} onPress={() => setMethod(m)} activeOpacity={0.75}>
                   <PaymentLogo method={m.id} size={52} />
-                  <Text style={styles.optionName}>{m.name}</Text>
+                  <Text style={styles.optionName}>{methodName(m)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -92,14 +100,14 @@ export default function RechargeSheet({ visible, onClose, driverPhone }: Props) 
                 <Text style={styles.backText}>‹</Text>
               </TouchableOpacity>
               <PaymentLogo method={method.id} size={40} />
-              <Text style={styles.detailTitle}>{method.name}</Text>
+              <Text style={styles.detailTitle}>{methodName(method)}</Text>
             </View>
 
             {method.accountNumber ? (
               <>
                 {/* Numéro de compte + copier */}
                 <View style={styles.accountCard}>
-                  <Text style={styles.label}>Numéro de compte {method.name}</Text>
+                  <Text style={styles.label}>{t('rechargeAccountNumber')(method.name)}</Text>
                   <View style={styles.accountRow}>
                     <Text style={styles.accountNumber} selectable>{formatAccountNumber(method.accountNumber)}</Text>
                     <TouchableOpacity
@@ -108,22 +116,20 @@ export default function RechargeSheet({ visible, onClose, driverPhone }: Props) 
                       activeOpacity={0.8}
                     >
                       <Text style={[styles.copyText, copied && styles.copyTextDone]}>
-                        {copied ? '✓ Copié' : '⧉ Copier'}
+                        {copied ? t('rechargeCopied') : t('rechargeCopy')}
                       </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 <View style={styles.steps}>
-                  <Text style={styles.step}><Text style={styles.stepNum}>1 </Text>Envoyez le montant de la recharge sur ce numéro via {method.name}.</Text>
-                  <Text style={styles.step}><Text style={styles.stepNum}>2 </Text>Faites une capture d'écran de la confirmation.</Text>
-                  <Text style={styles.step}><Text style={styles.stepNum}>3 </Text>Envoyez-la sur WhatsApp : votre solde sera crédité après vérification.</Text>
+                  <Text style={styles.step}><Text style={styles.stepNum}>1 </Text>{t('rechargeStep1')(method.name)}</Text>
+                  <Text style={styles.step}><Text style={styles.stepNum}>2 </Text>{t('rechargeStep2')}</Text>
+                  <Text style={styles.step}><Text style={styles.stepNum}>3 </Text>{t('rechargeStep3')}</Text>
                 </View>
               </>
             ) : (
-              <Text style={styles.otherText}>
-                Pour recharger avec un autre moyen de paiement, contactez-nous sur WhatsApp : nous vous indiquerons la marche à suivre.
-              </Text>
+              <Text style={styles.otherText}>{t('rechargeOtherText')}</Text>
             )}
 
             {/* Montant envoyé → demande de recharge (validée par un admin) */}
@@ -132,7 +138,7 @@ export default function RechargeSheet({ visible, onClose, driverPhone }: Props) 
                 style={styles.amountInput}
                 value={amount}
                 onChangeText={(v) => setAmount(v.replace(/[^\d]/g, ''))}
-                placeholder="Montant envoyé (MRU)"
+                placeholder={t('rechargeAmountSent')}
                 placeholderTextColor={C.muted}
                 keyboardType="number-pad"
               />
@@ -142,28 +148,30 @@ export default function RechargeSheet({ visible, onClose, driverPhone }: Props) 
                 disabled={!Number(amount) || sending}
                 activeOpacity={0.85}
               >
-                {sending ? <ActivityIndicator color={C.white} /> : <Text style={styles.declareText}>Déclarer</Text>}
+                {sending ? <ActivityIndicator color={C.white} /> : <Text style={styles.declareText}>{t('rechargeDeclare')}</Text>}
               </TouchableOpacity>
             </View>
 
             {/* WhatsApp */}
             <View style={styles.whatsappCard}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>WhatsApp (captures d'écran)</Text>
+                <Text style={styles.label}>{t('rechargeWaScreenshots')}</Text>
                 <Text style={styles.whatsappNumber} selectable>{formatWhatsapp(RECHARGE_WHATSAPP)}</Text>
               </View>
               <TouchableOpacity style={styles.whatsappBtn} onPress={openWhatsapp} activeOpacity={0.85}>
-                <Text style={styles.whatsappBtnText}>WhatsApp</Text>
+                <Text style={styles.whatsappBtnText}>{t('commonWhatsapp')}</Text>
               </TouchableOpacity>
             </View>
           </>
         )}
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  avoider:  { flex: 1 },
   backdrop: { flex: 1, backgroundColor: 'rgba(26, 11, 59, 0.5)' },
   sheet: {
     backgroundColor: C.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl,

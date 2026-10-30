@@ -3,26 +3,27 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { DrawerContentComponentProps, useDrawerStatus } from '@react-navigation/drawer';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
-import { SECURE_STORE_KEY, APP_VERSION } from '../config/constants';
-import { resetToWelcome } from './navigationRef';
-import { apiGet } from '../services/api';
+import { APP_VERSION } from '../config/constants';
+import { apiGet, logout } from '../services/api';
 import Avatar from '../components/Avatar';
 import { DriverProfile } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
+import { LANGUAGE_NAMES } from '../i18n/translations';
 import { C, G, RADIUS } from '../theme';
 
 const MENU_ITEMS = [
-  { key: 'Chauffeur',              icon: 'car-sport'      as const, color: '#EDE9FF', route: 'Home'        as const },
-  { key: 'Mon profil',             icon: 'person-circle-outline' as const, color: '#EDE9FF', route: 'Profil' as const },
-  { key: 'Mes trajets',            icon: 'reader-outline' as const, color: '#E8F5E9', route: 'Historique'  as const },
-  { key: 'Mon compte',             icon: 'wallet-outline' as const, color: '#E3F2FD', route: 'MonCompte'   as const },
-  { key: 'Performance et classement', icon: 'trophy-outline' as const, color: '#FFF3E0', route: 'Performance' as const },
-  { key: 'Paramètres',             icon: 'settings-outline' as const, color: '#F3E5F5', route: 'Parametres' as const },
-];
+  { key: 'menuDriver',      icon: 'car-sport'      as const, color: '#EDE9FF', route: 'Home'        as const },
+  { key: 'commonMyProfile', icon: 'person-circle-outline' as const, color: '#EDE9FF', route: 'Profil' as const },
+  { key: 'menuMyTrips',     icon: 'reader-outline' as const, color: '#E8F5E9', route: 'Historique'  as const },
+  { key: 'menuMyAccount',   icon: 'wallet-outline' as const, color: '#E3F2FD', route: 'MonCompte'   as const },
+  { key: 'menuPerformance', icon: 'trophy-outline' as const, color: '#FFF3E0', route: 'Performance' as const },
+  { key: 'menuSettings',    icon: 'settings-outline' as const, color: '#F3E5F5', route: 'Parametres' as const },
+] as const;
 
 export default function DrawerContent({ navigation }: DrawerContentComponentProps) {
   // Profil réel (nom, photo, note, statut) rechargé à chaque ouverture du menu
   const [profile, setProfile] = useState<DriverProfile | null>(null);
+  const { t, language } = useLanguage();
   const drawerStatus = useDrawerStatus();
   const loadProfile = useCallback(() => {
     apiGet<DriverProfile>('/drivers/me').then(setProfile).catch(() => {});
@@ -37,8 +38,7 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
 
   const handleLogout = async () => {
     navigation.closeDrawer();
-    await SecureStore.deleteItemAsync(SECURE_STORE_KEY);
-    resetToWelcome();
+    await logout();
   };
 
   return (
@@ -53,14 +53,14 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
           </LinearGradient>
           <View style={[styles.avatarBadge, { backgroundColor: isOnline ? C.accent : C.danger }]} />
         </View>
-        <Text style={styles.name}>{profile?.name || 'Complétez votre profil'}</Text>
+        <Text style={styles.name}>{profile?.name || t('menuCompleteProfile')}</Text>
         <Text style={styles.phone}>{profile?.phone ?? ''}</Text>
 
         <View style={styles.ratingChip}>
           <Ionicons name="star" size={12} color="#FFD60A" />
           <Text style={styles.ratingText}>{Number(profile?.rating ?? 5).toFixed(1)}</Text>
           <Text style={styles.ratingDot}>·</Text>
-          <Text style={styles.ratingText}>{profile?.totalRides ?? 0} courses</Text>
+          <Text style={styles.ratingText}>{t('ridesCount')(profile?.totalRides ?? 0)}</Text>
         </View>
       </LinearGradient>
 
@@ -76,7 +76,7 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
             <View style={[styles.menuIconBadge, { backgroundColor: item.color }]}>
               <Ionicons name={item.icon} size={19} color={C.primary} />
             </View>
-            <Text style={styles.menuLabel}>{item.key}</Text>
+            <Text style={styles.menuLabel}>{t(item.key)}</Text>
             <Ionicons name="chevron-forward" size={19} color={C.muted} />
           </TouchableOpacity>
         ))}
@@ -87,12 +87,12 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
           <View style={styles.passengerContent}>
             <Ionicons name="person-outline" size={20} color={C.text} style={{ width: 40, textAlign: 'center' }} />
             <View>
-              <Text style={styles.passengerTitle}>Mode Passager</Text>
-              <Text style={styles.passengerSub}>Passer en mode client</Text>
+              <Text style={styles.passengerTitle}>{t('menuPassengerMode')}</Text>
+              <Text style={styles.passengerSub}>{t('menuPassengerSub')}</Text>
             </View>
           </View>
           <View style={styles.passengerBadge}>
-            <Text style={styles.passengerBadgeText}>Bêta</Text>
+            <Text style={styles.passengerBadgeText}>{t('menuBeta')}</Text>
           </View>
         </TouchableOpacity>
 
@@ -102,15 +102,15 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
           <View style={[styles.menuIconBadge, { backgroundColor: '#FEE2E2' }]}>
             <Ionicons name="log-out-outline" size={19} color={C.danger} />
           </View>
-          <Text style={[styles.menuLabel, { color: C.danger }]}>Se déconnecter</Text>
+          <Text style={[styles.menuLabel, { color: C.danger }]}>{t('menuLogout')}</Text>
         </TouchableOpacity>
 
         <View style={styles.footer}>
-          <View style={styles.footerLangRow}>
+          <TouchableOpacity style={styles.footerLangRow} onPress={() => handleMenu('Parametres')} activeOpacity={0.7}>
             <Ionicons name="globe-outline" size={13} color={C.sub} />
-            <Text style={styles.footerLang}>Français</Text>
-          </View>
-          <Text style={styles.footerVersion}>Volta Capitaine v{APP_VERSION}</Text>
+            <Text style={styles.footerLang}>{LANGUAGE_NAMES[language]}</Text>
+          </TouchableOpacity>
+          <Text style={styles.footerVersion}>{t('appTitle')} v{APP_VERSION}</Text>
         </View>
       </ScrollView>
     </View>

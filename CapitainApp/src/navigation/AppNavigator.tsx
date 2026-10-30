@@ -18,6 +18,8 @@ import PerformanceScreen   from '../screens/PerformanceScreen';
 import RechargeScreen      from '../screens/RechargeScreen';
 import ActiveTripScreen    from '../screens/ActiveTripScreen';
 import ProfilScreen        from '../screens/ProfilScreen';
+import LanguageScreen      from '../screens/LanguageScreen';
+import { useLanguage } from '../i18n/LanguageContext';
 import { C } from '../theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -36,6 +38,7 @@ function isDriverToken(token: string): boolean {
 export default function AppNavigator() {
   const [isLoading,       setIsLoading]       = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { ready: languageReady, chosen: languageChosen } = useLanguage();
 
   useEffect(() => {
     SecureStore.getItemAsync(SECURE_STORE_KEY)
@@ -50,7 +53,7 @@ export default function AppNavigator() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  if (isLoading) {
+  if (isLoading || !languageReady) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.dark }}>
         <ActivityIndicator size="large" color={C.white} />
@@ -61,13 +64,19 @@ export default function AppNavigator() {
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
-        initialRouteName={isAuthenticated ? 'Main' : 'Welcome'}
+        initialRouteName={!languageChosen ? 'Language' : isAuthenticated ? 'Main' : 'Welcome'}
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
           contentStyle: { backgroundColor: C.bg },
         }}
       >
+        <Stack.Screen
+          name="Language"
+          component={LanguageScreen}
+          initialParams={{ next: isAuthenticated ? 'Main' : 'Welcome' }}
+          options={{ animation: 'fade' }}
+        />
         <Stack.Screen name="Welcome"     component={WelcomeScreen} options={{ animation: 'fade' }} />
         <Stack.Screen name="Login"       component={LoginScreen} />
         <Stack.Screen name="Auth"        component={AuthScreen} />

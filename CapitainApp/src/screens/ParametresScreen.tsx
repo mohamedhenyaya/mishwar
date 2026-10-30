@@ -7,9 +7,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
 import { RootStackParamList } from '../types';
-import { SECURE_STORE_KEY, SUPPORT_PHONE, SUPPORT_WHATSAPP } from '../config/constants';
+import { SUPPORT_PHONE, SUPPORT_WHATSAPP } from '../config/constants';
+import { logout } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
+import { LANGUAGE_NAMES, LanguageCode } from '../i18n/translations';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Parametres'>;
@@ -78,6 +80,31 @@ function DropdownRow({ badgeIcon, badgeBg, label, value, last = false }: {
   );
 }
 
+// Langue de l'application : choix immédiat, enregistré sur le téléphone
+function LanguageRow({ badgeIcon, badgeBg, label }: { badgeIcon: IoniconName; badgeBg: string; label: string }) {
+  const { language, setLanguage } = useLanguage();
+  return (
+    <View style={row.wrap}>
+      <View style={[row.badge, { backgroundColor: badgeBg }]}>
+        <Ionicons name={badgeIcon} size={18} color={C.primary} />
+      </View>
+      <Text style={[row.label, { flex: 1 }]}>{label}</Text>
+      <View style={row.segment}>
+        {(Object.keys(LANGUAGE_NAMES) as LanguageCode[]).map((code) => (
+          <TouchableOpacity
+            key={code}
+            style={[row.segmentItem, language === code && row.segmentItemActive]}
+            onPress={() => setLanguage(code)}
+            activeOpacity={0.8}
+          >
+            <Text style={[row.segmentText, language === code && row.segmentTextActive]}>{LANGUAGE_NAMES[code]}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function SwitchRow({ badgeIcon, badgeBg, label, value, onChange, last = false }: {
   badgeIcon: IoniconName; badgeBg: string; label: string; value: boolean; onChange: (v: boolean) => void; last?: boolean;
 }) {
@@ -112,10 +139,16 @@ const row = StyleSheet.create({
   dropdownRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dropValue:     { fontSize: 14, color: C.primary, fontWeight: '600' },
   dropArrow:     { width: 22, height: 22, borderRadius: 6, backgroundColor: C.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  segment:           { flexDirection: 'row', backgroundColor: C.surfaceAlt, borderRadius: RADIUS.md, padding: 3 },
+  segmentItem:       { paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.md - 2 },
+  segmentItemActive: { backgroundColor: C.primary },
+  segmentText:       { fontSize: 13, fontWeight: '600', color: C.primary },
+  segmentTextActive: { color: C.white, fontWeight: '700' },
 });
 
 // ─── Volume slider ────────────────────────────────────────────────────────────
 function VolumeRow({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const { t } = useLanguage();
   const STEPS = [0, 0.25, 0.5, 0.75, 1];
   return (
     <View style={vol.wrap}>
@@ -123,7 +156,7 @@ function VolumeRow({ value, onChange }: { value: number; onChange: (v: number) =
         <View style={[row.badge, { backgroundColor: '#FFF3E0' }]}>
           <Ionicons name="notifications" size={17} color={C.primary} />
         </View>
-        <Text style={vol.label}>Volume de sonnerie</Text>
+        <Text style={vol.label}>{t('settingsRingVolume')}</Text>
         <View style={vol.valuePill}>
           <Text style={vol.valueText}>{Math.round(value * 100)}%</Text>
         </View>
@@ -177,6 +210,7 @@ function Card({ children }: { children: React.ReactNode }) {
 
 export default function ParametresScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [volume,        setVolume]        = useState(1.0);
   const [emailVerified, setEmailVerified] = useState(false);
   const [editEmail,     setEditEmail]     = useState(false);
@@ -187,25 +221,22 @@ export default function ParametresScreen({ navigation }: Props) {
   const [notifVibrate,  setNotifVibrate]  = useState(true);
 
   const handleLogout = () => {
-    Alert.alert('Déconnexion', 'Voulez-vous vous déconnecter ?', [
-      { text: 'Annuler', style: 'cancel' },
+    Alert.alert(t('settingsLogoutTitle'), t('settingsLogoutConfirm'), [
+      { text: t('commonCancel'), style: 'cancel' },
       {
-        text: 'Déconnecter', style: 'destructive',
-        onPress: async () => {
-          await SecureStore.deleteItemAsync(SECURE_STORE_KEY);
-          navigation.replace('Welcome');
-        },
+        text: t('settingsLogoutBtn'), style: 'destructive',
+        onPress: logout,
       },
     ]);
   };
 
   const handleDelete = () => {
     Alert.alert(
-      'Supprimer mon compte',
-      'Cette action est irréversible. Toutes vos données seront perdues.',
+      t('settingsDeleteAccount'),
+      t('settingsDeleteMessage'),
       [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer définitivement', style: 'destructive', onPress: () => {} },
+        { text: t('commonCancel'), style: 'cancel' },
+        { text: t('settingsDeleteForever'), style: 'destructive', onPress: () => {} },
       ],
     );
   };
@@ -220,45 +251,47 @@ export default function ParametresScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color={C.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Paramètres</Text>
-        <Text style={styles.headerSub}>Personnalisez votre expérience</Text>
+        <Text style={styles.headerTitle}>{t('settingsTitle')}</Text>
+        <Text style={styles.headerSub}>{t('settingsSub')}</Text>
       </LinearGradient>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
       >
         {/* ── Langue ── */}
-        <Section icon="globe-outline" label="Langue & Région" />
+        <Section icon="globe-outline" label={t('settingsLangRegion')} />
         <Card>
-          <DropdownRow badgeIcon="earth" badgeBg="#E8F5E9" label="Application"      value="Français"    />
-          <DropdownRow badgeIcon="location-outline" badgeBg="#FFF3E0" label="Noms des lieux"   value="العربية" last />
+          <LanguageRow badgeIcon="earth" badgeBg="#E8F5E9" label={t('languageSettingLabel')} />
+          <DropdownRow badgeIcon="location-outline" badgeBg="#FFF3E0" label={t('settingsPlaceNames')} value="العربية" last />
         </Card>
 
         {/* ── Navigation ── */}
-        <Section icon="map-outline" label="Navigation" />
+        <Section icon="map-outline" label={t('settingsNavigation')} />
         <Card>
-          <DropdownRow badgeIcon="navigate-outline" badgeBg="#E3F2FD" label="Application GPS par défaut" value="Google Maps" last />
+          <DropdownRow badgeIcon="navigate-outline" badgeBg="#E3F2FD" label={t('settingsDefaultGps')} value="Google Maps" last />
         </Card>
 
         {/* ── Notifications ── */}
-        <Section icon="notifications-outline" label="Notifications" />
+        <Section icon="notifications-outline" label={t('settingsNotifications')} />
         <Card>
-          <SwitchRow badgeIcon="volume-high-outline" badgeBg="#FFF3E0" label="Son de notification" value={notifSound}   onChange={setNotifSound}   />
-          <SwitchRow badgeIcon="phone-portrait-outline" badgeBg="#F3E5F5" label="Vibration"           value={notifVibrate} onChange={setNotifVibrate} last />
+          <SwitchRow badgeIcon="volume-high-outline" badgeBg="#FFF3E0" label={t('settingsNotifSound')} value={notifSound}   onChange={setNotifSound}   />
+          <SwitchRow badgeIcon="phone-portrait-outline" badgeBg="#F3E5F5" label={t('settingsVibration')}           value={notifVibrate} onChange={setNotifVibrate} last />
         </Card>
 
         {/* ── Sonnerie ── */}
-        <Section icon="musical-notes-outline" label="Sonnerie de course" />
+        <Section icon="musical-notes-outline" label={t('settingsRingtone')} />
         <Card>
           <VolumeRow value={volume} onChange={setVolume} />
         </Card>
 
         {/* ── Informations ── */}
-        <Section icon="person-outline" label="Informations personnelles" />
+        <Section icon="person-outline" label={t('settingsPersonalInfo')} />
         <Card>
-          <SettingRow badgeIcon="call-outline" badgeBg="#E8F5E9" label="Téléphone" value="20122724"       />
-          <SettingRow badgeIcon="person" badgeBg="#EDE9FF" label="Nom"       value="MohamedhenYaya" />
+          <SettingRow badgeIcon="call-outline" badgeBg="#E8F5E9" label={t('settingsPhone')} value="20122724"       />
+          <SettingRow badgeIcon="person" badgeBg="#EDE9FF" label={t('settingsName')} value="MohamedhenYaya" />
 
           {/* Email */}
           {editEmail ? (
@@ -270,7 +303,7 @@ export default function ParametresScreen({ navigation }: Props) {
                 style={styles.editInput}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="Votre adresse email"
+                placeholder={t('settingsEmailPlaceholder')}
                 placeholderTextColor={C.muted}
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -281,7 +314,7 @@ export default function ParametresScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
           ) : (
-            <SettingRow badgeIcon="mail-outline" badgeBg="#E3F2FD" label="Email" value={email || 'Non renseigné'} onPress={() => setEditEmail(true)} />
+            <SettingRow badgeIcon="mail-outline" badgeBg="#E3F2FD" label={t('settingsEmail')} value={email || t('settingsNotSet')} onPress={() => setEditEmail(true)} />
           )}
 
           {/* Password */}
@@ -294,7 +327,7 @@ export default function ParametresScreen({ navigation }: Props) {
                 style={styles.editInput}
                 value={newPwd}
                 onChangeText={setNewPwd}
-                placeholder="Nouveau mot de passe"
+                placeholder={t('settingsNewPassword')}
                 placeholderTextColor={C.muted}
                 secureTextEntry
                 autoFocus
@@ -304,68 +337,68 @@ export default function ParametresScreen({ navigation }: Props) {
               </TouchableOpacity>
             </View>
           ) : (
-            <SettingRow badgeIcon="lock-closed-outline" badgeBg="#F3E5F5" label="Mot de passe" value="Modifier" onPress={() => setEditPwd(true)} last />
+            <SettingRow badgeIcon="lock-closed-outline" badgeBg="#F3E5F5" label={t('settingsPassword')} value={t('settingsModify')} onPress={() => setEditPwd(true)} last />
           )}
         </Card>
 
         {/* ── Vérification email ── */}
         <View style={styles.emailVerifCard}>
           <View style={styles.emailVerifTop}>
-            <Text style={styles.emailVerifLabel}>Email vérifié</Text>
+            <Text style={styles.emailVerifLabel}>{t('settingsEmailVerified')}</Text>
             <View style={[styles.emailVerifBadge, { backgroundColor: emailVerified ? '#ECFDF5' : '#FFF1F5', borderColor: emailVerified ? C.accentDk : C.dangerDk }]}>
               <Ionicons name={emailVerified ? 'checkmark-circle' : 'close-circle'} size={13} color={emailVerified ? C.accentDk : C.danger} />
               <Text style={[styles.emailVerifStatus, { color: emailVerified ? C.accentDk : C.danger }]}>
-                {emailVerified ? 'Vérifié' : 'Non vérifié'}
+                {emailVerified ? t('settingsVerified') : t('settingsNotVerified')}
               </Text>
             </View>
           </View>
           {!emailVerified && (
             <TouchableOpacity
               style={styles.verifyBtn}
-              onPress={() => Alert.alert('Email', 'Un lien de vérification a été envoyé.')}
+              onPress={() => Alert.alert(t('settingsEmail'), t('settingsVerificationSent'))}
               activeOpacity={0.85}
             >
               <LinearGradient colors={G.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.verifyBtnGrad}>
-                <Text style={styles.verifyBtnText}>Vérifier mon adresse e-mail</Text>
+                <Text style={styles.verifyBtnText}>{t('settingsVerifyEmail')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           )}
         </View>
 
         {/* ── Soutien ── */}
-        <Section icon="headset-outline" label="Soutien" />
+        <Section icon="headset-outline" label={t('settingsSupport')} />
         <Card>
           <SettingRow
             badgeIcon="call" badgeBg="#E3F2FD"
-            label="Centre d'assistance" sub={SUPPORT_PHONE}
+            label={t('settingsHelpCenter')} sub={SUPPORT_PHONE}
             onPress={callSupport}
           />
           <SettingRow
             badgeIcon="logo-whatsapp" badgeBg={C.accentDk + '22'} badgeColor={C.accentDk}
-            label="WhatsApp" sub={SUPPORT_WHATSAPP}
+            label={t('commonWhatsapp')} sub={SUPPORT_WHATSAPP}
             onPress={chatWhatsapp}
           />
           <SettingRow
             badgeIcon="wallet-outline" badgeBg="#FFF3E0"
-            label="Recharger mon portefeuille"
+            label={t('settingsRechargeWallet')}
             onPress={() => navigation.navigate('Recharge')}
             last
           />
         </Card>
 
         {/* ── Actions compte ── */}
-        <Section icon="settings-outline" label="Compte" />
+        <Section icon="settings-outline" label={t('settingsAccount')} />
         <Card>
-          <SettingRow badgeIcon="document-text-outline" badgeBg="#E3F2FD" label="Politique de confidentialité" onPress={() => {}} />
-          <SettingRow badgeIcon="log-out-outline" badgeBg="#FEE2E2" badgeColor={C.danger} label="Se déconnecter" onPress={handleLogout} last />
+          <SettingRow badgeIcon="document-text-outline" badgeBg="#E3F2FD" label={t('settingsPrivacy')} onPress={() => {}} />
+          <SettingRow badgeIcon="log-out-outline" badgeBg="#FEE2E2" badgeColor={C.danger} label={t('menuLogout')} onPress={handleLogout} last />
         </Card>
 
         {/* ── Danger zone ── */}
         <TouchableOpacity style={styles.deleteZone} onPress={handleDelete} activeOpacity={0.7}>
           <Ionicons name="trash-outline" size={22} color={C.danger} />
           <View>
-            <Text style={styles.deleteTitle}>Supprimer mon compte</Text>
-            <Text style={styles.deleteSub}>Action irréversible — toutes vos données seront perdues</Text>
+            <Text style={styles.deleteTitle}>{t('settingsDeleteAccount')}</Text>
+            <Text style={styles.deleteSub}>{t('settingsDeleteSub')}</Text>
           </View>
         </TouchableOpacity>
       </ScrollView>

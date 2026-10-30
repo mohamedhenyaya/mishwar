@@ -8,7 +8,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
-import { apiPost } from '../services/api';
+import { apiPost, apiErrorMessage } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Recharge'>;
@@ -30,6 +31,7 @@ const BANKS: BankOption[] = [
 
 export default function RechargeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [selected, setSelected] = useState<BankOption | null>(null);
   const [amount,    setAmount]  = useState('');
   const [reference, setReference] = useState('');
@@ -52,12 +54,12 @@ export default function RechargeScreen({ navigation }: Props) {
         reference: reference.trim() || undefined,
       });
       Alert.alert(
-        'Demande envoyée',
-        `Votre demande de recharge de ${amount} MRU via ${selected.name} a été transmise. Elle sera créditée après validation par un administrateur.`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }],
+        t('rechargeRequestSentTitle'),
+        t('rechargeRequestSentMessage')(amount, selected.name),
+        [{ text: t('commonOk'), onPress: () => navigation.goBack() }],
       );
     } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.message ?? "Impossible d'envoyer la demande de recharge.");
+      Alert.alert(t('commonError'), apiErrorMessage(e, t('rechargeRequestError')));
     } finally {
       setLoading(false);
     }
@@ -69,19 +71,17 @@ export default function RechargeScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color={C.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Recharger mon solde</Text>
-        <Text style={styles.headerSub}>Rechargez via une application bancaire, puis confirmez ci-dessous</Text>
+        <Text style={styles.headerTitle}>{t('rechargeTitle')}</Text>
+        <Text style={styles.headerSub}>{t('rechargeSub')}</Text>
       </LinearGradient>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
       >
-        <Text style={styles.hint}>
-          Effectuez votre transfert vers notre compte via l'une de ces applications, puis renseignez le montant
-          et la référence de la transaction pour que notre équipe valide votre recharge.
-        </Text>
+        <Text style={styles.hint}>{t('rechargeHint')}</Text>
 
         <View style={styles.bankList}>
           {BANKS.map((bank) => {
@@ -112,27 +112,27 @@ export default function RechargeScreen({ navigation }: Props) {
 
         {selected && (
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Confirmer la recharge {selected.name}</Text>
+            <Text style={styles.formTitle}>{t('rechargeConfirm')(selected.name)}</Text>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Montant (MRU)</Text>
+              <Text style={styles.fieldLabel}>{t('rechargeAmountLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={amount}
                 onChangeText={(v) => setAmount(v.replace(/[^0-9]/g, ''))}
-                placeholder="Ex : 500"
+                placeholder={t('rechargeAmountPlaceholder')}
                 placeholderTextColor={C.muted}
                 keyboardType="number-pad"
               />
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Référence de transaction (optionnel)</Text>
+              <Text style={styles.fieldLabel}>{t('rechargeReferenceLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={reference}
                 onChangeText={setReference}
-                placeholder="Numéro de reçu / transaction"
+                placeholder={t('rechargeReferencePlaceholder')}
                 placeholderTextColor={C.muted}
               />
             </View>
@@ -150,7 +150,7 @@ export default function RechargeScreen({ navigation }: Props) {
               >
                 {loading
                   ? <ActivityIndicator color={C.white} />
-                  : <Text style={styles.submitBtnText}>Envoyer la demande</Text>}
+                  : <Text style={styles.submitBtnText}>{t('rechargeSendRequest')}</Text>}
               </LinearGradient>
             </TouchableOpacity>
           </View>

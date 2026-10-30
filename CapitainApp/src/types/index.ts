@@ -11,13 +11,14 @@ export type DrawerParamList = {
 };
 
 export type RootStackParamList = {
+  Language:    { next: 'Welcome' | 'Main' } | undefined; // premier lancement : choix de la langue
   Welcome:     undefined;
   Auth:        { mode: 'register' };
   Login:       undefined;
   Main:        undefined;
   Historique:  undefined;
   Parametres:  undefined;
-  MonCompte:   undefined;
+  MonCompte:   { insufficientBalance?: boolean } | undefined;
   Performance: undefined;
   Recharge:    undefined;
   ActiveTrip:  { rideId: string };
@@ -85,17 +86,20 @@ export interface Coordinates {
   longitude: number;
 }
 
-export type RideStatus = 'completed' | 'cancelled_by_client' | 'cancelled_by_driver' | 'ongoing';
+export type RideStatus = 'completed' | 'cancelled_by_client' | 'cancelled_by_driver' | 'cancelled_other' | 'ongoing';
 
+// Ligne de GET /rides/driver/history (« Mes trajets »)
 export interface RideHistoryItem {
-  id:          string;
-  status:      RideStatus;
-  date:        string;
-  originLabel: string;
-  destLabel:   string;
-  clientName:  string;
-  price:       number;
-  currency:    string;
+  id:              string;
+  status:          RideStatus;
+  date:            string;        // ISO
+  startLatitude:   number;
+  startLongitude:  number;
+  destinationName: string | null; // null : trajet ouvert
+  isOpenTrip:      boolean;
+  clientName:      string | null;
+  price:           number;
+  currency:        string;
 }
 
 export interface Captain {

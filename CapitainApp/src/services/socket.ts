@@ -11,6 +11,9 @@ const EVENTS = {
   RIDE_UNAVAILABLE:  'ride:unavailable',
   RIDE_CANCELLED:    'ride:cancelled',
   RIDE_METER:        'ride:meter',
+  ACCOUNT_BLOCKED:   'account:blocked',
+  FORCED_OFFLINE:    'driver:forced-offline',
+  DOSSIER_UPDATED:   'driver:dossier-updated',
 } as const;
 
 // Relevé du compteur d'un trajet ouvert (distance parcourue + temps d'arrêt)
@@ -36,6 +39,12 @@ export interface RideRequestPayload {
 }
 
 export type RideNewPayload = RideRequestPayload;
+
+export type DossierEvent =
+  | { event: 'ACCOUNT_APPROVED' }
+  | { event: 'DOSSIER_REJECTED'; reason: string | null }
+  | { event: 'DOCUMENT_REVIEWED'; type: string; status: 'APPROVED' | 'REJECTED'; note: string | null }
+  | { event: 'UPDATED' };
 
 class CaptainSocketService {
   private socket: Socket | null = null;
@@ -79,6 +88,29 @@ class CaptainSocketService {
 
   onMeter(cb: (reading: MeterReading) => void): void {
     this.socket?.on(EVENTS.RIDE_METER, cb);
+  }
+
+  // Compte bloqué ou supprimé par un admin — le serveur coupe le socket juste après
+  onAccountBlocked(cb: (payload: { reason: string | null }) => void): void {
+    this.socket?.on(EVENTS.ACCOUNT_BLOCKED, cb);
+  }
+
+  // Solde passé sous zéro ou véhicule rejeté / renvoyé en validation : le serveur a remis
+  // le capitaine hors ligne (code INSUFFICIENT_BALANCE ou VEHICLE_NOT_APPROVED)
+  onForcedOffline(cb: (payload: { code: string; message: string }) => void): void {
+    this.socket?.on(EVENTS.FORCED_OFFLINE, cb);
+  }
+
+  // Décision d'un admin sur le dossier : compte approuvé/refusé, pièce validée/refusée, modification.
+  // Retourne la fonction de désinscription (plusieurs écrans écoutent en même temps).
+  onDossierUpdated(cb: (event: DossierEvent) => void): () => void {
+    this.socket?.on(EVENTS.DOSSIER_UPDATED, cb);
+    return () => { this.socket?.off(EVENTS.DOSSIER_UPDATED, cb); };
+  }
+
+  offAccountEvents(): void {
+    this.socket?.off(EVENTS.ACCOUNT_BLOCKED);
+    this.socket?.off(EVENTS.FORCED_OFFLINE);
   }
 
   // Connexion et chaque reconnexion (retour au premier plan, réseau rétabli)

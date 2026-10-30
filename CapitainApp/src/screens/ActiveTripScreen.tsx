@@ -6,7 +6,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { useDriverStatus } from '../context/DriverStatusContext';
 import { captainSocketService, RideMeterPayload } from '../services/socket';
-import { apiGet, apiPost } from '../services/api';
+import { apiGet, apiPost, apiErrorMessage } from '../services/api';
+import { tr, useLanguage } from '../i18n/LanguageContext';
 import { C, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveTrip'>;
@@ -30,6 +31,7 @@ interface RideDetails {
 export default function ActiveTripScreen({ navigation, route }: Props) {
   const { rideId } = route.params;
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const { location, setHasActiveRide } = useDriverStatus();
 
   const [ride, setRide] = useState<RideDetails | null>(null);
@@ -48,7 +50,7 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
     apiGet<RideDetails>(`/rides/${rideId}`)
       .then((r) => { if (!cancelled) setRide(r); })
       .catch(() => {
-        Alert.alert('Erreur', 'Impossible de charger cette course.');
+        Alert.alert(tr('commonError'), tr('tripLoadError'));
         navigation.goBack();
       })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -61,8 +63,8 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
     });
     captainSocketService.onRideCancelled(({ rideId: cancelledId }) => {
       if (cancelledId !== rideId) return;
-      Alert.alert('Course annulée', 'Le client a annulé cette course.', [
-        { text: 'OK', onPress: () => navigation.popToTop() },
+      Alert.alert(tr('tripCancelledTitle'), tr('tripClientCancelledThis'), [
+        { text: tr('commonOk'), onPress: () => navigation.popToTop() },
       ]);
     });
     return () => {
@@ -77,7 +79,7 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
       const updated = await apiPost<RideDetails, object>(`/rides/${rideId}/start`, {});
       setRide(updated);
     } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.message ?? 'Impossible de démarrer la course.');
+      Alert.alert(t('commonError'), apiErrorMessage(e, t('homeStartError')));
     } finally {
       setStarting(false);
     }
@@ -93,12 +95,12 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
         endLatitude, endLongitude,
       });
       Alert.alert(
-        'Course terminée',
-        `Prix final : ${completed.price} MRU`,
-        [{ text: 'OK', onPress: () => navigation.popToTop() }],
+        t('tripCompletedTitle'),
+        t('tripFinalPrice')(completed.price),
+        [{ text: t('commonOk'), onPress: () => navigation.popToTop() }],
       );
     } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.message ?? 'Impossible de terminer la course.');
+      Alert.alert(t('commonError'), apiErrorMessage(e, t('homeCompleteError')));
     } finally {
       setCompleting(false);
     }
@@ -118,7 +120,7 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
     <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20 }]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {isInProgress ? 'Course en cours' : 'En route vers le client'}
+          {isInProgress ? t('tripInProgress') : t('tripEnRoute')}
         </Text>
       </View>
 
@@ -128,7 +130,7 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
             <Text style={styles.clientAvatarText}>{(ride.riderName?.[0] ?? '?').toUpperCase()}</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.clientName}>{ride.riderName ?? 'Client'}</Text>
+            <Text style={styles.clientName}>{ride.riderName ?? t('commonClient')}</Text>
             <Text style={styles.clientPhone}>{ride.riderPhone ?? ''}</Text>
           </View>
         </View>
@@ -136,7 +138,7 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
         <View style={styles.destRow}>
           <Ionicons name="navigate-outline" size={16} color={C.sub} />
           <Text style={styles.destText}>
-            {ride.destinationName ?? 'Trajet ouvert — destination à définir'}
+            {ride.destinationName ?? t('commonOpenTripNoDest')}
           </Text>
         </View>
 
@@ -144,9 +146,9 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
           <View style={styles.priceCard}>
             {ride.isOpenTrip ? (
               <>
-                <Text style={styles.distanceText}>{(meter?.distanceKm ?? 0).toFixed(2)} km</Text>
+                <Text style={styles.distanceText}>{(meter?.distanceKm ?? 0).toFixed(2)} {t('commonKm')}</Text>
                 <Text style={styles.priceText}>{meter?.price ?? ride.estimatedPrice ?? 0} MRU</Text>
-                <Text style={styles.meterHint}>Compteur en temps réel</Text>
+                <Text style={styles.meterHint}>{t('tripLiveMeter')}</Text>
               </>
             ) : (
               <Text style={styles.priceText}>{ride.estimatedPrice ?? 0} MRU</Text>
@@ -160,13 +162,13 @@ export default function ActiveTripScreen({ navigation, route }: Props) {
           <TouchableOpacity style={styles.completeBtn} onPress={handleComplete} disabled={completing} activeOpacity={0.85}>
             {completing
               ? <ActivityIndicator color={C.white} />
-              : <Text style={styles.completeBtnText}>Terminer la course</Text>}
+              : <Text style={styles.completeBtnText}>{t('homeCompleteRide')}</Text>}
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.startBtn} onPress={handleStart} disabled={starting} activeOpacity={0.85}>
             {starting
               ? <ActivityIndicator color={C.white} />
-              : <Text style={styles.startBtnText}>Démarrer la course</Text>}
+              : <Text style={styles.startBtnText}>{t('homeStartRide')}</Text>}
           </TouchableOpacity>
         )}
       </View>

@@ -4,12 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDriverStatus } from '../context/DriverStatusContext';
 import { navigationRef } from '../navigation/navigationRef';
 import { apiPost } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
 import { C, SH, RADIUS } from '../theme';
 
 const COUNTDOWN_SECONDS = 20; // purement indicatif — le vrai délai est géré côté serveur
 
 export default function IncomingRideModal() {
   const { incomingRequest, dismissIncomingRequest, setHasActiveRide } = useDriverStatus();
+  const { t } = useLanguage();
   const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
   const [busy, setBusy] = useState(false);
   const progress = useRef(new Animated.Value(1)).current;
@@ -87,24 +89,24 @@ export default function IncomingRideModal() {
               <Ionicons name="car-sport" size={22} color={C.white} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Nouvelle course</Text>
-              <Text style={styles.subtitle}>{secondsLeft}s pour répondre</Text>
+              <Text style={styles.title}>{t('incomingNewRide')}</Text>
+              <Text style={styles.subtitle}>{t('incomingSecondsLeft')(secondsLeft)}</Text>
             </View>
           </View>
 
           <View style={styles.destRow}>
             <Ionicons name="navigate-outline" size={16} color={C.sub} />
             <Text style={styles.destText} numberOfLines={1}>
-              {incomingRequest.destinationName ?? 'Trajet ouvert — destination à définir'}
+              {incomingRequest.destinationName ?? t('commonOpenTripNoDest')}
             </Text>
           </View>
 
           <View style={styles.actionsRow}>
             <TouchableOpacity style={styles.rejectBtn} onPress={handleReject} disabled={busy} activeOpacity={0.85}>
-              <Text style={styles.rejectText}>Refuser</Text>
+              <Text style={styles.rejectText}>{t('commonReject')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept} disabled={busy} activeOpacity={0.85}>
-              <Text style={styles.acceptText}>Accepter</Text>
+              <Text style={styles.acceptText}>{t('commonAccept')}</Text>
             </TouchableOpacity>
           </View>
         </View>

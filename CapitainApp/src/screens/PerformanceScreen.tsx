@@ -5,6 +5,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
+import { TranslationKey } from '../i18n/translations';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Performance'>;
@@ -14,27 +16,28 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Performance'>;
 // sont simulées pour prévisualiser l'écran. À remplacer par un vrai appel API
 // dès qu'un endpoint de gamification sera disponible.
 
-interface Badge { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; unlocked: boolean }
+interface Badge { key: string; label: TranslationKey | null; icon: keyof typeof Ionicons.glyphMap; unlocked: boolean }
 interface LeaderboardEntry {
   id: string; name: string; points: number; trend: 'up' | 'down' | 'flat'; you?: boolean;
 }
 
 const CURRENT_POINTS = 200;
 const CURRENT_RANK = 359;
-const NEXT_BADGE = { label: 'Guerrier de la route', target: 300 };
-const CURRENT_BADGE_LABEL = 'Marathonien';
+const NEXT_BADGE = { label: 'perfBadgeRoadWarrior', target: 300 } as const;
+const CURRENT_BADGE_LABEL = 'perfBadgeMarathon';
 
 const STATS = [
-  { icon: 'checkmark-done-circle' as const, value: '24', label: 'Achèvement',            color: C.accent,  bg: '#ECFDF5' },
-  { icon: 'star' as const,                  value: '0',  label: 'Note',                   color: C.warning, bg: '#FFF8E1' },
-  { icon: 'time' as const,                  value: '0',  label: "Temps d'arrivée estim.", color: '#3B82F6', bg: '#E3F2FD' },
-  { icon: 'flame' as const,                 value: '0',  label: "Zones d'affluence",       color: C.danger,  bg: '#FFF1F5' },
-];
+  { icon: 'checkmark-done-circle' as const, value: '24', label: 'perfStatCompletion', color: C.accent,  bg: '#ECFDF5' },
+  { icon: 'star' as const,                  value: '0',  label: 'commonRating',       color: C.warning, bg: '#FFF8E1' },
+  { icon: 'time' as const,                  value: '0',  label: 'perfStatEta',        color: '#3B82F6', bg: '#E3F2FD' },
+  { icon: 'flame' as const,                 value: '0',  label: 'perfStatHotZones',   color: C.danger,  bg: '#FFF1F5' },
+] as const;
 
+// label null : badge encore secret (« ??? »)
 const BADGES: Badge[] = [
-  { key: 'marathon', label: 'Marathonien', icon: 'trail-sign',  unlocked: true },
-  { key: 'mystery1', label: '???',         icon: 'help',        unlocked: false },
-  { key: 'mystery2', label: '???',         icon: 'help',        unlocked: false },
+  { key: 'marathon', label: 'perfBadgeMarathon', icon: 'trail-sign',  unlocked: true },
+  { key: 'mystery1', label: null,                icon: 'help',        unlocked: false },
+  { key: 'mystery2', label: null,                icon: 'help',        unlocked: false },
 ];
 
 const LEADERBOARD: LeaderboardEntry[] = [
@@ -61,6 +64,7 @@ function initials(name: string) {
 
 export default function PerformanceScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const progress = Math.min(1, CURRENT_POINTS / NEXT_BADGE.target);
 
   return (
@@ -71,22 +75,22 @@ export default function PerformanceScreen({ navigation }: Props) {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
             <Ionicons name="chevron-back" size={22} color={C.white} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Performance et classement</Text>
+          <Text style={styles.headerTitle}>{t('menuPerformance')}</Text>
           <View style={styles.backBtn}>
             <Ionicons name="help-circle-outline" size={20} color={C.white} />
           </View>
         </View>
 
-        <Text style={styles.pointsLabel}>Points actuels</Text>
+        <Text style={styles.pointsLabel}>{t('perfCurrentPoints')}</Text>
         <View style={styles.rankRow}>
           <Ionicons name="ribbon" size={16} color="#FFD60A" />
-          <Text style={styles.rankText}>Rang #{CURRENT_RANK}</Text>
+          <Text style={styles.rankText}>{t('perfRank')(CURRENT_RANK)}</Text>
         </View>
         <Text style={styles.pointsValue}>{CURRENT_POINTS}</Text>
 
         <View style={styles.progressRow}>
-          <Text style={styles.progressLabel}>{CURRENT_BADGE_LABEL}</Text>
-          <Text style={styles.progressSub}>{NEXT_BADGE.target - CURRENT_POINTS} pts to {NEXT_BADGE.label}</Text>
+          <Text style={styles.progressLabel}>{t(CURRENT_BADGE_LABEL)}</Text>
+          <Text style={styles.progressSub}>{t('perfPointsTo')(NEXT_BADGE.target - CURRENT_POINTS, t(NEXT_BADGE.label))}</Text>
         </View>
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
@@ -105,26 +109,26 @@ export default function PerformanceScreen({ navigation }: Props) {
                 <Ionicons name={s.icon} size={20} color={s.color} />
               </View>
               <Text style={styles.statValue}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
+              <Text style={styles.statLabel}>{t(s.label)}</Text>
             </View>
           ))}
         </View>
 
         {/* ── Badges ── */}
-        <Text style={styles.sectionTitle}>Badges débloqués</Text>
+        <Text style={styles.sectionTitle}>{t('perfUnlockedBadges')}</Text>
         <View style={styles.badgeRow}>
           {BADGES.map((b) => (
             <View key={b.key} style={styles.badgeItem}>
               <View style={[styles.badgeCircle, b.unlocked ? styles.badgeCircleUnlocked : styles.badgeCircleLocked]}>
                 <Ionicons name={b.icon} size={26} color={b.unlocked ? C.warning : C.muted} />
               </View>
-              <Text style={[styles.badgeLabel, !b.unlocked && styles.badgeLabelLocked]}>{b.label}</Text>
+              <Text style={[styles.badgeLabel, !b.unlocked && styles.badgeLabelLocked]}>{b.label ? (t(b.label) as string) : '???'}</Text>
             </View>
           ))}
         </View>
 
         {/* ── Classement ── */}
-        <Text style={styles.sectionTitle}>Classement</Text>
+        <Text style={styles.sectionTitle}>{t('perfLeaderboard')}</Text>
         <View style={styles.leaderboard}>
           {LEADERBOARD.map((entry, idx) => {
             const rank = idx + 1;
@@ -143,7 +147,7 @@ export default function PerformanceScreen({ navigation }: Props) {
                   <Text style={styles.avatarText}>{initials(entry.name)}</Text>
                 </View>
                 <Text style={styles.entryName} numberOfLines={1}>{entry.name}</Text>
-                <Text style={styles.entryPoints}>{entry.points} pts</Text>
+                <Text style={styles.entryPoints}>{t('perfPoints')(entry.points)}</Text>
                 <Ionicons name={trend.icon} size={16} color={trend.color} />
               </View>
             );

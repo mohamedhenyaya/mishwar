@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Avatar from './Avatar';
 import { PublicUser } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
 import { C, RADIUS } from '../theme';
 
 export interface CancellationNotice {
@@ -16,6 +17,7 @@ interface Props {
 
 // Popup « course annulée par le client » aux couleurs de l'annulation
 export default function CancellationModal({ notice, onClose }: Props) {
+  const { t } = useLanguage();
   const scale = useRef(new Animated.Value(0.85)).current;
 
   useEffect(() => {
@@ -35,25 +37,23 @@ export default function CancellationModal({ notice, onClose }: Props) {
                   <Text style={styles.iconText}>✕</Text>
                 </View>
               </View>
-              <Text style={styles.title}>Course annulée</Text>
-              <Text style={styles.subtitle}>par le client</Text>
+              <Text style={styles.title}>{t('tripCancelledTitle')}</Text>
+              <Text style={styles.subtitle}>{t('cancelModalByClient')}</Text>
             </View>
 
             <View style={styles.body}>
               <View style={styles.clientRow}>
                 <Avatar photoUrl={notice.user.photoUrl} name={notice.user.name} size={44} color={C.danger} />
                 <View style={styles.clientInfo}>
-                  <Text style={styles.clientName}>{notice.user.name ?? 'Client'}</Text>
+                  <Text style={styles.clientName}>{notice.user.name ?? t('commonClient')}</Text>
                   <Text style={styles.clientDest} numberOfLines={1}>📍 {notice.destination}</Text>
                 </View>
               </View>
 
-              <Text style={styles.message}>
-                Vous êtes de nouveau disponible : les prochaines demandes vous seront envoyées automatiquement.
-              </Text>
+              <Text style={styles.message}>{t('cancelModalMessage')}</Text>
 
               <TouchableOpacity style={styles.button} onPress={onClose} activeOpacity={0.85}>
-                <Text style={styles.buttonText}>Compris</Text>
+                <Text style={styles.buttonText}>{t('commonUnderstood')}</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>

@@ -13,9 +13,15 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 
 import { captainSocketService, MeterReading, RideRequestPayload } from '../services/socket';
-import { apiGet, apiPatch, apiPost } from '../services/api';
+import { apiErrorMessage, apiGet, apiPatch, apiPost, signOut } from '../services/api';
 import { ensureNotificationPermission, notify } from '../services/notifications';
+import { DossierItem } from '../data/documents';
+import { tr, useLanguage } from '../i18n/LanguageContext';
 import { playAlert, startRinging, stopRinging } from '../services/alerts';
+import {
+  dismissRideOffer, ensureRideOfferPermissions, parseRideUrl, registerRideOffers, releaseLockScreen,
+  rideOffersAvailable, startOnlineTracking, stopOnlineTracking,
+} from '../services/rideOffers';
 import Avatar from '../components/Avatar';
 import CancellationModal, { CancellationNotice } from '../components/CancellationModal';
 import { openDirections } from '../services/directions';
@@ -28,6 +34,9 @@ import {
 import { C, G, SH, RADIUS } from '../theme';
 
 const DELTA = { latitudeDelta: 0.012, longitudeDelta: 0.012 };
+
+// Liens de l'écran d'appel déjà traités (l'écran d'accueil peut être remonté après reconnexion)
+const handledRideLinks = new Set<string>();
 
 type RidePhase = 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS';
 
@@ -63,20 +72,21 @@ const toActiveRide = (d: RideDetails): ActiveRide => ({
   phase:           d.status as RidePhase,
 });
 
-const PHASE_TITLES: Record<RidePhase, string> = {
-  ACCEPTED:    '📍  En route vers le client',
-  ARRIVED:     '🙋  Client en attente',
-  IN_PROGRESS: '🏁  Course en cours',
+const formatPrice = (price: RideRequestPayload['price']) =>
+  price != null ? `${Math.round(Number(price))} MRU` : tr('homeMeterPrice');
+
+// Solde négatif ou véhicule non approuvé : le serveur refuse le passage en ligne et les courses
+interface OnlineBlock { code: string; message: string }
+const ONLINE_BLOCK_CODES = ['INSUFFICIENT_BALANCE', 'VEHICLE_NOT_APPROVED', 'INSURANCE_EXPIRED'];
+const onlineBlock = (e: any): OnlineBlock | null => {
+  const data = e?.response?.data;
+  return ONLINE_BLOCK_CODES.includes(data?.code) ? { code: data.code, message: data.message } : null;
 };
 
-const formatPrice = (price: RideRequestPayload['price']) =>
-  price != null ? `${Math.round(Number(price))} MRU` : 'Au compteur';
-
-const apiErrorMessage = (e: any, fallback: string): string =>
-  e?.response?.data?.message ?? fallback;
-
+// Les écouteurs du socket (enregistrés une seule fois) lisent la langue courante via tr()
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const mapRef = useRef<MapView>(null);
 
   const [location,   setLocation]   = useState<Coordinates | null>(null);
@@ -106,6 +116,24 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     activeRideRef.current   = activeRide;
   }, [activeRide]);
 
+  // Hors ligne, puis : solde négatif → « Mon compte » pour recharger ;
+  // compte non approuvé ou assurance expirée → message du serveur et accès à « Mon profil »
+  const handleOnlineBlock = useCallback((block: OnlineBlock) => {
+    setIsOnline(false);
+    setRideRequest(null);
+    void stopOnlineTracking();
+    if (block.code === 'INSUFFICIENT_BALANCE') {
+      navigation.navigate('MonCompte', { insufficientBalance: true });
+      return;
+    }
+    Alert.alert(tr(block.code === 'INSURANCE_EXPIRED' ? 'homeInsuranceExpired' : 'homeAccountNotApproved'), block.message, [
+      { text: tr('commonLater'), style: 'cancel' },
+      { text: tr('commonMyProfile'), onPress: () => navigation.navigate('Profil') },
+    ]);
+  }, [navigation]);
+  const handleOnlineBlockRef = useRef(handleOnlineBlock);
+  handleOnlineBlockRef.current = handleOnlineBlock;
+
   // Popup « le client a annulé » — une seule fois par course (socket + vérification au premier plan)
   const announcedCancellations = useRef(new Set<string>());
   const [cancelNotice, setCancelNotice] = useState<CancellationNotice | null>(null);
@@ -114,21 +142,32 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     announcedCancellations.current.add(ride.rideId);
     setActiveRide(null);
     setMeter(null);
-    const name = ride.user.name ?? 'Le client';
+    const name = ride.user.name ?? tr('homeTheClientCap');
     playAlert('cancel');
-    notify('Course annulée par le client', `${name} a annulé la course.`);
+    notify(tr('homeCancelledByClientTitle'), tr('homeCancelledByClientBody')(name));
     setCancelNotice({
       user:        ride.user,
-      destination: ride.isOpenTrip ? 'Trajet ouvert' : ride.destinationName,
+      destination: ride.isOpenTrip ? tr('commonOpenTrip') : ride.destinationName,
     });
   };
 
-  // Sonnerie en boucle tant qu'une demande de course est affichée
-  // (arrêtée à l'acceptation, au refus, si la course est prise ailleurs ou annulée)
+  // Sonnerie en boucle tant qu'une demande de course est affichée à l'écran
+  // (arrêtée à l'acceptation, au refus, si la course est prise ailleurs ou annulée).
+  // App en arrière-plan : c'est l'écran d'appel Android qui sonne.
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   useEffect(() => {
-    if (rideRequest) startRinging();
-    else stopRinging();
-  }, [rideRequest?.rideId]);
+    const sub = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (rideRequest && appActive) {
+      dismissRideOffer(rideRequest.rideId); // la carte à l'écran remplace l'écran d'appel
+      startRinging();
+    } else {
+      stopRinging();
+    }
+    if (!rideRequest) releaseLockScreen();
+  }, [rideRequest?.rideId, appActive]);
   useEffect(() => stopRinging, []);
 
   // Annulation manquée pendant que l'app était en arrière-plan
@@ -191,11 +230,14 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       const me = await apiGet<DriverProfile>('/drivers/me');
       setProfile(me);
       setIsOnline(me.status !== 'OFFLINE');
+      // Encore en ligne (app relancée) : le suivi en arrière-plan doit tourner
+      if (me.status === 'ONLINE') void startOnlineTracking();
     } catch { /* réseau indisponible */ }
   }, []);
 
   useEffect(() => {
     ensureNotificationPermission();
+    registerRideOffers(); // téléphone joignable par l'écran « Nouvelle course », app fermée
     apiGet<RideDetails | null>('/rides/active')
       .then((ride) => { if (ride) setActiveRide(toActiveRide(ride)); })
       .catch(() => {});
@@ -222,14 +264,41 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         if (!isOnlineRef.current || activeRideIdRef.current) return;
         apiPatch('/drivers/status', { status: 'ONLINE' })
           .then(() => { if (locationRef.current) captainSocketService.updateLocation(locationRef.current); })
-          .catch(() => {});
+          .catch((e) => {
+            const block = onlineBlock(e);
+            if (block) handleOnlineBlockRef.current(block);
+          });
+      });
+
+      captainSocketService.onAccountBlocked(({ reason }) => {
+        signOut(reason ?? tr('homeAccountBlocked')); // message complet du serveur (durée et motif)
+      });
+      captainSocketService.onForcedOffline((block) => handleOnlineBlockRef.current(block));
+      captainSocketService.onDossierUpdated((e) => {
+        const toProfile = { text: tr('commonMyProfile'), onPress: () => navigation.navigate('Profil') };
+        const later = { text: tr('commonLater'), style: 'cancel' as const };
+        if (e.event === 'ACCOUNT_APPROVED') {
+          notify(tr('homeAccountApprovedTitle'), tr('homeAccountApprovedNotif'));
+          Alert.alert(tr('homeAccountApprovedTitle'), tr('homeAccountApprovedAlert'));
+        } else if (e.event === 'DOSSIER_REJECTED') {
+          notify(tr('homeDossierRejectedTitle'), e.reason ?? tr('homeDossierRejectedNotif'));
+          Alert.alert(tr('homeDossierRejectedTitle'), tr('homeDossierRejectedAlert')(e.reason), [later, toProfile]);
+        } else if (e.event === 'DOCUMENT_REVIEWED' && e.status === 'REJECTED') {
+          const label = tr('dossierLabels')[e.type as DossierItem] ?? tr('homeADocument');
+          notify(tr('homeDocumentRejectedTitle'), tr('homeDocumentRejectedNotif')(label, e.note));
+          Alert.alert(tr('homeDocumentRejectedTitle'), tr('homeDocumentRejectedAlert')(label, e.note), [later, toProfile]);
+        }
+        loadProfile();
       });
 
       captainSocketService.onRideRequest((payload) => {
         setRideRequest((current) => current ?? payload);
-        notify('Nouvelle course 🚕', payload.isOpenTrip
-          ? 'Trajet ouvert · prix au compteur'
-          : `Destination : ${payload.destinationName} · ${formatPrice(payload.price)}`);
+        // Build Android : l'écran d'appel (message Firebase) remplace la notification
+        if (!rideOffersAvailable) {
+          notify(tr('homeNewRideNotif'), payload.isOpenTrip
+            ? tr('homeNewRideOpenTripBody')
+            : tr('homeNewRideBody')(payload.destinationName, formatPrice(payload.price)));
+        }
       });
       captainSocketService.onMeter((reading) => {
         if (reading.rideId === activeRideIdRef.current) setMeter(reading);
@@ -237,6 +306,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       // Course prise par un autre chauffeur, expirée ou annulée par le client
       const dropRide = ({ rideId }: { rideId: string }) => {
         setRideRequest((r) => (r?.rideId === rideId ? null : r));
+        dismissRideOffer(rideId);
         const ride = activeRideRef.current;
         if (ride?.rideId === rideId) announceClientCancellation(ride);
       };
@@ -250,6 +320,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       captainSocketService.offMeter();
       captainSocketService.offRideUnavailable();
       captainSocketService.offRideCancelled();
+      captainSocketService.offAccountEvents();
       captainSocketService.disconnect();
     };
   }, [initLocation]);
@@ -292,8 +363,13 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       if (goingOnline && location) captainSocketService.updateLocation(location);
       if (!goingOnline) setRideRequest(null);
       setIsOnline(goingOnline);
+      // En ligne : écran de course et position garantis même app fermée
+      if (goingOnline) void ensureRideOfferPermissions().then(startOnlineTracking);
+      else void stopOnlineTracking();
     } catch (e) {
-      Alert.alert('Erreur', apiErrorMessage(e, 'Impossible de changer le statut.'));
+      const block = onlineBlock(e);
+      if (block) handleOnlineBlock(block);
+      else Alert.alert(t('commonError'), apiErrorMessage(e, t('homeStatusError')));
     }
   };
 
@@ -304,36 +380,57 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     try {
       await action();
     } catch (e) {
-      Alert.alert('Erreur', apiErrorMessage(e, fallback));
+      const block = onlineBlock(e);
+      if (block) handleOnlineBlock(block);
+      else Alert.alert(t('commonError'), apiErrorMessage(e, fallback));
     } finally {
       setBusy(false);
     }
   };
 
-  const acceptRide = () => rideRequest && runRideAction(async () => {
+  const acceptOffer = (rideId: string) => runRideAction(async () => {
     try {
       // La réponse contient le profil du client
-      const details = await apiPost<RideDetails>(`/rides/${rideRequest.rideId}/accept`, {});
+      const details = await apiPost<RideDetails>(`/rides/${rideId}/accept`, {});
       setActiveRide(toActiveRide(details));
     } finally {
       setRideRequest(null);
     }
-  }, 'Cette course n\'est plus disponible.');
+  }, t('homeRideUnavailable'));
+  const acceptRide = () => rideRequest && acceptOffer(rideRequest.rideId);
+
+  // App ouverte depuis l'écran d'appel : affiche la demande, ou l'accepte directement (« Accepter »)
+  const acceptOfferRef = useRef(acceptOffer);
+  acceptOfferRef.current = acceptOffer;
+  useEffect(() => {
+    const handle = (url: string | null | undefined) => {
+      const link = url ? parseRideUrl(url) : null;
+      if (!link || handledRideLinks.has(url!)) return;
+      handledRideLinks.add(url!);
+      dismissRideOffer(link.offer.rideId);
+      navigation.navigate('Main');
+      if (link.action === 'accept') acceptOfferRef.current(link.offer.rideId);
+      else setRideRequest((current) => current ?? link.offer);
+    };
+    Linking.getInitialURL().then(handle).catch(() => {});
+    const sub = Linking.addEventListener('url', ({ url }) => handle(url));
+    return () => sub.remove();
+  }, [navigation]);
 
   const rejectRide = () => rideRequest && runRideAction(async () => {
     setRideRequest(null);
     await apiPost(`/rides/${rideRequest.rideId}/reject`, {});
-  }, 'Impossible de refuser la course.');
+  }, t('homeRejectError'));
 
   const arriveRide = () => activeRide && runRideAction(async () => {
     await apiPost(`/rides/${activeRide.rideId}/arrive`, {});
     setActiveRide({ ...activeRide, phase: 'ARRIVED' });
-  }, 'Impossible de signaler votre arrivée.');
+  }, t('homeArriveError'));
 
   const startRide = () => activeRide && runRideAction(async () => {
     await apiPost(`/rides/${activeRide.rideId}/start`, {});
     setActiveRide({ ...activeRide, phase: 'IN_PROGRESS' });
-  }, 'Impossible de démarrer la course.');
+  }, t('homeStartError'));
 
   const completeRide = () => activeRide && runRideAction(async () => {
     // Sans destination connue, le prix est calculé sur la position d'arrivée réelle
@@ -349,43 +446,43 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     setClientRating(0);
     setRideToRate({ rideId: activeRide.rideId, user: activeRide.user, price });
     playAlert('success');
-  }, 'Impossible de terminer la course.');
+  }, t('homeCompleteError'));
 
   const submitClientRating = (skip = false) => rideToRate && runRideAction(async () => {
     if (!skip) await apiPost(`/rides/${rideToRate.rideId}/rate-rider`, { stars: clientRating });
     setRideToRate(null);
     loadProfile(); // nombre de courses à jour
-  }, 'Impossible d\'envoyer la note.');
+  }, t('homeRateError'));
 
   const callClient = (user: PublicUser) => {
-    Linking.openURL(`tel:${user.phone}`).catch(() => Alert.alert('Appel impossible', user.phone));
+    Linking.openURL(`tel:${user.phone}`).catch(() => Alert.alert(t('homeCallFailed'), user.phone));
   };
 
   // Avant l'arrivée : itinéraire vers le client. Ensuite : vers la destination (absente en trajet ouvert).
   const navigationTarget = (ride: ActiveRide): { coords: Coordinates; title: string } | null =>
     ride.phase === 'ACCEPTED'
-      ? { coords: ride.pickup, title: 'Aller chercher le client' }
-      : ride.destination ? { coords: ride.destination, title: 'Aller à la destination' } : null;
+      ? { coords: ride.pickup, title: t('homeGoPickup') }
+      : ride.destination ? { coords: ride.destination, title: t('homeGoDestination') } : null;
 
   const cancelActiveRide = () => {
     if (!activeRide) return;
-    Alert.alert('Annuler la course ?', 'Le client sera prévenu et pourra faire une nouvelle demande.', [
-      { text: 'Non', style: 'cancel' },
+    Alert.alert(t('homeCancelRideTitle'), t('homeCancelRideMessage'), [
+      { text: t('commonNo'), style: 'cancel' },
       {
-        text: 'Oui, annuler', style: 'destructive',
+        text: t('homeYesCancel'), style: 'destructive',
         onPress: () => runRideAction(async () => {
           await apiPost(`/rides/${activeRide.rideId}/driver-cancel`, {});
           setActiveRide(null);
           setMeter(null);
-        }, 'Impossible d\'annuler la course.'),
+        }, t('homeCancelRideError')),
       },
     ]);
   };
 
   const ridePhaseAction: Record<RidePhase, { label: string; onPress: () => void }> = {
-    ACCEPTED:    { label: 'Je suis arrivé',     onPress: arriveRide },
-    ARRIVED:     { label: 'Démarrer la course', onPress: startRide },
-    IN_PROGRESS: { label: 'Terminer la course', onPress: completeRide },
+    ACCEPTED:    { label: t('homeArrived'),      onPress: arriveRide },
+    ARRIVED:     { label: t('homeStartRide'),    onPress: startRide },
+    IN_PROGRESS: { label: t('homeCompleteRide'), onPress: completeRide },
   };
 
   const centerMap = () => {
@@ -421,7 +518,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         </MapView>
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.mapPlaceholder]}>
-          <Text style={styles.mapPlaceholderText}>Localisation…</Text>
+          <Text style={styles.mapPlaceholderText}>{t('homeLocating')}</Text>
         </View>
       )}
 
@@ -446,7 +543,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 />
               )}
               <View style={[styles.pillDot, { backgroundColor: isOnline ? C.accent : C.danger }]} />
-              <Text style={styles.pillLabel}>{isOnline ? 'En ligne' : 'Hors ligne'}</Text>
+              <Text style={styles.pillLabel}>{isOnline ? t('commonOnline') : t('commonOffline')}</Text>
             </View>
           </TouchableOpacity>
         </Animated.View>
@@ -473,16 +570,16 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           /* Notation du client après la course */
           <View style={styles.rideCard}>
             <View style={styles.rateBody}>
-              <Text style={styles.rateTitle}>Course terminée · {rideToRate.price} MRU</Text>
+              <Text style={styles.rateTitle}>{t('homeRideCompleted')(rideToRate.price)}</Text>
               <Avatar photoUrl={rideToRate.user.photoUrl} name={rideToRate.user.name} size={64} color={C.primary} />
-              <Text style={styles.rateQuestion}>Notez {rideToRate.user.name ?? 'le client'}</Text>
+              <Text style={styles.rateQuestion}>{t('homeRateClient')(rideToRate.user.name ?? t('commonTheClient'))}</Text>
               <StarRating value={clientRating} onChange={setClientRating} size={36} />
             </View>
             <View style={styles.rideActions}>
               {busy ? <ActivityIndicator color={C.primary} /> : (
                 <>
                   <TouchableOpacity style={[styles.rideBtn, styles.rideBtnGhost]} onPress={() => submitClientRating(true)} activeOpacity={0.8}>
-                    <Text style={styles.rideBtnGhostText}>Plus tard</Text>
+                    <Text style={styles.rideBtnGhostText}>{t('commonLater')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.rideBtn, styles.rideBtnMain, clientRating === 0 && { opacity: 0.4 }]}
@@ -490,7 +587,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                     disabled={clientRating === 0}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.rideBtnMainText}>Envoyer</Text>
+                    <Text style={styles.rideBtnMainText}>{t('commonSend')}</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -505,10 +602,10 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               style={styles.rideHeader}
             >
               <Text style={styles.rideHeaderTitle}>
-                {rideRequest ? '🚕  Nouvelle course' : PHASE_TITLES[activeRide!.phase]}
+                {rideRequest ? t('homeNewRide') : t('homePhaseTitles')[activeRide!.phase]}
               </Text>
               <Text style={styles.ridePrice}>
-                {(rideRequest ?? activeRide)!.isOpenTrip ? 'Au compteur' : formatPrice((rideRequest ?? activeRide)!.price)}
+                {(rideRequest ?? activeRide)!.isOpenTrip ? t('homeMeterPrice') : formatPrice((rideRequest ?? activeRide)!.price)}
               </Text>
             </LinearGradient>
 
@@ -517,9 +614,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               <View style={styles.clientRow}>
                 <Avatar photoUrl={activeRide.user.photoUrl} name={activeRide.user.name} size={52} color={C.primary} />
                 <View style={styles.clientInfo}>
-                  <Text style={styles.clientName}>{activeRide.user.name ?? 'Client'}</Text>
+                  <Text style={styles.clientName}>{activeRide.user.name ?? t('commonClient')}</Text>
                   <Text style={styles.clientMeta}>
-                    ⭐ {activeRide.user.rating.toFixed(1)} · {activeRide.user.totalRides} course{activeRide.user.totalRides > 1 ? 's' : ''}
+                    ⭐ {activeRide.user.rating.toFixed(1)} · {t('ridesCount')(activeRide.user.totalRides)}
                   </Text>
                   <Text style={styles.clientMeta}>{activeRide.user.phone}</Text>
                 </View>
@@ -542,10 +639,10 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             )}
 
             <View style={styles.rideBody}>
-              <Text style={styles.rideLabel}>Destination</Text>
+              <Text style={styles.rideLabel}>{t('homeDestination')}</Text>
               <Text style={styles.rideDest} numberOfLines={2}>
                 {(rideRequest ?? activeRide)!.isOpenTrip
-                  ? 'Trajet ouvert · le client vous indiquera la destination'
+                  ? t('homeOpenTripClientWillTell')
                   : (rideRequest ?? activeRide)!.destinationName}
               </Text>
             </View>
@@ -555,7 +652,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
               <View style={styles.meterRow}>
                 <Text style={styles.meterPrice}>{meter ? `${meter.price} MRU` : '…'}</Text>
                 <Text style={styles.meterStat}>
-                  {meter ? meter.distanceKm.toFixed(1) : '0.0'} km · {meter ? meter.stoppedMinutes : 0} min d'arrêt
+                  {t('homeMeterStats')(meter ? meter.distanceKm.toFixed(1) : '0.0', meter ? meter.stoppedMinutes : 0)}
                 </Text>
               </View>
             )}
@@ -567,10 +664,10 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             ) : rideRequest ? (
               <View style={styles.rideActions}>
                 <TouchableOpacity style={[styles.rideBtn, styles.rideBtnGhost]} onPress={rejectRide} activeOpacity={0.8}>
-                  <Text style={styles.rideBtnGhostText}>Refuser</Text>
+                  <Text style={styles.rideBtnGhostText}>{t('commonReject')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.rideBtn, styles.rideBtnMain]} onPress={acceptRide} activeOpacity={0.85}>
-                  <Text style={styles.rideBtnMainText}>Accepter</Text>
+                  <Text style={styles.rideBtnMainText}>{t('commonAccept')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -588,7 +685,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             {/* Annulation possible tant que la course n'a pas démarré */}
             {activeRide && activeRide.phase !== 'IN_PROGRESS' && !busy && (
               <TouchableOpacity style={styles.cancelRideBtn} onPress={cancelActiveRide} activeOpacity={0.7}>
-                <Text style={styles.cancelRideText}>Annuler la course</Text>
+                <Text style={styles.cancelRideText}>{t('homeCancelRide')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -602,22 +699,22 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             >
               <View style={styles.onlineTitleRow}>
                 <Ionicons name="radio" size={14} color={C.white} />
-                <Text style={styles.onlineTitle}>En attente de courses…</Text>
+                <Text style={styles.onlineTitle}>{t('homeWaitingRides')}</Text>
               </View>
               <View style={styles.onlineStats}>
                 <View style={styles.onlineStat}>
                   <Text style={styles.onlineStatVal}>{todayRides}</Text>
-                  <Text style={styles.onlineStatLabel}>courses</Text>
+                  <Text style={styles.onlineStatLabel}>{t('homeRidesLower')}</Text>
                 </View>
                 <View style={styles.onlineStatDiv} />
                 <View style={styles.onlineStat}>
                   <Text style={styles.onlineStatVal}>{todayEarnings} MRU</Text>
-                  <Text style={styles.onlineStatLabel}>aujourd'hui</Text>
+                  <Text style={styles.onlineStatLabel}>{t('homeToday')}</Text>
                 </View>
               </View>
             </LinearGradient>
             <TouchableOpacity style={styles.goOfflineBtn} onPress={toggleOnline} activeOpacity={0.8}>
-              <Text style={styles.goOfflineBtnText}>Passer hors ligne</Text>
+              <Text style={styles.goOfflineBtnText}>{t('homeGoOffline')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -628,8 +725,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 <Ionicons name="power" size={20} color={C.danger} />
               </View>
               <View>
-                <Text style={styles.offlineTitle}>Vous êtes hors ligne</Text>
-                <Text style={styles.offlineSub}>Activez pour recevoir des courses</Text>
+                <Text style={styles.offlineTitle}>{t('homeYouAreOffline')}</Text>
+                <Text style={styles.offlineSub}>{t('homeActivateToReceive')}</Text>
               </View>
             </View>
             <TouchableOpacity onPress={toggleOnline} activeOpacity={0.85} style={styles.goOnlineBtnWrap}>
@@ -638,7 +735,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={styles.goOnlineBtn}
               >
-                <Text style={styles.goOnlineBtnText}>En ligne</Text>
+                <Text style={styles.goOnlineBtnText}>{t('commonOnline')}</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "263363859837",
+    "project_id": "mishwar-b45f6",
+    "storage_bucket": "mishwar-b45f6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:263363859837:android:626a361ce7b0f516baa814",
+        "android_client_info": {
+          "package_name": "com.mishwar.capitaine"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA1BNGVso9lFUWmBQpUvhejGn17FcjHIBc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

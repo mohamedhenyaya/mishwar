@@ -7,35 +7,51 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { RootStackParamList, RideHistoryItem } from '../types';
+import { RootStackParamList, RideHistoryItem, RideStatus } from '../types';
 import { apiGet } from '../services/api';
+import { placeName } from '../services/geocode';
+import { useLanguage } from '../i18n/LanguageContext';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Historique'>;
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
-const MOCK: RideHistoryItem[] = [
-  { id:'1', status:'completed',           date:'26/06  17:39', originLabel:'ويسترين يونيون & مونيغرام، لاسبالماس', destLabel:'Trajet ouvert',                          clientName:'',        price:210, currency:'MRU' },
-  { id:'2', status:'cancelled_by_client', date:'26/06  17:31', originLabel:'Epicérie Wel Mahfou8, Essahraoui',      destLabel:'ANATOLİA CAFE RESTAURANT, Las Pal...',  clientName:'Mokhtar', price:100, currency:'MRU' },
-  { id:'3', status:'completed',           date:'26/06  12:38', originLabel:'Améliorer Google Maps, Tevragh Ze...',  destLabel:'Trajet ouvert',                          clientName:'soumeye', price:400, currency:'MRU' },
-  { id:'4', status:'completed',           date:'25/06  23:49', originLabel:'لمسيد لخظر، لكصر',                      destLabel:'Trajet ouvert',                          clientName:'',        price:175, currency:'MRU' },
-  { id:'5', status:'cancelled_by_client', date:'25/06  19:12', originLabel:'Station Total, Tevragh Zeina',          destLabel:'Hôpital Mère et Enfant',                 clientName:'Ahmed',   price:80,  currency:'MRU' },
-  { id:'6', status:'completed',           date:'25/06  15:05', originLabel:'Carrefour Ould Mey, Ksar',              destLabel:'Aéroport International Nouakchott',      clientName:'Fatima',  price:650, currency:'MRU' },
-];
+const HISTORY_DAYS = 30;
 
-const STATUS_META: Record<string, { label: string; icon: IoniconName; bg: string; color: string; borderColor: string }> = {
-  completed:           { label: 'Course finie',      icon: 'checkmark',   bg: '#ECFDF5', color: C.accent,  borderColor: C.accentDk },
-  cancelled_by_client: { label: 'Client a annulé',   icon: 'close',       bg: '#FFF1F5', color: C.danger,  borderColor: C.dangerDk },
-  cancelled_by_driver: { label: 'Vous avez annulé',  icon: 'close',       bg: '#FFF8EC', color: C.warning, borderColor: C.warningDk },
-  ongoing:             { label: 'En cours',           icon: 'arrow-forward', bg: '#F5F0FF', color: C.primary, borderColor: C.primaryDk },
+// Libellés traduits : t('historyStatus')
+const STATUS_META: Record<RideStatus, { icon: IoniconName; bg: string; color: string; borderColor: string }> = {
+  completed:           { icon: 'checkmark',     bg: '#ECFDF5', color: C.accent,  borderColor: C.accentDk },
+  cancelled_by_client: { icon: 'close',         bg: '#FFF1F5', color: C.danger,  borderColor: C.dangerDk },
+  cancelled_by_driver: { icon: 'close',         bg: '#FFF8EC', color: C.warning, borderColor: C.warningDk },
+  cancelled_other:     { icon: 'close',         bg: '#F4F4F6', color: C.sub,     borderColor: C.border },
+  ongoing:             { icon: 'arrow-forward', bg: '#F5F0FF', color: C.primary, borderColor: C.primaryDk },
 };
+
+const isCancelled = (status: RideStatus) => status.startsWith('cancelled');
+
+// 2026-06-26T17:39:00Z → « 26/06  17:39 » (heure du téléphone)
+function formatRideDate(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}  ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 // ─── Ride card with entrance animation ───────────────────────────────────────
 
 function RideCard({ item, index }: { item: RideHistoryItem; index: number }) {
-  const meta    = STATUS_META[item.status] ?? STATUS_META.completed;
+  const { t } = useLanguage();
+  const status  = STATUS_META[item.status] ? item.status : 'completed';
+  const meta    = STATUS_META[status];
   const slideAnim = useRef(new Animated.Value(40)).current;
   const opacity   = useRef(new Animated.Value(0)).current;
+
+  // Adresse du point de départ, retrouvée à partir des coordonnées
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    placeName(item.startLatitude, item.startLongitude).then((name) => { if (!cancelled) setOrigin(name); });
+    return () => { cancelled = true; };
+  }, [item.startLatitude, item.startLongitude]);
 
   useEffect(() => {
     const delay = index * 60;
@@ -55,9 +71,9 @@ function RideCard({ item, index }: { item: RideHistoryItem; index: number }) {
         <View style={styles.cardHeader}>
           <View style={[styles.statusBadge, { backgroundColor: meta.bg, borderColor: meta.borderColor }]}>
             <Ionicons name={meta.icon} size={11} color={meta.color} />
-            <Text style={[styles.statusLabel, { color: meta.color }]}>{meta.label}</Text>
+            <Text style={[styles.statusLabel, { color: meta.color }]}>{t('historyStatus')[status]}</Text>
           </View>
-          <Text style={styles.cardDate}>{item.date}</Text>
+          <Text style={styles.cardDate}>{formatRideDate(item.date)}</Text>
         </View>
 
         {/* Route */}
@@ -68,9 +84,11 @@ function RideCard({ item, index }: { item: RideHistoryItem; index: number }) {
             <View style={[styles.routeDot, styles.routeDotDest, { borderColor: C.danger }]} />
           </View>
           <View style={styles.routeLabels}>
-            <Text style={styles.routeOrigin} numberOfLines={1}>{item.originLabel}</Text>
+            <Text style={styles.routeOrigin} numberOfLines={1}>{origin ?? t('historyPickupPoint')}</Text>
             <View style={styles.routeGap} />
-            <Text style={styles.routeDest} numberOfLines={1}>{item.destLabel}</Text>
+            <Text style={styles.routeDest} numberOfLines={1}>
+              {item.isOpenTrip || !item.destinationName ? t('commonOpenTrip') : item.destinationName}
+            </Text>
           </View>
         </View>
 
@@ -78,7 +96,7 @@ function RideCard({ item, index }: { item: RideHistoryItem; index: number }) {
         <View style={styles.cardFooter}>
           <View style={styles.clientChip}>
             <Ionicons name="person" size={12} color={C.sub} />
-            <Text style={styles.clientName}>{item.clientName || 'Inconnu'}</Text>
+            <Text style={styles.clientName}>{item.clientName || t('historyUnknown')}</Text>
           </View>
           <View style={[styles.priceChip, { backgroundColor: meta.bg }]}>
             <Text style={[styles.priceText, { color: meta.color }]}>
@@ -114,16 +132,19 @@ const sum = StyleSheet.create({
 
 export default function HistoriqueScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [rides,      setRides]      = useState<RideHistoryItem[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [failed,     setFailed]     = useState(false);
 
   const fetchHistory = useCallback(async () => {
     try {
-      const data = await apiGet<RideHistoryItem[]>('/drivers/history?days=30');
+      const data = await apiGet<RideHistoryItem[]>(`/rides/driver/history?days=${HISTORY_DAYS}`);
       setRides(data);
+      setFailed(false);
     } catch {
-      setRides(MOCK);
+      setFailed(true); // les courses déjà affichées restent visibles
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -133,7 +154,7 @@ export default function HistoriqueScreen({ navigation }: Props) {
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   const completed = rides.filter((r) => r.status === 'completed');
-  const cancelled = rides.filter((r) => r.status === 'cancelled_by_client');
+  const cancelled = rides.filter((r) => isCancelled(r.status));
   const total     = completed.reduce((s, r) => s + r.price, 0);
 
   return (
@@ -143,14 +164,14 @@ export default function HistoriqueScreen({ navigation }: Props) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Ionicons name="chevron-back" size={22} color={C.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Historique</Text>
-        <Text style={styles.headerSub}>30 derniers jours</Text>
+        <Text style={styles.headerTitle}>{t('commonHistory')}</Text>
+        <Text style={styles.headerSub}>{t('historyLast30Days')}</Text>
 
         {/* Summary chips */}
         <View style={styles.summaryRow}>
-          <SummaryChip icon="checkmark-circle" value={completed.length} label="Terminées"   color={C.accent}  />
-          <SummaryChip icon="cash"             value={`${total}`}       label="MRU gagnés"  color={C.primary} />
-          <SummaryChip icon="close-circle"     value={cancelled.length} label="Annulations" color={C.danger}  />
+          <SummaryChip icon="checkmark-circle" value={completed.length} label={t('historyCompleted')}   color={C.accent}  />
+          <SummaryChip icon="cash"             value={`${total}`}       label={t('historyEarned')}  color={C.primary} />
+          <SummaryChip icon="close-circle"     value={cancelled.length} label={t('historyCancellations')} color={C.danger}  />
         </View>
       </LinearGradient>
 
@@ -158,7 +179,7 @@ export default function HistoriqueScreen({ navigation }: Props) {
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={styles.loadingText}>Chargement…</Text>
+          <Text style={styles.loadingText}>{t('commonLoading')}</Text>
         </View>
       ) : (
         <FlatList
@@ -175,13 +196,25 @@ export default function HistoriqueScreen({ navigation }: Props) {
               colors={[C.primary]}
             />
           }
-          ListEmptyComponent={
+          ListHeaderComponent={failed && rides.length > 0 ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="cloud-offline-outline" size={16} color={C.danger} />
+              <Text style={styles.errorBannerText}>{t('historyLoadErrorSub')}</Text>
+            </View>
+          ) : undefined}
+          ListEmptyComponent={failed ? (
+            <View style={styles.emptyWrap}>
+              <Ionicons name="cloud-offline-outline" size={48} color={C.muted} />
+              <Text style={styles.emptyTitle}>{t('historyLoadErrorTitle')}</Text>
+              <Text style={styles.emptySub}>{t('historyLoadErrorSub')}</Text>
+            </View>
+          ) : (
             <View style={styles.emptyWrap}>
               <Ionicons name="reader-outline" size={48} color={C.muted} />
-              <Text style={styles.emptyTitle}>Aucune course</Text>
-              <Text style={styles.emptySub}>Vos courses des 30 derniers jours apparaîtront ici.</Text>
+              <Text style={styles.emptyTitle}>{t('historyEmptyTitle')}</Text>
+              <Text style={styles.emptySub}>{t('historyEmptySub')}</Text>
             </View>
-          }
+          )}
         />
       )}
     </View>
@@ -191,6 +224,13 @@ export default function HistoriqueScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   root:    { flex: 1, backgroundColor: C.bg },
   centered:{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12,
+    backgroundColor: '#FFF1F1', borderRadius: RADIUS.lg, padding: 12,
+    borderWidth: 1, borderColor: '#FFD0D0',
+  },
+  errorBannerText: { flex: 1, fontSize: 13, color: C.danger, fontWeight: '600' },
 
   header: { paddingHorizontal: 20, paddingBottom: 28, overflow: 'hidden' },
   backBtn: {

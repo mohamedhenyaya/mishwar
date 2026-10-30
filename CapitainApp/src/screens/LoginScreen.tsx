@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  ActivityIndicator, Alert, Animated, KeyboardAvoidingView,
+  ActivityIndicator, Alert, Animated, KeyboardAvoidingView, ScrollView,
   Platform, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from 'react-native';
@@ -10,10 +10,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import { apiPost } from '../services/api';
+import { apiPost, apiErrorMessage } from '../services/api';
 import { SECURE_STORE_KEY } from '../config/constants';
 import { RootStackParamList } from '../types';
 import PhoneInput from '../components/PhoneInput';
+import { useLanguage } from '../i18n/LanguageContext';
 import { C, G, SH, RADIUS } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
@@ -45,6 +46,7 @@ const field = StyleSheet.create({
 
 export default function LoginScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguage();
   const [phone,    setPhone]    = useState('');
   const [password, setPassword] = useState('');
   const [showPwd,  setShowPwd]  = useState(false);
@@ -70,7 +72,7 @@ export default function LoginScreen({ navigation }: Props) {
       await SecureStore.setItemAsync(SECURE_STORE_KEY, res.accessToken);
       navigation.replace('Main');
     } catch (e: any) {
-      Alert.alert('Connexion échouée', e?.response?.data?.message ?? 'Numéro ou mot de passe incorrect.');
+      Alert.alert(t('loginFailedTitle'), apiErrorMessage(e, t('loginFailedMessage')));
     } finally {
       setLoading(false);
     }
@@ -79,9 +81,13 @@ export default function LoginScreen({ navigation }: Props) {
   const slideUp = mountAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] });
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.root, { paddingBottom: insets.bottom + 20 }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    {/* Défilement + « handled » : le bouton reste atteignable et répond dès le premier appui clavier ouvert */}
+    <ScrollView
+      contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 20 }]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
     >
       {/* ── Header gradient strip ── */}
       <LinearGradient colors={G.dark} style={[styles.headerStrip, { paddingTop: insets.top + 12 }]}>
@@ -93,18 +99,18 @@ export default function LoginScreen({ navigation }: Props) {
             <Ionicons name="car-sport" size={26} color={C.white} />
           </View>
           <View>
-            <Text style={styles.headerTitle}>Volta Capitaine</Text>
-            <Text style={styles.headerSub}>Espace chauffeur professionnel</Text>
+            <Text style={styles.headerTitle}>{t('appTitle')}</Text>
+            <Text style={styles.headerSub}>{t('loginHeaderSub')}</Text>
           </View>
         </View>
       </LinearGradient>
 
       {/* ── Form card ── */}
       <Animated.View style={[styles.formCard, { opacity: mountAnim, transform: [{ translateY: slideUp }] }]}>
-        <Text style={styles.formSub}>Connectez-vous pour accéder à vos courses.</Text>
+        <Text style={styles.formSub}>{t('loginSub')}</Text>
 
         <View style={styles.fields}>
-          <Field icon="call-outline" label="Numéro de téléphone">
+          <Field icon="call-outline" label={t('loginPhoneLabel')}>
             <PhoneInput
               value={phone}
               onChange={setPhone}
@@ -113,7 +119,7 @@ export default function LoginScreen({ navigation }: Props) {
             />
           </Field>
 
-          <Field icon="lock-closed-outline" label="Mot de passe">
+          <Field icon="lock-closed-outline" label={t('loginPasswordLabel')}>
             <View style={[styles.pwdContainer, pwdFocus && styles.pwdFocused]}>
               <TextInput
                 ref={passwordRef}
@@ -139,7 +145,7 @@ export default function LoginScreen({ navigation }: Props) {
           </Field>
 
           <TouchableOpacity style={styles.forgotRow} activeOpacity={0.7}>
-            <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+            <Text style={styles.forgotText}>{t('loginForgot')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -158,14 +164,14 @@ export default function LoginScreen({ navigation }: Props) {
           >
             {loading
               ? <ActivityIndicator color={C.white} />
-              : <Text style={styles.btnLabel}>Se connecter</Text>}
+              : <Text style={styles.btnLabel}>{t('loginSubmit')}</Text>}
           </LinearGradient>
         </TouchableOpacity>
 
         {/* Divider */}
         <View style={styles.divider}>
           <View style={styles.divLine} />
-          <Text style={styles.divText}>ou</Text>
+          <Text style={styles.divText}>{t('loginOr')}</Text>
           <View style={styles.divLine} />
         </View>
 
@@ -176,17 +182,19 @@ export default function LoginScreen({ navigation }: Props) {
           activeOpacity={0.7}
         >
           <Text style={styles.registerText}>
-            Pas encore inscrit ?{'  '}
-            <Text style={styles.registerCta}>Créer un compte →</Text>
+            {t('loginNoAccount')}{'  '}
+            <Text style={styles.registerCta}>{t('loginCreateAccount')}</Text>
           </Text>
         </TouchableOpacity>
       </Animated.View>
+    </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
+  scroll: { flexGrow: 1 },
 
   // Header strip
   headerStrip: {
@@ -209,7 +217,7 @@ const styles = StyleSheet.create({
 
   // Form card
   formCard: {
-    flex: 1, backgroundColor: C.surface, marginHorizontal: 16,
+    flexGrow: 1, backgroundColor: C.surface, marginHorizontal: 16,
     marginTop: -20, borderRadius: RADIUS.xxl,
     padding: 28, gap: 0,
     ...SH.md,
