@@ -11,7 +11,7 @@ import { apiGet, apiPost } from '../services/api';
 import { ensureNotificationPermission, notify } from '../services/notifications';
 import { playAlert } from '../services/alerts';
 import { SECURE_STORE_KEY } from '../config/constants';
-import { RideDetails, RootStackParamList, Tariff } from '../types';
+import { RideDetails, RootStackParamList, Tariff, ridePrice } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Match'>;
 type MatchStatus = 'searching' | 'cancelled';
@@ -97,8 +97,7 @@ function SearchProgress() {
 
 export default function MatchScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  // price : réservation directe ; estimatedPrice : transmis par l'écran d'itinéraire
-  const { rideId, price, estimatedPrice } = route.params;
+  const { rideId, price } = route.params;
 
   const [status,       setStatus]       = useState<MatchStatus>('searching');
   const [cancelReason, setCancelReason] = useState<string>('timeout');
@@ -180,13 +179,17 @@ export default function MatchScreen({ navigation, route }: Props) {
       { text: 'Annuler', style: 'destructive', onPress: cancelSearch },
     ]);
 
-  // Nouvelle demande : retour à l'onglet Accueil (écran d'itinéraire)
-  const retry = () => navigation.popToTop();
+  const retry = () => {
+    navigation.replace('Booking', {
+      startLatitude:  ride ? Number(ride.startLatitude) : undefined,
+      startLongitude: ride ? Number(ride.startLongitude) : undefined,
+    });
+  };
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const isOpenTrip = ride?.isOpenTrip ?? false;
-  const fixedPrice = price ?? estimatedPrice ?? (ride?.estimatedPrice != null ? Number(ride.estimatedPrice) : null);
+  const fixedPrice = price ?? (ride ? ridePrice(ride) : null);
   const cancelMsg  = CANCEL_MESSAGES[cancelReason] ?? CANCEL_MESSAGES.timeout;
 
   return (
@@ -255,7 +258,7 @@ export default function MatchScreen({ navigation, route }: Props) {
             <Text style={styles.priceLabel}>{isOpenTrip ? 'Prix au compteur' : 'Prix de la course'}</Text>
             {isOpenTrip && tariff && (
               <Text style={styles.priceHint}>
-                {tariff.perKm} MRU/km + {tariff.perStopMinute} MRU/min d'arrêt · min. {tariff.minimumFare} MRU
+                min. {tariff.minimumFare} · {tariff.perKm}/km · {tariff.perStopMinute}/min d’arrêt
               </Text>
             )}
           </View>

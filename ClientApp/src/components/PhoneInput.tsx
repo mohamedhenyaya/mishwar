@@ -6,10 +6,17 @@ import {
 } from 'react-native';
 import type { TextInputInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { COUNTRIES, Country, DEFAULT_COUNTRY } from '../data/countries';
-import { useLanguage } from '../i18n/LanguageContext';
-import { colors, radius, shadows, spacing, typography } from '../theme';
+
+// ── Palette ───────────────────────────────────────────────────────────────────
+const C = {
+  blue:   '#007AFF',
+  bg:     '#F5F6FA',
+  text:   '#1A1A1A',
+  subtle: '#7F8C8D',
+  white:  '#FFFFFF',
+  border: '#EAECF0',
+};
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface PhoneInputProps {
@@ -27,7 +34,6 @@ interface PhoneInputProps {
 const PhoneInput = forwardRef<TextInputInstance, PhoneInputProps>(
   ({ value, onChange, placeholder = 'XX XX XX XX', inputStyle, containerStyle, onSubmitEditing, returnKeyType = 'done' }, ref) => {
     const insets = useSafeAreaInsets();
-    const { t } = useLanguage();
 
     const [country,      setCountry]      = useState<Country>(DEFAULT_COUNTRY);
     const [localNumber,  setLocalNumber]  = useState('');
@@ -74,7 +80,7 @@ const PhoneInput = forwardRef<TextInputInstance, PhoneInputProps>(
           >
             <Text style={styles.flag}>{country.flag}</Text>
             <Text style={styles.dialCode}>+{country.dialCode}</Text>
-            <Ionicons name="chevron-down" size={12} color={colors.textSecondary} />
+            <Text style={styles.chevron}>▾</Text>
           </TouchableOpacity>
 
           {/* Séparateur */}
@@ -87,7 +93,7 @@ const PhoneInput = forwardRef<TextInputInstance, PhoneInputProps>(
             value={localNumber}
             onChangeText={handleChangeLocal}
             placeholder={placeholder}
-            placeholderTextColor={colors.placeholder}
+            placeholderTextColor="#AEAEB2"
             keyboardType="phone-pad"
             returnKeyType={returnKeyType}
             onSubmitEditing={onSubmitEditing}
@@ -106,24 +112,24 @@ const PhoneInput = forwardRef<TextInputInstance, PhoneInputProps>(
 
             {/* Header modal */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('phoneSelectCountry')}</Text>
+              <Text style={styles.modalTitle}>Sélectionner un pays</Text>
               <TouchableOpacity
                 onPress={() => { setModalVisible(false); setSearch(''); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Ionicons name="close" size={22} color={colors.textSecondary} />
+                <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>
             </View>
 
             {/* Barre de recherche */}
             <View style={styles.searchWrap}>
-              <Ionicons name="search" size={17} color={colors.textTertiary} />
+              <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={styles.searchInput}
                 value={search}
                 onChangeText={setSearch}
-                placeholder={t('phoneSearchCountry')}
-                placeholderTextColor={colors.placeholder}
+                placeholder="Rechercher un pays ou un indicatif…"
+                placeholderTextColor="#AEAEB2"
                 autoFocus
                 returnKeyType="search"
                 clearButtonMode="while-editing"
@@ -152,13 +158,13 @@ const PhoneInput = forwardRef<TextInputInstance, PhoneInputProps>(
                     <Text style={[styles.itemDial, active && styles.itemDialActive]}>
                       +{item.dialCode}
                     </Text>
-                    {active && <Ionicons name="checkmark" size={16} color={colors.accent} style={{ marginLeft: 4 }} />}
+                    {active && <Text style={styles.itemCheck}>✓</Text>}
                   </TouchableOpacity>
                 );
               }}
               ListEmptyComponent={
                 <View style={styles.emptyWrap}>
-                  <Text style={styles.emptyText}>{t('phoneNoCountryFound')}</Text>
+                  <Text style={styles.emptyText}>Aucun pays trouvé</Text>
                 </View>
               }
             />
@@ -177,69 +183,76 @@ export default PhoneInput;
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    borderWidth: 1.5, borderColor: colors.border,
+    backgroundColor: C.white, borderRadius: 14,
+    borderWidth: 1.5, borderColor: C.border,
     overflow: 'hidden',
-    ...shadows.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6,
+    elevation: 3,
   },
 
   // Sélecteur pays
   countryBtn: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.md, paddingVertical: 14, gap: 6,
+    paddingHorizontal: 12, paddingVertical: 14, gap: 4,
   },
   flag:     { fontSize: 22 },
-  dialCode: { ...typography.bodyLg, fontWeight: '700', color: colors.text },
+  dialCode: { fontSize: 15, fontWeight: '700', color: C.text },
+  chevron:  { fontSize: 10, color: C.subtle, marginTop: 2 },
 
   separator: {
-    width: 1, height: 28, backgroundColor: colors.border, marginHorizontal: 2,
+    width: 1, height: 28, backgroundColor: C.border, marginHorizontal: 2,
   },
 
   input: {
     flex: 1,
-    fontSize: 16, color: colors.text,
-    paddingHorizontal: spacing.md,
+    fontSize: 16, color: C.text,
+    paddingHorizontal: 12,
     paddingVertical: Platform.OS === 'ios' ? 14 : 11,
   },
 
   // Modal
   modal: {
-    flex: 1, backgroundColor: colors.surface,
+    flex: 1, backgroundColor: C.white,
   },
   modalHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl, paddingBottom: spacing.lg,
-    borderBottomWidth: 1, borderBottomColor: colors.border,
+    paddingHorizontal: 20, paddingBottom: 16,
+    borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  modalTitle: { ...typography.h3, color: colors.text },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: C.text },
+  modalClose: { fontSize: 18, color: C.subtle, fontWeight: '500' },
 
   // Recherche
   searchWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    margin: spacing.lg, paddingHorizontal: spacing.md,
-    backgroundColor: colors.bg, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    margin: 16, paddingHorizontal: 14,
+    backgroundColor: C.bg, borderRadius: 12,
+    borderWidth: 1, borderColor: C.border,
   },
+  searchIcon:  { fontSize: 16 },
   searchInput: {
-    flex: 1, fontSize: 15, color: colors.text,
+    flex: 1, fontSize: 15, color: C.text,
     paddingVertical: Platform.OS === 'ios' ? 12 : 9,
   },
 
   // Liste
-  listSeparator: { height: 1, backgroundColor: colors.border, marginLeft: 64 },
+  listSeparator: { height: 1, backgroundColor: C.border, marginLeft: 64 },
   countryItem: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.xl, paddingVertical: 13, gap: spacing.lg,
+    paddingHorizontal: 20, paddingVertical: 13, gap: 14,
   },
-  countryItemActive: { backgroundColor: colors.accentMuted },
+  countryItemActive: { backgroundColor: '#EBF5FF' },
   itemFlag: { fontSize: 24, width: 32 },
   itemName: {
-    flex: 1, ...typography.bodyLg, fontWeight: '500', color: colors.text,
+    flex: 1, fontSize: 15, color: C.text, fontWeight: '500',
   },
-  itemNameActive: { color: colors.accent, fontWeight: '700' },
-  itemDial:       { ...typography.bodySm, color: colors.textSecondary, fontWeight: '600' },
-  itemDialActive: { color: colors.accent },
+  itemNameActive: { color: C.blue, fontWeight: '700' },
+  itemDial:       { fontSize: 14, color: C.subtle, fontWeight: '600' },
+  itemDialActive: { color: C.blue },
+  itemCheck:      { fontSize: 16, color: C.blue, fontWeight: '800', marginLeft: 4 },
 
   emptyWrap: { padding: 40, alignItems: 'center' },
-  emptyText: { ...typography.bodyLg, color: colors.textSecondary },
+  emptyText: { fontSize: 15, color: C.subtle },
 });

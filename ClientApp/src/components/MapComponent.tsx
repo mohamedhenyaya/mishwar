@@ -1,9 +1,7 @@
 import React, { forwardRef } from 'react';
-import { StyleSheet, View, Platform } from 'react-native';
+import { StyleSheet, View, Text, Platform } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region, MapViewProps } from 'react-native-maps';
-import { Ionicons } from '@expo/vector-icons';
 import { Coordinates, Driver } from '../types';
-import { colors, shadows } from '../theme';
 
 interface Props extends Omit<MapViewProps, 'provider'> {
   initialRegion: Region;
@@ -45,7 +43,7 @@ const MapComponent = forwardRef<MapView, Props>(
             onPress={() => onDriverPress?.(driver)}
           >
             <View style={styles.driverMarker}>
-              <Ionicons name="car-sport" size={16} color={colors.primary} />
+              <Text style={styles.driverIcon}>🚗</Text>
             </View>
           </Marker>
         ))}
@@ -67,7 +65,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(20, 20, 43, 0.18)',
+    backgroundColor: 'rgba(26, 26, 46, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -75,14 +73,21 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: colors.primary,
+    backgroundColor: '#1A1A2E',
     borderWidth: 2.5,
-    borderColor: colors.surface,
+    borderColor: '#FFFFFF',
   },
   driverMarker: {
-    backgroundColor: colors.surface,
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 6,
-    ...shadows.sm,
+    padding: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  driverIcon: {
+    fontSize: 18,
   },
 });

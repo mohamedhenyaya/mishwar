@@ -1,19 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
-  Animated,
   Dimensions,
+  Platform,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
-import { Button } from '../components/ui';
-import { useLanguage } from '../i18n/LanguageContext';
-import { colors, radius, spacing, typography, motion } from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Welcome'>;
 
@@ -21,67 +18,64 @@ const { height } = Dimensions.get('window');
 
 export default function WelcomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { t } = useLanguage();
-
-  const fade = useRef(new Animated.Value(0)).current;
-  const slide = useRef(new Animated.Value(24)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: motion.slow, useNativeDriver: true }),
-      Animated.spring(slide, { toValue: 0, useNativeDriver: true, ...motion.spring }),
-    ]).start();
-  }, [fade, slide]);
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
+      {/* Fond avec dégradé simulé */}
       <View style={styles.topSection}>
         <View style={styles.circle1} />
         <View style={styles.circle2} />
 
+        {/* Logo */}
         <View style={[styles.logoWrap, { marginTop: insets.top + 48 }]}>
           <View style={styles.logoCircle}>
-            <Ionicons name="car-sport" size={34} color={colors.textInverse} />
+            <Text style={styles.logoEmoji}>🚗</Text>
           </View>
           <Text style={styles.appName}>Mishwar</Text>
-          <Text style={styles.tagline}>{t('welcomeTagline')}</Text>
+          <Text style={styles.tagline}>Votre trajet, votre prix</Text>
         </View>
 
-        <View style={styles.illustrationWrap}>
-          <Ionicons name="map" size={72} color="rgba(255,255,255,0.18)" />
-        </View>
+        {/* Illustration */}
+        <Text style={styles.illustration}>🗺️</Text>
       </View>
 
-      <Animated.View
-        style={[
-          styles.bottomSection,
-          { paddingBottom: insets.bottom + 32, opacity: fade, transform: [{ translateY: slide }] },
-        ]}
-      >
-        <Text style={styles.welcomeTitle}>{t('welcomeTitle')}</Text>
-        <Text style={styles.welcomeSubtitle}>{t('welcomeSubtitle')}</Text>
+      {/* Section bas */}
+      <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 32 }]}>
+        <Text style={styles.welcomeTitle}>Bienvenue !</Text>
+        <Text style={styles.welcomeSubtitle}>
+          Réservez un trajet ou connectez-vous à votre compte existant.
+        </Text>
 
-        <View style={{ gap: spacing.md }}>
-          <Button
-            label={t('welcomeCreateAccount')}
-            onPress={() => navigation.navigate('Auth', { mode: 'register' })}
-          />
-          <Button
-            label={t('welcomeHaveAccount')}
-            variant="outline"
-            onPress={() => navigation.navigate('Login')}
-          />
-        </View>
+        {/* Bouton Créer un compte */}
+        <TouchableOpacity
+          style={styles.btnPrimary}
+          activeOpacity={0.88}
+          onPress={() => navigation.navigate('Auth', { mode: 'register' })}
+        >
+          <Text style={styles.btnPrimaryLabel}>Créer un compte</Text>
+        </TouchableOpacity>
 
+        {/* Bouton Se connecter */}
+        <TouchableOpacity
+          style={styles.btnSecondary}
+          activeOpacity={0.88}
+          onPress={() => navigation.navigate('Login')}
+        >
+          <Text style={styles.btnSecondaryLabel}>J'ai déjà un compte</Text>
+        </TouchableOpacity>
+
+        {/* Mention WhatsApp */}
         <View style={styles.waNote}>
-          <Ionicons name="logo-whatsapp" size={15} color={colors.whatsapp} style={{ marginTop: 1 }} />
+          <Text style={styles.waNoteIcon}>💬</Text>
           <Text style={styles.waNoteText}>
-            {t('welcomeOtpNotePrefix')}<Text style={styles.waNoteGreen}>WhatsApp OTP</Text>{t('welcomeOtpNoteSuffix')}
+            Inscription via{' '}
+            <Text style={styles.waNoteGreen}>WhatsApp OTP</Text>
+            {' '}· Connexion par mot de passe.
           </Text>
         </View>
-      </Animated.View>
+      </View>
     </View>
   );
 }
@@ -89,15 +83,16 @@ export default function WelcomeScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.primary,
+    backgroundColor: '#1A1A2E',
   },
 
+  // ── Section haute ──────────────────────────────────────────────────────────
   topSection: {
-    height: height * 0.5,
-    backgroundColor: colors.primary,
+    height: height * 0.52,
+    backgroundColor: '#1A1A2E',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: spacing.xxl,
+    paddingBottom: 24,
     overflow: 'hidden',
   },
   circle1: {
@@ -105,19 +100,19 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: colors.accent,
-    opacity: 0.12,
-    top: -90,
-    right: -90,
+    backgroundColor: '#25D366',
+    opacity: 0.08,
+    top: -80,
+    right: -80,
   },
   circle2: {
     position: 'absolute',
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: colors.whatsapp,
-    opacity: 0.08,
-    bottom: -20,
+    backgroundColor: '#4F8EF7',
+    opacity: 0.1,
+    bottom: 0,
     left: -60,
   },
   logoWrap: {
@@ -133,51 +128,102 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 4,
   },
+  logoEmoji: {
+    fontSize: 36,
+  },
   appName: {
-    ...typography.display,
-    color: colors.textInverse,
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   tagline: {
-    ...typography.body,
-    color: colors.textInverseMuted,
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
+    fontWeight: '400',
   },
-  illustrationWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  illustration: {
+    fontSize: 80,
+    opacity: 0.85,
   },
 
+  // ── Section basse ──────────────────────────────────────────────────────────
   bottomSection: {
     flex: 1,
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: radius.xxl,
-    borderTopRightRadius: radius.xxl,
-    paddingHorizontal: spacing.xxl,
-    paddingTop: spacing.xxl,
-    gap: spacing.lg,
+    backgroundColor: '#F5F5F7',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 28,
+    paddingTop: 32,
+    gap: 14,
   },
   welcomeTitle: {
-    ...typography.h1,
-    color: colors.text,
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#1A1A2E',
+    marginBottom: 2,
   },
   welcomeSubtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
-    marginTop: -8,
+    fontSize: 14,
+    color: '#888',
+    lineHeight: 21,
+    marginBottom: 6,
+  },
+  btnPrimary: {
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: '#1A1A2E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1A1A2E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  btnPrimaryLabel: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  btnSecondary: {
+    height: 58,
+    borderRadius: 18,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E0E0E8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  btnSecondaryLabel: {
+    color: '#1A1A2E',
+    fontSize: 16,
+    fontWeight: '600',
   },
   waNote: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    gap: 8,
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  waNoteIcon: {
+    fontSize: 14,
+    marginTop: Platform.OS === 'ios' ? 1 : 2,
   },
   waNoteText: {
     flex: 1,
-    ...typography.caption,
-    color: colors.textTertiary,
+    fontSize: 12,
+    color: '#AAA',
     lineHeight: 18,
   },
   waNoteGreen: {
-    color: colors.whatsappDark,
-    fontWeight: '700',
+    color: '#25D366',
+    fontWeight: '600',
   },
 });

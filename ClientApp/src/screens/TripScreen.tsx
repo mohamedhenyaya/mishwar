@@ -19,7 +19,7 @@ import { ensureNotificationPermission, notify } from '../services/notifications'
 import { playAlert } from '../services/alerts';
 import { SECURE_STORE_KEY } from '../config/constants';
 import {
-  Coordinates, MeterReading, PublicDriver, RideDetails, RideStatus, RootStackParamList,
+  Coordinates, MeterReading, PublicDriver, RideDetails, RideStatus, RootStackParamList, ridePrice,
 } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Trip'>;
@@ -291,7 +291,7 @@ export default function TripScreen({ navigation, route }: Props) {
             </View>
             <View style={styles.meterStats}>
               <Text style={styles.meterStat}>{meter ? meter.distanceKm.toFixed(1) : '0.0'} km</Text>
-              <Text style={styles.meterStat}>{meter ? meter.stoppedMinutes : 0} min d'arrêt</Text>
+              <Text style={styles.meterStat}>{meter ? meter.stoppedMinutes : 0} min d’arrêt</Text>
             </View>
           </View>
         )}
@@ -302,7 +302,7 @@ export default function TripScreen({ navigation, route }: Props) {
             {ride.isOpenTrip ? '⏱ Trajet ouvert' : `📍 ${ride.destinationName}`}
           </Text>
           <Text style={styles.tripPrice}>
-            {ride.price != null ? `${Math.round(Number(ride.price))} MRU` : 'Au compteur'}
+            {ridePrice(ride) != null ? `${ridePrice(ride)} MRU` : 'Au compteur'}
           </Text>
         </View>
 

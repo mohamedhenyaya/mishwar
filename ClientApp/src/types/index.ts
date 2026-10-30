@@ -1,32 +1,20 @@
 // ─── Navigation ──────────────────────────────────────────────────────────────
-// "Home/Trips/Ranking/Profile" vivent dans une barre d'onglets (voir
-// navigation/MainTabs.tsx) ; les autres écrans restent des Stack.Screen
-// classiques empilés par-dessus.
-
-import type { CompositeScreenProps } from '@react-navigation/native';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-
-export type TabParamList = {
-  Home: undefined;
-  Trips: undefined;
-  Ranking: undefined;
-  Profile: undefined;
-};
 
 export type RootStackParamList = {
   Welcome: undefined;
   Auth: { mode: 'register' };
   Login: undefined;
-  Main: undefined;
-  Match: { rideId: string; price?: number | null; isOpenTrip?: boolean; estimatedPrice?: number };
+  Home: undefined;
+  Booking: { destination?: string; startLatitude?: number; startLongitude?: number };
+  Match: { rideId: string; price?: number | null };
   Trip: { rideId: string };
   Rating: { rideId: string; driver: PublicDriver | null; price: number | null };
-  Favorites: undefined;
-  Support: undefined;
+  Profile: undefined;
 };
 
 // ─── Course en temps réel (réponses de l'API /rides) ─────────────────────────
+
+export type RideStatus = 'PENDING' | 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
 export interface PublicDriver {
   id: string;
@@ -60,11 +48,10 @@ export interface RideDetails {
   destinationName: string;
   endLatitude: number | string | null;
   endLongitude: number | string | null;
-  price: number | string | null;
-  estimatedPrice: number | string | null;
-  livePrice: number | string | null;
+  price: number | string | null;          // prix final, fixé à la fin de la course
+  estimatedPrice: number | string | null; // tarif au km calculé à la création (destination connue)
   isOpenTrip: boolean;
-  cancelledBy: 'user' | 'driver' | 'system' | null;
+  cancelledBy: 'user' | 'driver' | 'system' | 'admin' | null;
   startedAt: string | null;
   createdAt: string;
   driver: PublicDriver | null;
@@ -79,7 +66,7 @@ export interface MeterReading {
   price: number;
 }
 
-// GET /rides/tariff — réglages admin (PlatformSettings)
+// GET /rides/tariff
 export interface Tariff {
   currency: string;
   minimumFare: number;
@@ -94,15 +81,15 @@ export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
   moto:  'Moto',
 };
 
-export type TabScreenProps<T extends keyof TabParamList> = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, T>,
-  NativeStackScreenProps<RootStackParamList>
->;
+// Prix affiché : prix final s'il existe, sinon tarif calculé à la création
+export function ridePrice(ride: Pick<RideDetails, 'price' | 'estimatedPrice'>): number | null {
+  const value = ride.price ?? ride.estimatedPrice;
+  return value != null ? Math.round(Number(value)) : null;
+}
 
 // ─── Domain ───────────────────────────────────────────────────────────────────
 
 export type VehicleType = 'sedan' | 'suv' | 'van' | 'moto';
-export type RideVehicleClass = 'economy' | 'comfort' | 'premium';
 
 export interface Coordinates {
   latitude: number;
@@ -125,60 +112,15 @@ export interface User {
   email?: string;
 }
 
-export interface UserProfile {
-  id: string;
-  phone: string;
-  name: string | null;
-  email: string | null;
-  rating: number;
-  ratingCount: number;
-  photoUrl: string | null;
-  totalRides: number;
-}
-
-export type RideStatus = 'SCHEDULED' | 'PENDING' | 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-
 export interface Ride {
   id: string;
-  status: RideStatus;
-  destinationName: string;
-  startLatitude: number;
-  startLongitude: number;
-  endLatitude: number | null;
-  endLongitude: number | null;
-  vehicleType: RideVehicleClass;
-  price: number | null;
-  discountAmount: number | null;
-  couponCode: string | null;
-  cancelledBy: string | null;
-  cancelReason: string | null;
-  scheduledAt: string | null;
-  createdAt: string;
-}
-
-export interface FavoritePlace {
-  id: string;
-  label: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-  createdAt: string;
-}
-
-export type LeaderboardPeriod = 'day' | 'week' | 'month' | 'year';
-
-export interface LeaderboardEntry {
-  rank: number;
   userId: string;
-  name: string;
-  points: number;
-  isCurrentUser: boolean;
-}
-
-export interface LeaderboardResult {
-  period: LeaderboardPeriod;
-  entries: LeaderboardEntry[];
-  currentUser: { rank: number; points: number } | null;
+  driverId: string;
+  origin: Coordinates;
+  destination: Coordinates;
+  status: 'pending' | 'accepted' | 'ongoing' | 'completed' | 'cancelled';
+  price?: number;
+  createdAt: string;
 }
 
 // ─── API ──────────────────────────────────────────────────────────────────────
